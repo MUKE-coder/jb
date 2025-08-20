@@ -5,6 +5,7 @@ import type { LucideProps } from "lucide-react";
 import {
   BriefcaseBusinessIcon,
   CircleUserIcon,
+  Code,
   CornerDownLeftIcon,
   DownloadIcon,
   LetterTextIcon,
@@ -53,9 +54,9 @@ type CommandLinkItem = {
 
 const MENU_LINKS: CommandLinkItem[] = [
   {
-    title: "Daifolio",
+    title: "Portfolio",
     href: "/",
-    icon: ChanhDaiMark,
+    icon: Code,
   },
   {
     title: "Blog",
@@ -90,21 +91,21 @@ const DAIFOLIO_LINKS: CommandLinkItem[] = [
     href: "/#projects",
     icon: Icons.project,
   },
-  {
-    title: "Honors & Awards",
-    href: "/#awards",
-    icon: Icons.award,
-  },
-  {
-    title: "Certifications",
-    href: "/#certs",
-    icon: Icons.certificate,
-  },
-  {
-    title: "Download vCard",
-    href: "/vcard",
-    icon: CircleUserIcon,
-  },
+  // {
+  //   title: "Honors & Awards",
+  //   href: "/#awards",
+  //   icon: Icons.award,
+  // },
+  // {
+  //   title: "Certifications",
+  //   href: "/#certs",
+  //   icon: Icons.certificate,
+  // },
+  // {
+  //   title: "Download vCard",
+  //   href: "/vcard",
+  //   icon: CircleUserIcon,
+  // },
 ];
 
 const SOCIAL_LINK_ITEMS: CommandLinkItem[] = SOCIAL_LINKS.map((item) => ({
@@ -238,7 +239,7 @@ export function CommandMenu({ posts }: { posts: Post[] }) {
           <CommandSeparator />
 
           <CommandLinkGroup
-            heading="Daifolio"
+            heading="Portfolio"
             links={DAIFOLIO_LINKS}
             onLinkSelect={handleOpenLink}
           />
@@ -271,7 +272,7 @@ export function CommandMenu({ posts }: { posts: Post[] }) {
 
           <CommandSeparator />
 
-          <CommandGroup heading="Brand Assets">
+          {/* <CommandGroup heading="Brand Assets">
             <CommandItem
               onSelect={() => {
                 handleCopyText(
@@ -309,9 +310,9 @@ export function CommandMenu({ posts }: { posts: Post[] }) {
                 Download Brand Assets
               </a>
             </CommandItem>
-          </CommandGroup>
+          </CommandGroup> */}
 
-          <CommandSeparator />
+          {/* <CommandSeparator /> */}
 
           <CommandGroup heading="Theme">
             <CommandItem
