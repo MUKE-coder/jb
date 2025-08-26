@@ -7,10 +7,6 @@ createdAt: 2025-08-26
 updatedAt: 2025-08-26
 ---
 
-# Next.js Code Snippets - Frequently Used Patterns
-
-A collection of battle-tested code snippets that I find myself using repeatedly in Next.js applications. These are practical, production-ready patterns that solve common problems.
-
 ## CORS Configuration in Next.js
 
 Setting up CORS in a Next.js application using middleware to handle cross-origin requests properly.
@@ -243,9 +239,10 @@ const handleExport = async (filteredOrders: SalesOrder[]) => {
 
 Complete PDF generation setup using React-PDF with download and print functionality.
 
-### PDF Data Preparation
+### Single Invoice PDF Component
 
 ```typescript
+// Usage in component for single invoice
 const { data: order, isLoading, error, refetch } = useSalesOrder(orderId);
 
 const preparePDFData = (order: any) => {
@@ -290,6 +287,584 @@ const preparePDFData = (order: any) => {
 
 // Usage in component
 <SalesOrderPrintComponent orderData={preparePDFData(order)} />
+```
+
+### Sales Report PDF , SalesReportComponent, Hhooks and Usage
+
+```typescript
+"use client";
+
+import React from "react";
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  pdf,
+} from "@react-pdf/renderer";
+import { format } from "date-fns";
+import { Download, Printer } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import PDFHeader from "./PDFHeader";
+import { DateFilterOption, SalesOrderFilters } from "@/actions/sales-orders-v2";
+
+// Types for the sales order data
+interface SalesOrderData {
+  id: string;
+  orderNumber: string;
+  orderDate: string | Date;
+  status: string;
+  paymentStatus: string;
+  buyerName: string;
+  buyerType: "SALES_PERSON" | "SALES_AGENT";
+  targetTitle: string;
+  totalAmount: number;
+  amountPaid: number;
+  outstandingBalance: number;
+  orderItems: Array<{
+    id: string;
+    productName: string;
+    numberPlate: string;
+    modelName: string;
+    unitPrice: number;
+    quantity: number;
+    lineTotal: number;
+    isPaid: boolean;
+  }>;
+}
+
+interface SalesReportData {
+  orders: SalesOrderData[];
+  period: {
+    filter: DateFilterOption;
+    dateRange?: {
+      from: Date;
+      to: Date;
+    };
+    label: string;
+  };
+  summary: {
+    totalOrders: number;
+    totalRevenue: number;
+    totalPaid: number;
+    totalOutstanding: number;
+    paidOrders: number;
+    outstandingOrders: number;
+    averageOrderValue: number;
+  };
+}
+
+// PDF Styles
+const styles = StyleSheet.create({
+  page: {
+    flexDirection: "column",
+    backgroundColor: "#FFFFFF",
+    padding: 30,
+    fontSize: 10,
+    fontFamily: "Helvetica",
+  },
+  section: {
+    marginBottom: 15,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 8,
+    color: "#1f2937",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    paddingBottom: 3,
+  },
+  periodInfo: {
+    backgroundColor: "#f3f4f6",
+    padding: 15,
+    marginBottom: 20,
+    borderRadius: 5,
+  },
+  periodTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 5,
+    color: "#1f2937",
+  },
+  periodText: {
+    fontSize: 10,
+    color: "#4b5563",
+  },
+  summaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 20,
+  },
+  summaryCard: {
+    width: "48%",
+    marginBottom: 10,
+    marginRight: "2%",
+    padding: 10,
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 3,
+  },
+  summaryLabel: {
+    fontSize: 9,
+    color: "#6b7280",
+    marginBottom: 3,
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#1f2937",
+  },
+  table: {
+    width: "100%",
+    borderStyle: "solid",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    marginBottom: 15,
+  },
+  tableRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    minHeight: 25,
+    alignItems: "center",
+  },
+  tableHeader: {
+    backgroundColor: "#1f2937",
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
+  tableCol: {
+    padding: 5,
+    borderRightWidth: 1,
+    borderRightColor: "#e5e7eb",
+    fontSize: 9,
+  },
+  orderCol: { width: "15%" },
+  dateCol: { width: "12%" },
+  buyerCol: { width: "20%" },
+  itemsCol: { width: "8%", textAlign: "center" },
+  amountCol: { width: "15%", textAlign: "right" },
+  paidCol: { width: "15%", textAlign: "right" },
+  outstandingCol: { width: "15%", textAlign: "right" },
+  badge: {
+    fontSize: 7,
+    padding: 2,
+    borderRadius: 2,
+    textAlign: "center",
+    color: "#FFFFFF",
+  },
+  paidBadge: {
+    fontSize: 7,
+    padding: 2,
+    borderRadius: 2,
+    textAlign: "center",
+    backgroundColor: "#10b981",
+    color: "#FFFFFF",
+  },
+  partialBadge: {
+    fontSize: 7,
+    padding: 2,
+    borderRadius: 2,
+    textAlign: "center",
+    backgroundColor: "#f59e0b",
+    color: "#FFFFFF",
+  },
+  pendingBadge: {
+    fontSize: 7,
+    padding: 2,
+    borderRadius: 2,
+    textAlign: "center",
+    backgroundColor: "#ef4444",
+    color: "#FFFFFF",
+  },
+  footer: {
+    marginTop: "auto",
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    fontSize: 8,
+    color: "#6b7280",
+    textAlign: "center",
+  },
+  pageNumber: {
+    position: "absolute",
+    fontSize: 8,
+    bottom: 20,
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    color: "#6b7280",
+  },
+});
+
+// PDF Document Component
+const SalesReportPDF: React.FC<{ reportData: SalesReportData }> = ({
+  reportData,
+}) => {
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-UG", {
+      style: "currency",
+      currency: "UGX",
+      minimumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatDate = (date: string | Date) => {
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    return format(dateObj, "MMM dd, yyyy");
+  };
+
+  const getPaymentStatusBadge = (status: string) => {
+    switch (status) {
+      case "PAID":
+        return styles.paidBadge;
+      case "PARTIAL":
+        return styles.partialBadge;
+      default:
+        return styles.pendingBadge;
+    }
+  };
+
+  const getPeriodDescription = () => {
+    const { filter, dateRange, label } = reportData.period;
+
+    if (filter === "custom" && dateRange) {
+      return `Custom Period: ${formatDate(dateRange.from)} - ${formatDate(
+        dateRange.to
+      )}`;
+    }
+
+    return `Report Period: ${label}`;
+  };
+
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        {/* Reusable Header */}
+        <PDFHeader title="SALES REPORT" />
+
+        {/* Period Information */}
+        <View style={styles.periodInfo}>
+          <Text style={styles.periodTitle}>Sales Report Summary</Text>
+          <Text style={styles.periodText}>{getPeriodDescription()}</Text>
+          <Text style={styles.periodText}>
+            Generated on {format(new Date(), "PPP 'at' p")}
+          </Text>
+        </View>
+
+        {/* Summary Cards */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Performance Summary</Text>
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Total Orders</Text>
+              <Text style={styles.summaryValue}>
+                {reportData.summary.totalOrders}
+              </Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Total Revenue</Text>
+              <Text style={styles.summaryValue}>
+                {formatCurrency(reportData.summary.totalRevenue)}
+              </Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Amount Collected</Text>
+              <Text style={styles.summaryValue}>
+                {formatCurrency(reportData.summary.totalPaid)}
+              </Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Outstanding Balance</Text>
+              <Text style={styles.summaryValue}>
+                {formatCurrency(reportData.summary.totalOutstanding)}
+              </Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Paid Orders</Text>
+              <Text style={styles.summaryValue}>
+                {reportData.summary.paidOrders}
+              </Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Outstanding Orders</Text>
+              <Text style={styles.summaryValue}>
+                {reportData.summary.outstandingOrders}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Orders Table */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Detailed Order List ({reportData.orders.length} orders)
+          </Text>
+          <View style={styles.table}>
+            {/* Table Header */}
+            <View style={[styles.tableRow, styles.tableHeader]}>
+              <View style={[styles.tableCol, styles.orderCol]}>
+                <Text>Order #</Text>
+              </View>
+              <View style={[styles.tableCol, styles.dateCol]}>
+                <Text>Date</Text>
+              </View>
+              <View style={[styles.tableCol, styles.buyerCol]}>
+                <Text>Buyer</Text>
+              </View>
+              <View style={[styles.tableCol, styles.itemsCol]}>
+                <Text>Items</Text>
+              </View>
+              <View style={[styles.tableCol, styles.amountCol]}>
+                <Text>Total</Text>
+              </View>
+              <View style={[styles.tableCol, styles.paidCol]}>
+                <Text>Paid</Text>
+              </View>
+              <View style={[styles.tableCol, styles.outstandingCol]}>
+                <Text>Outstanding</Text>
+              </View>
+            </View>
+
+            {/* Table Rows */}
+            {reportData.orders.slice(0, 25).map((order, index) => (
+              <View key={order.id} style={styles.tableRow}>
+                <View style={[styles.tableCol, styles.orderCol]}>
+                  <Text style={{ fontWeight: "bold", fontSize: 8 }}>
+                    {order.orderNumber}
+                  </Text>
+                  <Text style={getPaymentStatusBadge(order.paymentStatus)}>
+                    {order.paymentStatus}
+                  </Text>
+                </View>
+                <View style={[styles.tableCol, styles.dateCol]}>
+                  <Text>{formatDate(order.orderDate)}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.buyerCol]}>
+                  <Text style={{ fontWeight: "bold", fontSize: 8 }}>
+                    {order.buyerName}
+                  </Text>
+                  <Text style={{ fontSize: 7, color: "#6b7280" }}>
+                    {order.buyerType.replace("_", " ")}
+                  </Text>
+                </View>
+                <View style={[styles.tableCol, styles.itemsCol]}>
+                  <Text>{order.orderItems.length}</Text>
+                </View>
+                <View style={[styles.tableCol, styles.amountCol]}>
+                  <Text style={{ fontWeight: "bold" }}>
+                    {formatCurrency(order.totalAmount)}
+                  </Text>
+                </View>
+                <View style={[styles.tableCol, styles.paidCol]}>
+                  <Text style={{ color: "#10b981" }}>
+                    {formatCurrency(order.amountPaid)}
+                  </Text>
+                </View>
+                <View style={[styles.tableCol, styles.outstandingCol]}>
+                  <Text style={{ color: "#ef4444" }}>
+                    {formatCurrency(order.outstandingBalance)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {reportData.orders.length > 25 && (
+            <Text
+              style={{ fontSize: 8, fontStyle: "italic", textAlign: "center" }}
+            >
+              Showing first 25 orders of {reportData.orders.length} total orders
+            </Text>
+          )}
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text>This report contains confidential business information.</Text>
+          <Text>For inquiries, contact us at info@yourcompany.com</Text>
+        </View>
+
+        {/* Page Number */}
+        <Text
+          style={styles.pageNumber}
+          render={({ pageNumber, totalPages }) =>
+            `Page ${pageNumber} of ${totalPages}`
+          }
+          fixed
+        />
+      </Page>
+    </Document>
+  );
+};
+
+// Main Component Props
+interface SalesReportComponentProps {
+  orders: SalesOrderData[];
+  currentFilter: SalesOrderFilters;
+}
+
+// Hook for sales report functionality
+export const useSalesReport = ({
+  orders,
+  currentFilter,
+}: SalesReportComponentProps) => {
+  // Calculate summary data
+  const summary = React.useMemo(() => {
+    const totalOrders = orders.length;
+    const totalRevenue = orders.reduce(
+      (sum, order) => sum + order.totalAmount,
+      0
+    );
+    const totalPaid = orders.reduce((sum, order) => sum + order.amountPaid, 0);
+    const totalOutstanding = orders.reduce(
+      (sum, order) => sum + order.outstandingBalance,
+      0
+    );
+    const paidOrders = orders.filter(
+      (order) => order.paymentStatus === "PAID"
+    ).length;
+    const outstandingOrders = orders.filter(
+      (order) =>
+        order.paymentStatus === "PENDING" ||
+        order.paymentStatus === "PARTIAL" ||
+        order.paymentStatus === "OVERDUE"
+    ).length;
+    const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    return {
+      totalOrders,
+      totalRevenue,
+      totalPaid,
+      totalOutstanding,
+      paidOrders,
+      outstandingOrders,
+      averageOrderValue,
+    };
+  }, [orders]);
+
+  // Get period label
+  const getPeriodLabel = () => {
+    const filter = currentFilter.dateFilter || "last7days";
+    switch (filter) {
+      case "today":
+        return "Today";
+      case "last7days":
+        return "Last 7 Days";
+      case "thisMonth":
+        return "This Month";
+      case "thisYear":
+        return "This Year";
+      case "custom":
+        return "Custom Period";
+      case "lifetime":
+        return "All Time";
+      default:
+        return "Last 7 Days";
+    }
+  };
+
+  const reportData: SalesReportData = {
+    orders,
+    period: {
+      filter: currentFilter.dateFilter || "last7days",
+      dateRange: currentFilter.dateRange,
+      label: getPeriodLabel(),
+    },
+    summary,
+  };
+
+  const handlePrint = () => {
+    const generatePDF = async () => {
+      try {
+        const blob = await pdf(
+          <SalesReportPDF reportData={reportData} />
+        ).toBlob();
+        const url = URL.createObjectURL(blob);
+        const printWindow = window.open(url);
+
+        if (printWindow) {
+          printWindow.onload = () => {
+            printWindow.print();
+          };
+        } else {
+          toast.error("Popup blocked. Please allow popups for this site.");
+        }
+      } catch (error) {
+        console.error("Error generating PDF for print:", error);
+        toast.error("Failed to generate PDF for printing");
+      }
+    };
+
+    generatePDF();
+    toast.success("Preparing sales report for printing...");
+  };
+
+  const handleDownload = async () => {
+    try {
+      const blob = await pdf(
+        <SalesReportPDF reportData={reportData} />
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Sales-Report-${getPeriodLabel().replace(
+        /\s+/g,
+        "-"
+      )}-${format(new Date(), "yyyy-MM-dd")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Sales report downloaded successfully!");
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      toast.error("Failed to download sales report");
+    }
+  };
+
+  return {
+    handlePrint,
+    handleDownload,
+    printButton: (
+      <Button variant="outline" onClick={handlePrint} className="gap-2">
+        <Printer className="h-4 w-4" />
+        Print Report
+      </Button>
+    ),
+    downloadButton: (
+      <Button variant="outline" onClick={handleDownload} className="gap-2">
+        <Download className="h-4 w-4" />
+        Download Report
+      </Button>
+    ),
+  };
+};
+
+// Component version (if you need to render the buttons directly)
+const SalesReportComponent: React.FC<SalesReportComponentProps> = ({
+  orders,
+  currentFilter,
+}) => {
+  const { printButton, downloadButton } = useSalesReport({
+    orders,
+    currentFilter,
+  });
+
+  return (
+    <div className="flex gap-2">
+      {printButton}
+      {downloadButton}
+    </div>
+  );
+};
+
+export default SalesReportComponent;
+
 ```
 
 ### Reusable PDF Header Component

@@ -1,0 +1,406 @@
+---
+title: Next.js Code Snippets - Frequently Used Patterns
+description: A collection of battle-tested code snippets for Next.js applications including CORS setup, Prisma configuration, file uploads, data export, and PDF generation.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfZ7uhOSU9C3gHFdyzTE0q7PpDnjchu6XsKk1l
+category: reference
+createdAt: 2025-08-26
+updatedAt: 2025-08-26
+---
+
+# Next.js Code Snippets - Frequently Used Patterns
+
+A collection of battle-tested code snippets that I find myself using repeatedly in Next.js applications. These are practical, production-ready patterns that solve common problems.
+
+## CORS Configuration in Next.js
+
+Setting up CORS in a Next.js application using middleware to handle cross-origin requests properly.
+
+**File: `middleware.ts`**
+
+```typescript
+import { NextRequest, NextResponse } from "next/server";
+
+const allowedOrigins = [
+  "https://newsletter-hub-teal.vercel.app",
+  "http://localhost:3000",
+];
+
+const corsOptions = {
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export function middleware(request: NextRequest) {
+  // Check the origin from the request
+  const origin = request.headers.get("origin") ?? "";
+  const isAllowedOrigin = allowedOrigins.includes(origin);
+
+  // Handle preflighted requests
+  const isPreflight = request.method === "OPTIONS";
+
+  if (isPreflight) {
+    const preflightHeaders = {
+      ...(isAllowedOrigin && { "Access-Control-Allow-Origin": origin }),
+      ...corsOptions,
+    };
+    return NextResponse.json({}, { headers: preflightHeaders });
+  }
+
+  // Handle simple requests
+  const response = NextResponse.next();
+
+  if (isAllowedOrigin) {
+    response.headers.set("Access-Control-Allow-Origin", origin);
+  }
+
+  Object.entries(corsOptions).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
+
+  return response;
+}
+
+export const config = {
+  matcher: "/api/:path*",
+};
+```
+
+**Key Benefits:**
+
+- Handles both preflight and simple CORS requests
+- Configurable allowed origins
+- Applies only to API routes via matcher
+
+## Global Prisma Instance
+
+Creating a singleton Prisma client instance that works properly in development and production environments.
+
+**File: `lib/db.ts`**
+
+```typescript
+import { PrismaClient } from "@prisma/client";
+import { withAccelerate } from "@prisma/extension-accelerate";
+
+export const db = new PrismaClient().$extends(withAccelerate());
+
+const globalForPrisma = global as unknown as { prisma: typeof db };
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+```
+
+**Key Benefits:**
+
+- Prevents multiple Prisma instances in development
+- Includes Prisma Accelerate extension for caching
+- Memory efficient and prevents connection pool exhaustion
+
+## UploadThing File Router Configuration
+
+Complete UploadThing setup for handling different types of file uploads with proper MIME type configuration.
+
+**File: `app/api/uploadthing/core.ts`**
+
+```typescript
+import { createUploadthing, type FileRouter } from "uploadthing/next";
+import { UploadThingError } from "uploadthing/server";
+
+const f = createUploadthing();
+
+// FileRouter for your app, can contain multiple FileRoutes
+export const ourFileRouter = {
+  // Define as many FileRoutes as you like, each with a unique routeSlug
+  categoryImage: f({ image: { maxFileSize: "1MB" } }).onUploadComplete(
+    async ({ metadata, file }) => {
+      console.log("file url", file.url);
+      return { uploadedBy: "JB" };
+    }
+  ),
+  blogImage: f({ image: { maxFileSize: "1MB" } }).onUploadComplete(
+    async ({ metadata, file }) => {
+      console.log("file url", file.url);
+      return { uploadedBy: "JB" };
+    }
+  ),
+  fileUploads: f({
+    image: { maxFileSize: "1MB", maxFileCount: 4 },
+    pdf: { maxFileSize: "1MB", maxFileCount: 4 },
+    "application/msword": { maxFileSize: "1MB", maxFileCount: 4 }, // .doc
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+      maxFileSize: "1MB",
+      maxFileCount: 4,
+    }, // .docx
+    "application/vnd.ms-excel": { maxFileSize: "1MB", maxFileCount: 4 }, // .xls
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+      maxFileSize: "1MB",
+      maxFileCount: 4,
+    }, // .xlsx
+    "application/vnd.ms-powerpoint": { maxFileSize: "1MB", maxFileCount: 4 }, // .ppt
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      { maxFileSize: "1MB", maxFileCount: 4 }, // .pptx
+    "text/plain": { maxFileSize: "1MB", maxFileCount: 4 }, // .txt
+
+    // Archive types
+    "application/gzip": { maxFileSize: "1MB", maxFileCount: 4 },
+    "application/zip": { maxFileSize: "1MB", maxFileCount: 4 },
+  }).onUploadComplete(async ({ metadata, file }) => {
+    console.log("file url", file.url);
+    return { uploadedBy: "JB" };
+  }),
+  mailAttachments: f({
+    image: { maxFileSize: "1MB", maxFileCount: 4 },
+    pdf: { maxFileSize: "1MB", maxFileCount: 4 },
+    "application/msword": { maxFileSize: "1MB", maxFileCount: 4 }, // .doc
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+      maxFileSize: "1MB",
+      maxFileCount: 4,
+    }, // .docx
+    "application/vnd.ms-excel": { maxFileSize: "1MB", maxFileCount: 4 }, // .xls
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+      maxFileSize: "1MB",
+      maxFileCount: 4,
+    }, // .xlsx
+    "application/vnd.ms-powerpoint": { maxFileSize: "1MB", maxFileCount: 4 }, // .ppt
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      { maxFileSize: "1MB", maxFileCount: 4 }, // .pptx
+    "text/plain": { maxFileSize: "1MB", maxFileCount: 4 }, // .txt
+
+    // Archive types
+    "application/gzip": { maxFileSize: "1MB", maxFileCount: 4 },
+    "application/zip": { maxFileSize: "1MB", maxFileCount: 4 },
+  }).onUploadComplete(async ({ metadata, file }) => {
+    console.log("file url", file.url);
+    return { uploadedBy: "JB" };
+  }),
+} satisfies FileRouter;
+
+export type OurFileRouter = typeof ourFileRouter;
+```
+
+**Key Benefits:**
+
+- Supports multiple file types including Office documents
+- Separate routes for different use cases
+- Proper MIME type configuration for all common file formats
+
+## Excel Export with XLSX
+
+Export data to Excel format with proper formatting and error handling.
+
+```typescript
+const handleExport = async (filteredOrders: SalesOrder[]) => {
+  setIsExporting(true);
+  try {
+    const exportData = filteredOrders.map((order) => ({
+      "Order Number": order.orderNumber,
+      "Order Date": formatDate(order.orderDate),
+      "Buyer Type": order.buyerType.replace("_", " "),
+      "Buyer Name": order.buyerName,
+      Target: order.targetTitle,
+      "Items Count": order.orderItems.length,
+      "Number Plates": order.orderItems
+        .map((item) => item.numberPlate)
+        .join(", "),
+      "Total Amount": formatCurrency(order.totalAmount),
+      "Amount Paid": formatCurrency(order.amountPaid),
+      Outstanding: formatCurrency(order.outstandingBalance),
+      "Payment Status": order.paymentStatus,
+      "Order Status": order.status,
+      Created: formatDate(order.createdAt),
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Sales Orders");
+
+    const fileName = `Sales_Orders_${activeTab}_${format(
+      new Date(),
+      "yyyy-MM-dd"
+    )}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+
+    toast.success("Export successful", {
+      description: `Sales orders exported to ${fileName}`,
+    });
+  } catch (error) {
+    toast.error("Export failed", {
+      description:
+        error instanceof Error ? error.message : "Unknown error occurred",
+    });
+  } finally {
+    setIsExporting(false);
+  }
+};
+```
+
+**Key Benefits:**
+
+- Transforms complex nested data into flat Excel format
+- Automatic file naming with timestamps
+- Proper error handling and user feedback
+- Loading states for better UX
+
+## PDF Generation and Download
+
+Complete PDF generation setup using React-PDF with download and print functionality.
+
+### PDF Data Preparation
+
+```typescript
+const { data: order, isLoading, error, refetch } = useSalesOrder(orderId);
+
+const preparePDFData = (order: any) => {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    orderDate: order.orderDate,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    buyerName: order.buyerName,
+    buyerType: order.buyerType,
+    targetTitle: order.targetTitle,
+    subtotal: order.subtotal,
+    taxAmount: order.taxAmount,
+    totalAmount: order.totalAmount,
+    amountPaid: order.amountPaid,
+    outstandingBalance: order.outstandingBalance,
+    notes: order.notes,
+    salesAgent: order.salesAgent,
+    salesPerson: order.salesPerson,
+    orderItems: order.orderItems.map((item: any) => ({
+      id: item.id,
+      productName: item.productName,
+      numberPlate: item.numberPlate,
+      modelName: item.modelName,
+      unitPrice: item.unitPrice,
+      quantity: item.quantity,
+      lineTotal: item.lineTotal,
+      isPaid: item.isPaid,
+      paidAt: item.paidAt,
+    })),
+    payments: order.payments.map((payment: any) => ({
+      id: payment.id,
+      amount: payment.amount,
+      paymentDate: payment.paymentDate,
+      paymentMethod: payment.paymentMethod,
+      referenceNumber: payment.referenceNumber,
+      notes: payment.notes,
+    })),
+  };
+};
+
+// Usage in component
+<SalesOrderPrintComponent orderData={preparePDFData(order)} />
+```
+
+### Reusable PDF Header Component
+
+**File: `components/pdf/PDFHeader.tsx`**
+
+```typescript
+import React from "react";
+import { View, Text, StyleSheet } from "@react-pdf/renderer";
+
+interface PDFHeaderProps {
+  title: string;
+  companyName?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+}
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#1f2937",
+    color: "#FFFFFF",
+    padding: 20,
+    marginBottom: 20,
+  },
+  companyInfo: {
+    flex: 1,
+  },
+  companyName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 5,
+  },
+  companyDetails: {
+    fontSize: 10,
+  },
+  documentTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+  },
+});
+
+const PDFHeader: React.FC<PDFHeaderProps> = ({
+  title,
+  companyName = "Limibooks (U) Ltd",
+  phone = "+256 772514057",
+  email = "info@limibooks.com",
+  address = "Kampala, Uganda",
+}) => {
+  return (
+    <View style={styles.header}>
+      <View style={styles.companyInfo}>
+        <Text style={styles.companyName}>{companyName}</Text>
+        <Text style={styles.companyDetails}>Phone: {phone}</Text>
+        <Text style={styles.companyDetails}>Email: {email}</Text>
+        <Text style={styles.companyDetails}>Address: {address}</Text>
+      </View>
+      <Text style={styles.documentTitle}>{title}</Text>
+    </View>
+  );
+};
+
+export default PDFHeader;
+```
+
+**Key Benefits:**
+
+- Reusable header component for consistent branding
+- Configurable company information
+- Professional styling with React-PDF
+- Type-safe props interface
+
+## Installation Commands
+
+For the snippets above, you'll need these dependencies:
+
+```bash
+# CORS and basic Next.js functionality (built-in)
+npm install next
+
+# Prisma with Accelerate
+npm install prisma @prisma/client @prisma/extension-accelerate
+npx prisma init
+
+# UploadThing
+npm install uploadthing @uploadthing/react
+
+# Excel export
+npm install xlsx
+npm install --save-dev @types/xlsx
+
+# PDF generation
+npm install @react-pdf/renderer
+npm install --save-dev @types/react
+
+# Date formatting (if using date-fns)
+npm install date-fns
+
+# Toast notifications (if using sonner)
+npm install sonner
+```
+
+## Usage Tips
+
+1. **CORS Middleware**: Place the middleware.ts file in your project root, alongside your next.config.js
+2. **Prisma Instance**: Import `db` from your lib/db.ts file instead of creating new PrismaClient instances
+3. **UploadThing**: Remember to set up the API route in `app/api/uploadthing/route.ts`
+4. **File Exports**: Always handle errors gracefully and provide user feedback
+5. **PDF Generation**: Consider implementing lazy loading for PDF components to improve performance
+
+These snippets cover the most common patterns I use in Next.js applications and should save significant development time.
