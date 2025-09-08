@@ -7384,6 +7384,67 @@ export const countries: Country[] = [
 ];
 ```
 
+## React Query Snippets for CRUD
+
+```tsx
+// hooks/use-church-mutations.ts
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  createSubdomainAction,
+  deleteChurchAction,
+} from "@/actions/sub-domain";
+import { getAllChurches, getSubdomainData } from "@/lib/subdomains";
+
+export function useCreateChurch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createSubdomainAction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["churches"],
+      });
+    },
+    onError: (error: any) => {
+      console.error("Mutation error:", error);
+    },
+  });
+}
+
+export function useSubdomainData(subdomain: string) {
+  return useQuery({
+    queryKey: ["subdomain", subdomain],
+    queryFn: () => getSubdomainData(subdomain),
+    enabled: !!subdomain, // Only run if subdomain exists
+    retry: 1, // Retry once on failure
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+export function useChurchesData() {
+  return useQuery({
+    queryKey: ["churches"],
+    queryFn: () => getAllChurches(),
+    retry: 1, // Retry once on failure
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+export function useDeleteChurch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: deleteChurchAction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["churches"] });
+    },
+    onError: (error: any) => {
+      console.error("Delete church error:", error);
+    },
+  });
+}
+```
+
 **Key Benefits:**
 
 - Reusable header component for consistent branding
