@@ -2,6 +2,20 @@ import type { Registry } from "shadcn/registry";
 
 export const components: Registry["items"] = [
   {
+    name: "multi-step-form",
+    type: "registry:component",
+    title: "Multi Step Form",
+    author: "jb <jb@desishub.com>",
+    dependencies: ["motion"],
+    registryDependencies: ["<registryBaseUrl>/utils.json"],
+    files: [
+      {
+        path: "multi-step/multi-step-form.tsx",
+        type: "registry:component",
+      },
+    ],
+  },
+  {
     name: "theme-switcher",
     type: "registry:component",
     description:
@@ -16,13 +30,14 @@ export const components: Registry["items"] = [
         type: "registry:component",
       },
     ],
-    docs: "https://chanhdai.com/components/theme-switcher-component",
+    docs: "https://jb.desishub.com/components/theme-switcher-component",
   },
+
   {
     name: "flip-sentences",
     type: "registry:component",
     title: "Flip Sentences",
-    author: "ncdai <dai@chanhdai.com>",
+    author: "jb <jb@desishub.com>",
     dependencies: ["motion"],
     registryDependencies: ["<registryBaseUrl>/utils.json"],
     files: [
