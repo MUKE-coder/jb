@@ -5,7 +5,7 @@ import { examples } from "./registry-examples";
 import { hook } from "./registry-hook";
 import { lib } from "./registry-lib";
 
-export const registry = {
+const registry = {
   name: "jbwebdeveloper",
   homepage: "https://jb.desishub.com/components",
   items: [
@@ -17,3 +17,5 @@ export const registry = {
     ...examples,
   ],
 } satisfies Registry;
+
+export default registry;

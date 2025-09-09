@@ -28,6 +28,15 @@ export const Index: Record<string, any> = {
       type: "registry:hook",
     }],
   },
+  "multi-step-form": {
+    name: "multi-step-form",
+    description: "A comprehensive multi-step form system with validation, animations, and custom theming",
+    type: "registry:ui",
+    files: [{
+      path: "src/registry/multi-step/multi-step-form.tsx",
+      type: "registry:component",
+    }],
+  },
   "theme-switcher": {
     name: "theme-switcher",
     description: "A theme switcher component for Next.js apps with next-themes and Tailwind CSS, supporting system, light, and dark modes.",

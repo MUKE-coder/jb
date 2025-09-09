@@ -3,11 +3,24 @@ import type { Registry } from "shadcn/registry";
 export const components: Registry["items"] = [
   {
     name: "multi-step-form",
-    type: "registry:component",
+    type: "registry:ui",
     title: "Multi Step Form",
-    author: "jb <jb@desishub.com>",
-    dependencies: ["motion"],
-    registryDependencies: ["<registryBaseUrl>/utils.json"],
+    description:
+      "A comprehensive multi-step form system with validation, animations, and custom theming",
+    dependencies: [
+      "framer-motion",
+      "react-rough-notation",
+      "@radix-ui/react-toggle-group",
+      "lucide-react",
+    ],
+    registryDependencies: [
+      "button",
+      "input",
+      "label",
+      "checkbox",
+      "switch",
+      "separator",
+    ],
     files: [
       {
         path: "multi-step/multi-step-form.tsx",
@@ -32,7 +45,6 @@ export const components: Registry["items"] = [
     ],
     docs: "https://jb.desishub.com/components/theme-switcher-component",
   },
-
   {
     name: "flip-sentences",
     type: "registry:component",

@@ -1,13 +1,13 @@
 {
   "$schema": "https://ui.shadcn.com/schema/registry.json",
-  "name": "ncdai",
-  "homepage": "https://chanhdai.com",
+  "name": "jbwebdeveloper",
+  "homepage": "https://jb.desishub.com",
   "items": [
     {
       "name": "utils",
       "type": "registry:lib",
       "title": "Utility Functions",
-      "author": "ncdai <dai@chanhdai.com>",
+      "author": "jb <jb@desishub.com>",
       "dependencies": [
         "clsx",
         "tailwind-merge"
@@ -35,18 +35,44 @@
       ]
     },
     {
+      "name": "multi-step-form",
+      "type": "registry:ui",
+      "title": "Multi Step Form",
+      "description": "A comprehensive multi-step form system with validation, animations, and custom theming",
+      "dependencies": [
+        "framer-motion",
+        "react-rough-notation",
+        "@radix-ui/react-toggle-group",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "input",
+        "label",
+        "checkbox",
+        "switch",
+        "separator"
+      ],
+      "files": [
+        {
+          "path": "src/registry/multi-step/multi-step-form.tsx",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
       "name": "theme-switcher",
       "type": "registry:component",
+      "description": "A theme switcher component for Next.js apps with next-themes and Tailwind CSS, supporting system, light, and dark modes.",
       "title": "Theme Switcher",
       "author": "ncdai <dai@chanhdai.com>",
-      "description": "A theme switcher component for Next.js apps with next-themes and Tailwind CSS, supporting system, light, and dark modes.",
       "dependencies": [
         "next-themes",
         "lucide-react",
         "motion"
       ],
       "registryDependencies": [
-        "https://chanhdai.com/r/utils.json"
+        "undefined/utils.json"
       ],
       "files": [
         {
@@ -54,18 +80,18 @@
           "type": "registry:component"
         }
       ],
-      "docs": "https://chanhdai.com/components/theme-switcher-component"
+      "docs": "https://jb.desishub.com/components/theme-switcher-component"
     },
     {
       "name": "flip-sentences",
       "type": "registry:component",
       "title": "Flip Sentences",
-      "author": "ncdai <dai@chanhdai.com>",
+      "author": "jb <jb@desishub.com>",
       "dependencies": [
         "motion"
       ],
       "registryDependencies": [
-        "https://chanhdai.com/r/utils.json"
+        "undefined/utils.json"
       ],
       "files": [
         {
@@ -77,14 +103,14 @@
     {
       "name": "apple-hello-effect",
       "type": "registry:component",
+      "description": "Create a Xin chào and Hello writing effect inspired by Apple using Motion for React.",
       "title": "Apple Hello Effect",
       "author": "ncdai <dai@chanhdai.com>",
-      "description": "Create a Xin chào and Hello writing effect inspired by Apple using Motion for React.",
       "dependencies": [
         "motion"
       ],
       "registryDependencies": [
-        "https://chanhdai.com/r/utils.json"
+        "undefined/utils.json"
       ],
       "files": [
         {
@@ -97,14 +123,14 @@
     {
       "name": "wheel-picker",
       "type": "registry:component",
+      "description": "iOS-like wheel picker for React with smooth inertia scrolling and infinite loop support.",
       "title": "Wheel Picker",
       "author": "ncdai <dai@chanhdai.com>",
-      "description": "iOS-like wheel picker for React with smooth inertia scrolling and infinite loop support.",
       "dependencies": [
         "@ncdai/react-wheel-picker"
       ],
       "registryDependencies": [
-        "https://chanhdai.com/r/utils.json"
+        "undefined/utils.json"
       ],
       "files": [
         {
@@ -117,9 +143,9 @@
     {
       "name": "work-experience",
       "type": "registry:component",
+      "description": "Displays a list of work experiences with role details and durations.",
       "title": "Work Experience",
       "author": "ncdai <dai@chanhdai.com>",
-      "description": "Displays a list of work experiences with role details and durations.",
       "dependencies": [
         "react-markdown",
         "lucide-react"
@@ -128,7 +154,7 @@
         "@tailwindcss/typography"
       ],
       "registryDependencies": [
-        "https://chanhdai.com/r/utils.json",
+        "undefined/utils.json",
         "collapsible",
         "separator"
       ],
