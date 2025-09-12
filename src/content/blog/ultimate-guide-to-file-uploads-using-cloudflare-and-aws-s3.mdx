@@ -402,6 +402,48 @@ Go to your bucket → Permissions → Bucket Policy and add:
 }
 ```
 
+### Configure S3 CORS Policy
+
+1. Go to your S3 bucket in the AWS Console
+
+- Navigate to your bucket (jb-file-uploads in your case)
+- Click on the "Permissions" tab
+
+2. Scroll down to "Cross-origin resource sharing (CORS)"
+
+- Click "Edit"
+
+3. Add this CORS configuration:
+
+```json
+[
+  {
+    "AllowedHeaders": ["*"],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "AllowedOrigins": [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://yourdomain.com"
+    ],
+    "ExposeHeaders": ["ETag", "x-amz-meta-custom-header"],
+    "MaxAgeSeconds": 3000
+  }
+]
+```
+
+4. Save the changes
+
+For Production
+
+- When you deploy your app, make sure to update the AllowedOrigins to include your production domain:
+
+```json
+"AllowedOrigins": [
+    "http://localhost:3000",
+    "https://your-production-domain.com"
+]
+```
+
 #### 3. Create IAM User
 
 1. Go to IAM → Users → Create User
