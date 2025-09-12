@@ -51,6 +51,7 @@ export interface FileWithMetadata {
   uploading: boolean;
   progress: number;
   key?: string;
+  publicUrl?: string;
   isDeleting: boolean;
   error: boolean;
   objectUrl?: string;
@@ -73,7 +74,8 @@ export function Dropzone({
     "image/*": [],
     "application/pdf": [],
     "application/msword": [],
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [],
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      [],
     "application/zip": [],
   },
   maxFiles = 5,
@@ -100,7 +102,8 @@ export function Dropzone({
         prevFiles.map((f) => (f.id === fileId ? { ...f, isDeleting: true } : f))
       );
 
-      const endpoint = provider === "aws-s3" ? "/api/s3/delete" : "/api/r2/delete";
+      const endpoint =
+        provider === "aws-s3" ? "/api/s3/delete" : "/api/r2/delete";
       const response = await fetch(endpoint, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
@@ -135,7 +138,8 @@ export function Dropzone({
     );
 
     try {
-      const endpoint = provider === "aws-s3" ? "/api/s3/upload" : "/api/r2/upload";
+      const endpoint =
+        provider === "aws-s3" ? "/api/s3/upload" : "/api/r2/upload";
       const presignedResponse = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,7 +162,7 @@ export function Dropzone({
         return;
       }
 
-      const { presignedUrl, key } = await presignedResponse.json();
+      const { presignedUrl, key, publicUrl } = await presignedResponse.json();
 
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -169,7 +173,12 @@ export function Dropzone({
             setFiles((prevFiles) =>
               prevFiles.map((f) =>
                 f.file === file
-                  ? { ...f, progress: Math.round(percentComplete), key: key }
+                  ? {
+                      ...f,
+                      progress: Math.round(percentComplete),
+                      key: key,
+                      publicUrl: publicUrl,
+                    }
                   : f
               )
             );
@@ -231,23 +240,28 @@ export function Dropzone({
     }
   }, []);
 
-  const onDropRejected = useCallback((fileRejections: FileRejection[]) => {
-    if (fileRejections.length) {
-      const tooManyFiles = fileRejections.find(
-        (rejection) => rejection.errors[0].code === "too-many-files"
-      );
-      const fileTooLarge = fileRejections.find(
-        (rejection) => rejection.errors[0].code === "file-too-large"
-      );
+  const onDropRejected = useCallback(
+    (fileRejections: FileRejection[]) => {
+      if (fileRejections.length) {
+        const tooManyFiles = fileRejections.find(
+          (rejection) => rejection.errors[0].code === "too-many-files"
+        );
+        const fileTooLarge = fileRejections.find(
+          (rejection) => rejection.errors[0].code === "file-too-large"
+        );
 
-      if (tooManyFiles) {
-        toast.error(`Too many files. Maximum ${maxFiles} files allowed.`);
+        if (tooManyFiles) {
+          toast.error(`Too many files. Maximum ${maxFiles} files allowed.`);
+        }
+        if (fileTooLarge) {
+          toast.error(
+            `File too large. Maximum ${maxSize / (1024 * 1024)}MB allowed.`
+          );
+        }
       }
-      if (fileTooLarge) {
-        toast.error(`File too large. Maximum ${maxSize / (1024 * 1024)}MB allowed.`);
-      }
-    }
-  }, [maxFiles, maxSize]);
+    },
+    [maxFiles, maxSize]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -287,9 +301,7 @@ export function Dropzone({
               <p className="text-center text-sm text-muted-foreground">
                 Drag & drop files here, or click to select
               </p>
-              <Button size={isCompact ? "sm" : "default"}>
-                Select Files
-              </Button>
+              <Button size={isCompact ? "sm" : "default"}>Select Files</Button>
             </div>
           )}
         </CardContent>
@@ -297,58 +309,68 @@ export function Dropzone({
 
       {files.length > 0 && (
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {files.map(({ id, file, uploading, progress, isDeleting, error, objectUrl }) => {
-            const isImage = file.type.startsWith("image/");
+          {files.map(
+            ({
+              id,
+              file,
+              uploading,
+              progress,
+              isDeleting,
+              error,
+              objectUrl,
+            }) => {
+              const isImage = file.type.startsWith("image/");
 
-            return (
-              <div key={id} className="flex flex-col gap-1">
-                <div className="relative aspect-square rounded-lg overflow-hidden border">
-                  {isImage ? (
-                    <img
-                      src={objectUrl}
-                      alt={file.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-muted">
-                      <File className="h-12 w-12 text-muted-foreground" />
-                    </div>
-                  )}
-
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-2 right-2 h-6 w-6"
-                    onClick={() => removeFile(id)}
-                    disabled={isDeleting || uploading}
-                  >
-                    {isDeleting ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
+              return (
+                <div key={id} className="flex flex-col gap-1">
+                  <div className="relative aspect-square rounded-lg overflow-hidden border">
+                    {isImage ? (
+                      <img
+                        src={objectUrl}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
-                      <Trash2 className="h-3 w-3" />
-                    )}
-                  </Button>
-
-                  {uploading && !isDeleting && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <div className="text-white font-medium text-lg">
-                        {progress}%
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        <File className="h-12 w-12 text-muted-foreground" />
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {error && (
-                    <div className="absolute inset-0 bg-red-500/50 flex items-center justify-center">
-                      <div className="text-white font-medium">Error</div>
-                    </div>
-                  )}
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-6 w-6"
+                      onClick={() => removeFile(id)}
+                      disabled={isDeleting || uploading}
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                    </Button>
+
+                    {uploading && !isDeleting && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <div className="text-white font-medium text-lg">
+                          {progress}%
+                        </div>
+                      </div>
+                    )}
+
+                    {error && (
+                      <div className="absolute inset-0 bg-red-500/50 flex items-center justify-center">
+                        <div className="text-white font-medium">Error</div>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate px-1">
+                    {file.name}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground truncate px-1">
-                  {file.name}
-                </p>
-              </div>
-            );
-          })}
+              );
+            }
+          )}
         </div>
       )}
     </div>
@@ -365,6 +387,7 @@ export function Dropzone({
 //     });
 //   };
 // }, [files]);
+
 ```
 
 ---
@@ -459,9 +482,9 @@ Create a `.env.local` file:
 ```env
 # AWS S3 Configuration
 AWS_S3_REGION=us-east-1
+AWS_S3_BUCKET_NAME=your_bucket_name
 AWS_S3_ACCESS_KEY_ID=your_access_key_id
 AWS_S3_SECRET_ACCESS_KEY=your_secret_access_key
-AWS_S3_BUCKET_NAME=your_bucket_name
 ```
 
 ### API Routes
@@ -505,6 +528,19 @@ const uploadRequestSchema = z.object({
   size: z.number(),
 });
 
+function constructAwsS3Url(
+  key: string,
+  bucketName: string,
+  region: string,
+  customDomain?: string
+): string {
+  if (customDomain) {
+    return `${customDomain}/${encodeURIComponent(key)}`;
+  }
+  return `https://${bucketName}.s3.${region}.amazonaws.com/${encodeURIComponent(
+    key
+  )}`;
+}
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -530,10 +566,14 @@ export async function POST(request: Request) {
     const presignedUrl = await getSignedUrl(s3Client, command, {
       expiresIn: 3600, // URL expires in 1 hour
     });
-
+    const key = uniqueKey;
+    const bucketName = process.env.AWS_S3_BUCKET_NAME!;
+    const region = process.env.AWS_S3_REGION!;
+    const publicUrl = constructAwsS3Url(key, bucketName, region);
     return NextResponse.json({
       presignedUrl,
       key: uniqueKey,
+      publicUrl,
     });
   } catch (error) {
     console.error("Error generating presigned URL:", error);
@@ -589,10 +629,15 @@ export async function DELETE(request: Request) {
 ### Usage Example
 
 ```typescript
-// app/page.tsx
-import { Dropzone } from "@/components/ui/dropzone";
+// app/s3/page.tsx
+"use client";
+
+import { Dropzone, FileWithMetadata } from "@/components/ui/dropzone";
+import { useState } from "react";
 
 export default function HomePage() {
+  const [files, setFiles] = useState<FileWithMetadata[]>();
+  console.log(files);
   return (
     <div className="max-w-2xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">AWS S3 File Upload</h1>
@@ -601,10 +646,12 @@ export default function HomePage() {
         variant="default"
         maxFiles={10}
         maxSize={1024 * 1024 * 50} // 50MB
+        onFilesChange={(files) => setFiles(files)}
       />
     </div>
   );
 }
+
 ```
 
 ### Pros and Cons
