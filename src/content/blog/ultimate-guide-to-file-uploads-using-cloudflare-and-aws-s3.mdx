@@ -356,15 +356,15 @@ export function Dropzone({
 }
 
 // Cleanup hook
-useEffect(() => {
-  return () => {
-    files.forEach((file) => {
-      if (file.objectUrl) {
-        URL.revokeObjectURL(file.objectUrl);
-      }
-    });
-  };
-}, [files]);
+// useEffect(() => {
+//   return () => {
+//     files.forEach((file) => {
+//       if (file.objectUrl) {
+//         URL.revokeObjectURL(file.objectUrl);
+//       }
+//     });
+//   };
+// }, [files]);
 ```
 
 ---
