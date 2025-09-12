@@ -704,7 +704,7 @@ In your bucket settings, add CORS rules:
 ]
 ```
 
-#### 4. Create API Token
+#### 4. Create API Token (See near the button of Create Bucket -> API dropdown)
 
 1. Go to R2 → Manage R2 API tokens
 2. Click "Create API token"
@@ -757,7 +757,17 @@ const uploadRequestSchema = z.object({
   contentType: z.string(),
   size: z.number(),
 });
-
+function constructCloudflareR2Url(
+  key: string,
+  bucketName: string,
+  customDomain?: string
+): string {
+  if (customDomain) {
+    return `${customDomain}/${encodeURIComponent(key)}`;
+  }
+  // R2 public URL format (requires public access setup)
+  return `https://pub-${bucketName}.r2.dev/${encodeURIComponent(key)}`;
+}
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -783,10 +793,15 @@ export async function POST(request: Request) {
     const presignedUrl = await getSignedUrl(r2Client, command, {
       expiresIn: 3600, // URL expires in 1 hour
     });
+    const key = uniqueKey;
+    const bucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME!;
+
+    const publicUrl = constructCloudflareR2Url(key, bucketName);
 
     return NextResponse.json({
       presignedUrl,
       key: uniqueKey,
+      publicUrl,
     });
   } catch (error) {
     console.error("Error generating presigned URL:", error);
@@ -843,24 +858,27 @@ export async function DELETE(request: Request) {
 
 ```typescript
 // app/r2-demo/page.tsx
-import { Dropzone } from "@/components/ui/dropzone";
+"use client";
+import { Dropzone, FileWithMetadata } from "@/components/ui/dropzone";
+import { useState } from "react";
 
-export default function R2DemoPage() {
+export default function HomePage() {
+  const [files, setFiles] = useState<FileWithMetadata[]>();
+  console.log(files);
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Cloudflare R2 File Upload</h1>
+      <h1 className="text-2xl font-bold mb-6">AWS S3 File Upload</h1>
       <Dropzone
         provider="cloudflare-r2"
         variant="compact"
-        maxFiles={5}
-        accept={{
-          "image/*": [],
-          "application/pdf": [],
-        }}
+        maxFiles={10}
+        maxSize={1024 * 1024 * 50} // 50MB
+        onFilesChange={(files) => setFiles(files)}
       />
     </div>
   );
 }
+
 ```
 
 ### Pros and Cons
