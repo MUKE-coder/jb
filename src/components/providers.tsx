@@ -33,7 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           </LazyMotion>
         </AppProgressProvider>
 
-        <Toaster />
+        <Toaster richColors />
         <Analytics />
         <SpeedInsights />
       </ThemeProvider>

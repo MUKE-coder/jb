@@ -38,3 +38,12 @@ export const SOCIAL_LINKS: SocialLink[] = [
     href: "https://www.youtube.com/@JBWEBDEVELOPER",
   },
 ];
+export const TOOLS_LINKS: SocialLink[] = [
+  {
+    icon: "/lara.png",
+    title: "BD Connection String Formatter",
+    description:
+      "Paste your Neon database connection string below to extract and format it for Laravel.",
+    href: "/tools/connection-string-formatter",
+  },
+];
