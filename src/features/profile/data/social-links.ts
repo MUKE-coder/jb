@@ -46,4 +46,11 @@ export const TOOLS_LINKS: SocialLink[] = [
       "Paste your Neon database connection string below to extract and format it for Laravel.",
     href: "/tools/connection-string-formatter",
   },
+  {
+    icon: "/devops.png",
+    title: "DevOps Roadmap",
+    description:
+      "Step by step guide for DevOps, SRE or any other Operations Role in 2025.",
+    href: "/tools/devops",
+  },
 ];
