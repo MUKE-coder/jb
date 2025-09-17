@@ -2,6 +2,21 @@ import type { Registry } from "shadcn/registry";
 
 export const components: Registry["items"] = [
   {
+    name: "zustand-cart",
+    type: "registry:ui",
+    title: "Zustand Cart",
+    description:
+      "A complete e-commerce shopping cart component with product listing, cart management",
+    dependencies: ["lucide-react", "zustand"],
+    registryDependencies: ["button", "card"],
+    files: [
+      {
+        path: "cart/zustand-cart.tsx",
+        type: "registry:component",
+      },
+    ],
+  },
+  {
     name: "multi-step-form",
     type: "registry:ui",
     title: "Multi Step Form",

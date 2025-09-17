@@ -28,6 +28,15 @@ export const Index: Record<string, any> = {
       type: "registry:hook",
     }],
   },
+  "zustand-cart": {
+    name: "zustand-cart",
+    description: "A complete e-commerce shopping cart component with product listing, cart management",
+    type: "registry:ui",
+    files: [{
+      path: "src/registry/cart/zustand-cart.tsx",
+      type: "registry:component",
+    }],
+  },
   "multi-step-form": {
     name: "multi-step-form",
     description: "A comprehensive multi-step form system with validation, animations, and custom theming",
