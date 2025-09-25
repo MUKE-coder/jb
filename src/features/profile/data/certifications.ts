@@ -143,3 +143,23 @@ export const CERTIFICATIONS: Certification[] = [
       "https://drive.google.com/file/d/1-NHhjKlQbhlcO7bpRue1XzDgDaudOf2N/view?usp=sharing",
   },
 ];
+// export const OTHER_PROJECTS: OtherProject[] = [
+//   {
+//     title: "Kyaja Store Ug UG - Your One-Stop Shop for All Your Needs",
+//     description:
+//       "Discover a wide range of quality products at Kyaja-Store Ug UG, located in Kampala downtown. Explore our extensive collection, including fashion, electronics, and more.",
+//     appLogoURL: "https://www.kyaja.com/logo.svg",
+//     createdDate: "2025-05-08",
+//     appIconName: "Kyaja",
+//     appURL: "https://www.kyaja.com/",
+//   },
+//   {
+//     title: "CodeMint - Fullstack Marketplace",
+//     description:
+//       "Get access to premium fullstack projects with complete source code. Built with Next.js, React, TypeScript, and modern web technologies. Perfect for developers looking for",
+//     appLogoURL: "https://assets.chanhdai.com/images/companies/ipvietnam.webp",
+//     createdDate: "2025-05-08",
+//     appIconName: "CodeMint",
+//     appURL: "https://codemint-gamma.vercel.app/",
+//   },
+// ];

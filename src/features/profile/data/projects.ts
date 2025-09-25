@@ -216,4 +216,170 @@ export const PROJECTS: Project[] = [
 - Job-ready curriculum designed by industry experts
 - Proven track record of student success stories`,
   },
+  {
+    id: "inventory-pro",
+    title: "Inventory Pro - Inventory Management System",
+    period: {
+      start: "02.2023",
+    },
+    link: "https://zoho-inventory.vercel.app",
+    skills: [
+      "Inventory Management",
+      "Next.js",
+      "Supply Chain Management",
+      "Stock Tracking",
+      "Order Management",
+      "Warehouse Management",
+      "Real-time Analytics",
+      "Business Intelligence",
+      "Multi-location Support",
+      "Barcode Integration",
+      "Reporting & Dashboards",
+      "Multi Organisation",
+      "Roles and Permissions",
+    ],
+    description: `A comprehensive inventory management system designed to streamline business operations and optimize stock control.
+- Multi-Organisation,Its SAAS application , where you can create multiple organisations
+- Real-time inventory tracking across multiple locations and warehouses
+- Automated stock level monitoring with low-stock alerts and reorder points
+- Purchase order management and supplier relationship tracking
+- Sales order processing with integrated billing and invoicing
+- Barcode scanning and QR code support for efficient item identification
+- Advanced reporting and analytics for inventory insights and forecasting
+- Multi-user access with role-based permissions and audit trails
+- Integration capabilities with popular accounting and e-commerce platforms
+- Mobile-responsive design for on-the-go inventory management
+- Batch and serial number tracking for complete product traceability`,
+  },
+  {
+    id: "invoice-pro",
+    title: "InvoicePro - Invoice Generator & Management",
+    period: {
+      start: "02.2023", // You can adjust this date as needed
+    },
+    link: "https://invoice-generator-pro-phi.vercel.app/",
+    skills: [
+      "Invoice Generation",
+      "Next.js",
+      "PDF Generation",
+      "Email Integration",
+      "Brand Customization",
+      "Customer Management",
+      "Freelance Tools",
+      "Small Business Solutions",
+      "Data Extraction",
+      "Document Management",
+      "Responsive Design",
+    ],
+    description: `A powerful invoice generation platform designed specifically for freelancers and small businesses to streamline billing processes.
+- Create up to 2 free customizable invoices with professional templates
+- Complete brand customization including logo upload and brand color theming
+- Instant PDF generation and download for professional invoice delivery
+- Automated customer detail extraction and storage from invoice data
+- Customer-based invoice organization and viewing for better client management
+- Integrated email system for direct invoice sending to clients
+- User-friendly interface optimized for quick invoice creation
+- Responsive design ensuring seamless experience across all devices
+- Smart data persistence to maintain customer and invoice history
+- Professional invoice templates suitable for various business types`,
+  },
+  {
+    id: "wesendall",
+    title: "WesendAll - Bulk SMS & Email Platform",
+    period: {
+      start: "02.2023", // You can adjust this date as needed
+    },
+    link: "https://www.wesendall.com/",
+    skills: [
+      "Bulk Messaging",
+      "SMS Gateway Integration",
+      "Email Marketing",
+      "Mobile Money Integration",
+      "Contact Management",
+      "Group Messaging",
+      "Payment Processing",
+      "Communication Platform",
+      "Next.js",
+      "API Integration",
+      "Business Communication",
+    ],
+    description: `A comprehensive bulk communication platform enabling businesses to reach customers through SMS and email campaigns.
+- Bulk SMS and email sending capabilities for marketing and notifications
+- Flexible contact management with individual contacts and organized groups
+- Multiple sending options: group messaging, single SMS, or bulk messaging to pasted contact lists
+- Integrated mobile money payment system for easy account top-up and credit management
+- User-friendly contact organization with group creation and management features
+- Cost-effective communication solution for businesses of all sizes
+- Real-time delivery tracking and campaign analytics
+- Scalable messaging infrastructure supporting high-volume campaigns
+- Intuitive dashboard for managing contacts, credits, and message history
+- Reliable messaging delivery with multiple gateway integrations`,
+  },
+  {
+    id: "limibooks",
+    title: "Limibooks - Vehicle Sales & Accounting System",
+    period: {
+      start: "02.2023", // You can adjust this date as needed
+    },
+    link: "https://www.limibooks.com",
+    skills: [
+      "Accounting System",
+      "Vehicle Management",
+      "Sales Management",
+      "Inventory Control",
+      "Financial Reporting",
+      "Installment Processing",
+      "Target Management",
+      "PDF Generation",
+      "Data Analytics",
+      "Chart Visualization",
+      "Agent Management",
+      "Next.js",
+    ],
+    description: `A specialized accounting and sales management system designed for vehicle dealerships and automotive businesses.
+- Comprehensive vehicle inventory management with detailed vehicle registration and tracking
+- Sales agent and car dealer registration with performance monitoring capabilities
+- Quarterly target setting and tracking system for sales teams and individual agents
+- Complete sales order processing from creation to fulfillment
+- Automated PDF generation for invoices, receipts, and sales documentation
+- Flexible installment payment system supporting both order-level and individual vehicle payments
+- Advanced filtering and search capabilities across all system modules
+- Comprehensive reporting suite with detailed financial and sales analytics
+- Interactive charts and dashboards for business intelligence and performance tracking
+- Multi-user access with role-based permissions for agents, dealers, and administrators
+- Real-time sales tracking and commission calculation features`,
+  },
+  {
+    id: "green-freight-logistics",
+    title: "Green Freight Logistics - Logistics Management & Tracking System",
+    period: {
+      start: "02.2023", // You can adjust this date as needed
+    },
+    link: "https://www.greenlinkfreightlogisticstracking.com/",
+    skills: [
+      "Logistics Management",
+      "Shipment Tracking",
+      "Customer Management",
+      "Document Generation",
+      "Supply Chain Management",
+      "Real-time Tracking",
+      "Receipt Printing",
+      "Admin Dashboard",
+      "Public Tracking Interface",
+      "Next.js",
+      "Template System",
+    ],
+    description: `A comprehensive logistics management system designed to streamline freight operations and provide transparent shipment tracking.
+- Complete shipment management with creation, monitoring, and status updates
+- Customer registration and management system for efficient client handling
+- Customizable receipt printing with professional templates for shipment documentation
+- Public shipment tracking interface allowing customers to monitor their packages in real-time
+- Admin dashboard for managing all logistics operations and customer relationships
+- Automated shipment status updates throughout the delivery lifecycle
+- Professional receipt generation system with branded templates
+- User-friendly tracking interface accessible to customers without login requirements
+- Comprehensive shipment history and delivery confirmation system
+- Scalable platform supporting multiple shipment types and delivery routes
+- Real-time notifications and status updates for enhanced customer communication`,
+  },
 ];
