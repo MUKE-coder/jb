@@ -5,3 +5,7 @@ https://claude.ai/chat/3539cb7f-8f76-4c6d-b736-13addaad6eaa
 ## AMAZON SES , SQS AND SNS
 
 https://claude.ai/chat/08e49a85-4239-4530-a6b8-67bb9bbe8f6a
+
+## GO COMPARISON
+
+https://github.com/burakorkmez/react-go-tutorial/blob/master/COMPARISONS.md
