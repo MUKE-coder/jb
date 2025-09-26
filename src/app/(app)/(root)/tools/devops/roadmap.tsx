@@ -2,6 +2,8 @@
 import Head from "next/head";
 import React, { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+
 const DevOpsRoadmap = () => {
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
@@ -482,7 +484,7 @@ const DevOpsRoadmap = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       <Head>
         <title>
           Complete DevOps Roadmap 2025 | Master DevOps Tools & Technologies
@@ -494,12 +496,10 @@ const DevOpsRoadmap = () => {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <header className="bg-white shadow-sm">
+      <header className="shadow-sm">
         <div className="container mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-gray-800">
-            DevOps Engineer Roadmap 2025
-          </h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="text-3xl font-bold">DevOps Engineer Roadmap 2025</h1>
+          <p className="mt-2">
             A complete guide to mastering DevOps tools and technologies in 10-14
             months
           </p>
@@ -507,11 +507,9 @@ const DevOpsRoadmap = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8 rounded-lg bg-white p-6 shadow-md">
-          <h2 className="mb-4 text-2xl font-semibold text-gray-800">
-            Roadmap Overview
-          </h2>
-          <p className="mb-4 text-gray-600">
+        <div className="mb-8 rounded-lg p-6 shadow-md">
+          <h2 className="mb-4 text-2xl font-semibold">Roadmap Overview</h2>
+          <p className="mb-4">
             This roadmap is designed to take you from beginner to proficient
             DevOps engineer in 10-14 months, assuming you dedicate 3-5 hours of
             study every day. The roadmap has been updated with modern tools and
@@ -528,10 +526,7 @@ const DevOpsRoadmap = () => {
 
         <div className="space-y-6">
           {roadmapData.map((item, index) => (
-            <div
-              key={item.id}
-              className="overflow-hidden rounded-lg bg-white shadow-md"
-            >
+            <div key={item.id} className="overflow-hidden rounded-lg shadow-md">
               <button
                 className="flex w-full items-center justify-between p-6 text-left focus:outline-none"
                 onClick={() => toggleSection(item.id)}
@@ -541,18 +536,16 @@ const DevOpsRoadmap = () => {
                     <span className="font-bold text-blue-600">{index + 1}</span>
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-800">
-                      {item.title}
-                    </h3>
-                    <p className="mt-1 text-gray-600">{item.description}</p>
+                    <h3 className="text-xl font-semibold">{item.title}</h3>
+                    <p className="mt-1">{item.description}</p>
                   </div>
                 </div>
                 <div className="flex items-center">
-                  <span className="mr-4 rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-800">
+                  <span className="mr-4 rounded-full border px-3 py-1 text-sm font-medium">
                     {item.duration}
                   </span>
                   <svg
-                    className={`h-5 w-5 transform text-gray-500 transition-transform ${
+                    className={`h-5 w-5 transform transition-transform ${
                       activeSection === item.id ? "rotate-180" : ""
                     }`}
                     fill="none"
@@ -572,7 +565,7 @@ const DevOpsRoadmap = () => {
               {activeSection === item.id && (
                 <div className="px-6 pb-6">
                   <div className="border-t border-gray-100 pt-4">
-                    <h4 className="mb-3 font-medium text-gray-700">
+                    <h4 className="mb-3 font-medium">
                       What you&apos;ll learn:
                     </h4>
                     <ul className="mb-6 space-y-2">
@@ -592,14 +585,12 @@ const DevOpsRoadmap = () => {
                               d="M5 13l4 4L19 7"
                             />
                           </svg>
-                          <span className="text-gray-600">{detail}</span>
+                          <span className="">{detail}</span>
                         </li>
                       ))}
                     </ul>
 
-                    <h4 className="mb-3 font-medium text-gray-700">
-                      Learning resources:
-                    </h4>
+                    <h4 className="mb-3 font-medium">Learning resources:</h4>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       {item.resources.map((resource, i) => (
                         <a
@@ -607,12 +598,12 @@ const DevOpsRoadmap = () => {
                           href={resource.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100"
+                          className="flex items-center rounded-lg border p-3 transition-colors"
                         >
-                          <span className="mr-3 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
+                          <span className="mr-3 rounded px-2 py-1 text-xs font-medium">
                             {resource.type === "free" ? "FREE" : "PAID"}
                           </span>
-                          <span className="text-gray-700">{resource.name}</span>
+                          <span className="">{resource.name}</span>
                           <svg
                             className="ml-auto h-4 w-4 text-gray-400"
                             fill="none"
@@ -638,10 +629,9 @@ const DevOpsRoadmap = () => {
         </div>
 
         <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2">
-          <div className="rounded-lg bg-white p-6 shadow-md">
-            <h2 className="mb-4 text-2xl font-semibold text-gray-800">
-              Recommended Books
-            </h2>
+          <div className="rounded-lg border p-6 shadow-md">
+            <h2 className="mb-4 text-2xl font-semibold">Recommended Books</h2>
+            <hr />
             <div className="space-y-4">
               {books.map((book, index) => (
                 <a
@@ -649,33 +639,30 @@ const DevOpsRoadmap = () => {
                   href={book.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+                  className="block rounded-lg border p-4 shadow transition-colors"
                 >
-                  <h3 className="font-medium text-gray-800">{book.title}</h3>
-                  <p className="mt-1 text-sm text-gray-600">by {book.author}</p>
+                  <h3 className="font-medium">{book.title}</h3>
+                  <p className="mt-1 text-sm">by {book.author}</p>
                 </a>
               ))}
             </div>
           </div>
 
-          <div className="rounded-lg bg-white p-6 shadow-md">
-            <h2 className="mb-4 text-2xl font-semibold text-gray-800">
-              DevOps Tools
-            </h2>
-            <div className="space-y-4">
+          <div className="rounded-lg border p-6 shadow-md">
+            <h2 className="mb-4 text-2xl font-semibold">DevOps Tools</h2>
+            <hr />
+            <div className="space-y-0">
               {tools.map((toolCategory, index) => (
-                <div key={index} className="rounded-lg bg-gray-50 p-4">
-                  <h3 className="mb-2 font-medium text-gray-800">
-                    {toolCategory.category}
-                  </h3>
+                <div key={index} className="rounded-lg p-4">
+                  <h3 className="mb-2 font-medium">{toolCategory.category}</h3>
                   <div className="flex flex-wrap gap-2">
                     {toolCategory.items.map((tool, i) => (
-                      <span
+                      <Button
                         key={i}
-                        className="rounded-full bg-blue-100 px-3 py-1 text-sm text-blue-800"
+                        className="rounded-full px-3 py-1 text-sm"
                       >
                         {tool}
-                      </span>
+                      </Button>
                     ))}
                   </div>
                 </div>
