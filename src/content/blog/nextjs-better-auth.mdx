@@ -271,7 +271,10 @@ export const auth = betterAuth({
         return {
           firstName: profile.given_name,
           lastName: profile.family_name,
-          phone: "1234567890", // Default phone for social logins
+          name: profile.name, // ✅ Add this
+          email: profile.email, // ✅ Add this
+          emailVerified: profile.email_verified ?? true, // ✅ Add this
+          phone: "0000000000", // Placeholder since Google doesn't provide phone
           role: "USER",
         };
       },
