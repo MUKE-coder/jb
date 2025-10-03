@@ -1,0 +1,1030 @@
+---
+title: "Complete Guide: PostgreSQL & pgAdmin Docker Setup for Go Developers"
+description: "Learn how to set up PostgreSQL 17 and pgAdmin in Docker containers while running your Go application locally. This comprehensive guide includes Docker Compose configuration, complete Go code examples with pgx/v5, connection pooling best practices, and a full Docker commands cheatsheet. Perfect for developers who want isolated, portable database environments without containerizing their entire application."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfr34PajROx6ybt2CcUd1VSITq573GszPLuZkK
+category: development
+createdAt: 2025-10-03
+updatedAt: 2025-10-03
+---
+
+# PostgreSQL & pgAdmin with Docker for Go Development
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Prerequisites](#prerequisites)
+3. [Project Setup](#project-setup)
+4. [Docker Compose Configuration](#docker-compose-configuration)
+5. [Starting the Services](#starting-the-services)
+6. [Connecting Go Application to PostgreSQL](#connecting-go-application-to-postgresql)
+7. [Complete Go Example](#complete-go-example)
+8. [Database Management with pgAdmin](#database-management-with-pgadmin)
+9. [Best Practices](#best-practices)
+10. [Troubleshooting](#troubleshooting)
+11. [Docker Commands Cheatsheet](#docker-commands-cheatsheet)
+
+---
+
+## Overview
+
+This guide helps you set up:
+
+- **PostgreSQL 17** running in Docker
+- **pgAdmin 4** running in Docker
+- **Your Go application** running locally on your host machine
+- Seamless connection between your local Go app and containerized PostgreSQL
+
+This setup is ideal for development because:
+
+- You can use your favorite IDE/editor for Go development
+- Hot reload and debugging work normally
+- Database is isolated and portable
+- Easy to reset/recreate the database environment
+
+---
+
+## Prerequisites
+
+- Docker and Docker Compose installed
+- Go 1.21 or higher installed on your system
+- Basic understanding of Go and PostgreSQL
+- A terminal/command prompt
+
+**Verify installations:**
+
+```bash
+docker --version
+docker-compose --version
+go version
+```
+
+---
+
+## Project Setup
+
+### Step 1: Create Project Structure
+
+Create your Go project directory:
+
+```bash
+mkdir my-go-app
+cd my-go-app
+```
+
+Your project structure will look like this:
+
+```
+my-go-app/
+├── docker-compose.yml
+├── .env
+├── .gitignore
+├── go.mod
+├── go.sum
+├── main.go
+├── database/
+│   └── db.go
+└── postgres-data/          # This will be auto-created by Docker
+```
+
+### Step 2: Create Essential Files
+
+Create a `.gitignore` file:
+
+```bash
+# .gitignore
+postgres-data/
+.env
+*.log
+```
+
+Create a `.env` file for environment variables:
+
+```bash
+# .env
+# PostgreSQL Configuration
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_secure_password_here
+POSTGRES_DB=myapp_db
+POSTGRES_PORT=5432
+
+# pgAdmin Configuration
+PGADMIN_EMAIL=admin@example.com
+PGADMIN_PASSWORD=admin_password_here
+PGADMIN_PORT=5050
+
+# Database Connection String for Go
+DATABASE_URL=postgres://postgres:your_secure_password_here@localhost:5432/myapp_db?sslmode=disable
+```
+
+**Important:** Replace the passwords with your own secure passwords!
+
+---
+
+## Docker Compose Configuration
+
+Create a `docker-compose.yml` file in your project root:
+
+```yaml
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Optional: for initialization scripts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${PGADMIN_PORT}:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pgadmin-data:
+```
+
+### Optional: Create Initialization Script
+
+Create `init.sql` in your project root (optional, for initial database setup):
+
+```sql
+-- init.sql
+-- This script runs automatically when the database is first created
+
+-- Create extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Create example table
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    uuid UUID DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- Insert sample data
+INSERT INTO users (name, email) VALUES
+    ('John Doe', 'john@example.com'),
+    ('Jane Smith', 'jane@example.com')
+ON CONFLICT (email) DO NOTHING;
+```
+
+---
+
+## Starting the Services
+
+### Step 1: Start Docker Containers
+
+From your project directory, run:
+
+```bash
+docker-compose up -d
+```
+
+This will:
+
+- Download PostgreSQL 17 and pgAdmin images (first time only)
+- Create and start both containers
+- Create a Docker network for communication
+- Create persistent volumes for data storage
+
+### Step 2: Verify Containers are Running
+
+```bash
+docker-compose ps
+```
+
+You should see both `postgres-db` and `pgadmin` with status "Up".
+
+### Step 3: Check Logs (if needed)
+
+```bash
+# Check all logs
+docker-compose logs
+
+# Check PostgreSQL logs only
+docker-compose logs postgres
+
+# Follow logs in real-time
+docker-compose logs -f
+```
+
+---
+
+## Connecting Go Application to PostgreSQL
+
+### Step 1: Initialize Go Module
+
+```bash
+go mod init github.com/yourusername/my-go-app
+```
+
+### Step 2: Install Required Packages
+
+We'll use `pgx` (recommended PostgreSQL driver for Go):
+
+```bash
+go get github.com/jackc/pgx/v5
+go get github.com/jackc/pgx/v5/pgxpool
+go get github.com/joho/godotenv
+```
+
+**Alternative:** If you prefer `database/sql` with `pq` driver:
+
+```bash
+go get github.com/lib/pq
+```
+
+### Step 3: Create Database Connection File
+
+Create `database/db.go`:
+
+```go
+// database/db.go
+package database
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Database struct {
+	Pool *pgxpool.Pool
+}
+
+// NewDatabase creates a new database connection pool
+func NewDatabase(databaseURL string) (*Database, error) {
+	// Configure connection pool
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse database URL: %w", err)
+	}
+
+	// Set pool configuration
+	config.MaxConns = 25
+	config.MinConns = 5
+	config.MaxConnLifetime = time.Hour
+	config.MaxConnIdleTime = time.Minute * 30
+	config.HealthCheckPeriod = time.Minute
+
+	// Create connection pool
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create connection pool: %w", err)
+	}
+
+	// Test connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("unable to ping database: %w", err)
+	}
+
+	log.Println("Successfully connected to PostgreSQL database!")
+
+	return &Database{Pool: pool}, nil
+}
+
+// Close closes the database connection pool
+func (db *Database) Close() {
+	if db.Pool != nil {
+		db.Pool.Close()
+		log.Println("Database connection closed")
+	}
+}
+
+// Health checks if the database is accessible
+func (db *Database) Health() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := db.Pool.Ping(ctx); err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
+	}
+
+	return nil
+}
+
+// GetDatabaseStats returns connection pool statistics
+func (db *Database) GetDatabaseStats() map[string]interface{} {
+	stats := db.Pool.Stat()
+	return map[string]interface{}{
+		"total_connections":     stats.TotalConns(),
+		"idle_connections":      stats.IdleConns(),
+		"acquired_connections":  stats.AcquiredConns(),
+		"max_connections":       stats.MaxConns(),
+		"acquire_count":         stats.AcquireCount(),
+		"acquire_duration_avg":  stats.AcquireDuration().String(),
+		"new_connections_count": stats.NewConnsCount(),
+	}
+}
+```
+
+---
+
+## Complete Go Example
+
+### Create `main.go`:
+
+```go
+// main.go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/yourusername/my-go-app/database"
+	"github.com/joho/godotenv"
+)
+
+type User struct {
+	ID        int       `json:"id"`
+	UUID      string    `json:"uuid"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func main() {
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables")
+	}
+
+	// Get database URL from environment
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		log.Fatal("DATABASE_URL environment variable is not set")
+	}
+
+	// Connect to database
+	db, err := database.NewDatabase(databaseURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	// Setup graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle OS signals for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		log.Println("Shutting down gracefully...")
+		cancel()
+	}()
+
+	// Run application
+	if err := run(ctx, db); err != nil {
+		log.Fatalf("Application error: %v", err)
+	}
+
+	log.Println("Application stopped")
+}
+
+func run(ctx context.Context, db *database.Database) error {
+	// Check database health
+	if err := db.Health(); err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
+	}
+
+	// Print database stats
+	stats := db.GetDatabaseStats()
+	log.Printf("Database Stats: %+v\n", stats)
+
+	// Example: Create a new user
+	if err := createUser(ctx, db, "Alice Johnson", "alice@example.com"); err != nil {
+		log.Printf("Failed to create user: %v", err)
+	}
+
+	// Example: Get all users
+	users, err := getAllUsers(ctx, db)
+	if err != nil {
+		return fmt.Errorf("failed to get users: %w", err)
+	}
+
+	log.Printf("Found %d users:", len(users))
+	for _, user := range users {
+		log.Printf("  - %s (%s) - Created: %s", user.Name, user.Email, user.CreatedAt.Format(time.RFC3339))
+	}
+
+	// Example: Get user by email
+	user, err := getUserByEmail(ctx, db, "alice@example.com")
+	if err != nil {
+		log.Printf("Failed to get user: %v", err)
+	} else {
+		log.Printf("Found user: %+v", user)
+	}
+
+	// Example: Update user
+	if err := updateUser(ctx, db, user.ID, "Alice Cooper"); err != nil {
+		log.Printf("Failed to update user: %v", err)
+	}
+
+	// Example: Delete user
+	// if err := deleteUser(ctx, db, user.ID); err != nil {
+	// 	log.Printf("Failed to delete user: %v", err)
+	// }
+
+	return nil
+}
+
+// createUser inserts a new user into the database
+func createUser(ctx context.Context, db *database.Database, name, email string) error {
+	query := `
+		INSERT INTO users (name, email, updated_at)
+		VALUES ($1, $2, $3)
+		RETURNING id, uuid, created_at
+	`
+
+	var id int
+	var uuid string
+	var createdAt time.Time
+
+	err := db.Pool.QueryRow(ctx, query, name, email, time.Now()).Scan(&id, &uuid, &createdAt)
+	if err != nil {
+		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	log.Printf("Created user: ID=%d, UUID=%s, Name=%s, Email=%s", id, uuid, name, email)
+	return nil
+}
+
+// getAllUsers retrieves all users from the database
+func getAllUsers(ctx context.Context, db *database.Database) ([]User, error) {
+	query := `
+		SELECT id, uuid, name, email, created_at, updated_at
+		FROM users
+		ORDER BY created_at DESC
+	`
+
+	rows, err := db.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var user User
+		err := rows.Scan(&user.ID, &user.UUID, &user.Name, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return users, nil
+}
+
+// getUserByEmail retrieves a user by email
+func getUserByEmail(ctx context.Context, db *database.Database, email string) (*User, error) {
+	query := `
+		SELECT id, uuid, name, email, created_at, updated_at
+		FROM users
+		WHERE email = $1
+	`
+
+	var user User
+	err := db.Pool.QueryRow(ctx, query, email).Scan(
+		&user.ID, &user.UUID, &user.Name, &user.Email, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}
+
+// updateUser updates a user's name
+func updateUser(ctx context.Context, db *database.Database, id int, name string) error {
+	query := `
+		UPDATE users
+		SET name = $1, updated_at = $2
+		WHERE id = $3
+	`
+
+	result, err := db.Pool.Exec(ctx, query, name, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("no user found with id %d", id)
+	}
+
+	log.Printf("Updated user ID=%d, new name=%s", id, name)
+	return nil
+}
+
+// deleteUser deletes a user by ID
+func deleteUser(ctx context.Context, db *database.Database, id int) error {
+	query := `DELETE FROM users WHERE id = $1`
+
+	result, err := db.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("no user found with id %d", id)
+	}
+
+	log.Printf("Deleted user ID=%d", id)
+	return nil
+}
+```
+
+### Step 4: Run Your Go Application
+
+```bash
+# Make sure Docker containers are running
+docker-compose ps
+
+# Install dependencies
+go mod tidy
+
+# Run the application
+go run main.go
+```
+
+You should see output like:
+
+```
+Successfully connected to PostgreSQL database!
+Database Stats: map[...]
+Created user: ID=3, UUID=..., Name=Alice Johnson, Email=alice@example.com
+Found 3 users:
+  - Alice Johnson (alice@example.com) - Created: 2025-10-03T...
+  - Jane Smith (jane@example.com) - Created: 2025-10-03T...
+  - John Doe (john@example.com) - Created: 2025-10-03T...
+```
+
+---
+
+## Database Management with pgAdmin
+
+### Step 1: Access pgAdmin
+
+Open your browser and go to: `http://localhost:5050`
+
+Login with credentials from your `.env` file:
+
+- Email: `admin@example.com`
+- Password: `admin_password_here`
+
+### Step 2: Add PostgreSQL Server
+
+1. Click **"Add New Server"**
+2. **General Tab:**
+   - Name: `Local PostgreSQL`
+3. **Connection Tab:**
+   - Host: `postgres` (this is the container name in the Docker network)
+   - Port: `5432`
+   - Maintenance database: `myapp_db`
+   - Username: `postgres`
+   - Password: (your password from .env)
+4. Check **"Save password"**
+5. Click **"Save"**
+
+**Note:** Use `postgres` as the hostname (not `localhost` or an IP address) because pgAdmin is running in the same Docker network as PostgreSQL.
+
+### Step 3: Explore Your Database
+
+Navigate through:
+
+- **Servers** → **Local PostgreSQL** → **Databases** → **myapp_db** → **Schemas** → **public** → **Tables** → **users**
+
+Right-click on `users` table and select **"View/Edit Data"** → **"All Rows"** to see your data.
+
+---
+
+## Best Practices
+
+### 1. Use Environment Variables
+
+Always use `.env` files for configuration. Never hardcode credentials!
+
+### 2. Connection Pooling
+
+The example uses connection pooling for better performance:
+
+- **MaxConns**: Maximum number of connections
+- **MinConns**: Minimum idle connections
+- **MaxConnLifetime**: How long a connection can be reused
+- **MaxConnIdleTime**: How long an idle connection is kept
+
+### 3. Context with Timeouts
+
+Always use context with timeouts for database operations:
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+err := db.Pool.QueryRow(ctx, query).Scan(...)
+```
+
+### 4. Prepared Statements
+
+Use parameterized queries to prevent SQL injection:
+
+```go
+// Good ✅
+query := "SELECT * FROM users WHERE email = $1"
+db.Pool.QueryRow(ctx, query, email)
+
+// Bad ❌
+query := fmt.Sprintf("SELECT * FROM users WHERE email = '%s'", email)
+```
+
+### 5. Error Handling
+
+Always handle and log errors appropriately:
+
+```go
+if err != nil {
+    return fmt.Errorf("descriptive error message: %w", err)
+}
+```
+
+### 6. Database Migrations
+
+For production, use migration tools like:
+
+- [golang-migrate](https://github.com/golang-migrate/migrate)
+- [goose](https://github.com/pressly/goose)
+- [dbmate](https://github.com/amacneil/dbmate)
+
+Example with golang-migrate:
+
+```bash
+# Install
+go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+# Create migration
+migrate create -ext sql -dir migrations -seq create_users_table
+
+# Run migrations
+migrate -path migrations -database "postgres://postgres:password@localhost:5432/myapp_db?sslmode=disable" up
+```
+
+### 7. Backup Your Database
+
+Regular backups are essential:
+
+```bash
+# Backup
+docker exec postgres-db pg_dump -U postgres myapp_db > backup.sql
+
+# Restore
+docker exec -i postgres-db psql -U postgres myapp_db < backup.sql
+```
+
+### 8. Development vs Production
+
+Use different configurations:
+
+```go
+// config/config.go
+type Config struct {
+    Environment string
+    Database    DatabaseConfig
+}
+
+type DatabaseConfig struct {
+    URL      string
+    MaxConns int32
+    MinConns int32
+}
+
+func Load() *Config {
+    env := os.Getenv("ENVIRONMENT")
+    if env == "" {
+        env = "development"
+    }
+
+    config := &Config{Environment: env}
+
+    if env == "production" {
+        config.Database.MaxConns = 50
+        config.Database.MinConns = 10
+    } else {
+        config.Database.MaxConns = 25
+        config.Database.MinConns = 5
+    }
+
+    return config
+}
+```
+
+---
+
+## Troubleshooting
+
+### Problem: Can't connect to PostgreSQL from Go app
+
+**Solutions:**
+
+1. **Check if PostgreSQL is running:**
+
+   ```bash
+   docker-compose ps
+   ```
+
+2. **Check PostgreSQL logs:**
+
+   ```bash
+   docker-compose logs postgres
+   ```
+
+3. **Verify connection string:**
+
+   - Make sure host is `localhost` (not `postgres`)
+   - Check port is `5432`
+   - Verify credentials match `.env` file
+
+4. **Test connection manually:**
+   ```bash
+   psql "postgres://postgres:your_password@localhost:5432/myapp_db"
+   ```
+
+### Problem: "Connection refused" error
+
+**Cause:** PostgreSQL container not fully started
+
+**Solution:** Wait a few seconds after `docker-compose up` or check health:
+
+```bash
+docker inspect postgres-db --format='{{.State.Health.Status}}'
+```
+
+### Problem: pgAdmin can't connect to PostgreSQL
+
+**Solutions:**
+
+1. **Use correct hostname:** Use `postgres` (container name), not `localhost`
+2. **Check both containers are in same network:**
+   ```bash
+   docker network inspect my-go-app_app-network
+   ```
+
+### Problem: "Database does not exist" error
+
+**Solutions:**
+
+1. **Check database name in connection string**
+2. **Recreate containers:**
+   ```bash
+   docker-compose down -v
+   docker-compose up -d
+   ```
+
+### Problem: Port already in use
+
+**Check what's using port 5432:**
+
+```bash
+# Linux/macOS
+sudo lsof -i :5432
+
+# Windows
+netstat -ano | findstr :5432
+```
+
+**Solutions:**
+
+- Stop local PostgreSQL: `sudo systemctl stop postgresql`
+- Use different port in docker-compose.yml: `"5433:5432"`
+
+### Problem: Permission denied on postgres-data folder
+
+**Solution:**
+
+```bash
+sudo chown -R $USER:$USER postgres-data
+```
+
+---
+
+## Docker Commands Cheatsheet
+
+### Docker Compose Commands
+
+| Command                             | Description                                          |
+| ----------------------------------- | ---------------------------------------------------- |
+| `docker-compose up`                 | Start all services                                   |
+| `docker-compose up -d`              | Start services in background                         |
+| `docker-compose down`               | Stop and remove containers                           |
+| `docker-compose down -v`            | Stop and remove containers + volumes (deletes data!) |
+| `docker-compose ps`                 | List running services                                |
+| `docker-compose logs`               | View logs from all services                          |
+| `docker-compose logs -f postgres`   | Follow PostgreSQL logs                               |
+| `docker-compose restart`            | Restart all services                                 |
+| `docker-compose restart postgres`   | Restart only PostgreSQL                              |
+| `docker-compose stop`               | Stop services without removing                       |
+| `docker-compose start`              | Start stopped services                               |
+| `docker-compose exec postgres bash` | Open shell in PostgreSQL container                   |
+| `docker-compose pull`               | Pull latest images                                   |
+
+### PostgreSQL Container Commands
+
+| Command                                                              | Description                  |
+| -------------------------------------------------------------------- | ---------------------------- |
+| `docker exec -it postgres-db psql -U postgres`                       | Connect to PostgreSQL CLI    |
+| `docker exec -it postgres-db psql -U postgres -d myapp_db`           | Connect to specific database |
+| `docker exec postgres-db pg_dump -U postgres myapp_db > backup.sql`  | Backup database              |
+| `docker exec -i postgres-db psql -U postgres myapp_db < backup.sql`  | Restore database             |
+| `docker exec postgres-db psql -U postgres -c "SELECT version();"`    | Check PostgreSQL version     |
+| `docker exec postgres-db psql -U postgres -c "\l"`                   | List all databases           |
+| `docker exec postgres-db psql -U postgres -d myapp_db -c "\dt"`      | List tables                  |
+| `docker exec postgres-db psql -U postgres -d myapp_db -c "\d users"` | Describe users table         |
+
+### Useful SQL Commands (from psql)
+
+| Command        | Description         |
+| -------------- | ------------------- |
+| `\l`           | List databases      |
+| `\c dbname`    | Connect to database |
+| `\dt`          | List tables         |
+| `\d tablename` | Describe table      |
+| `\du`          | List users/roles    |
+| `\q`           | Quit psql           |
+| `\?`           | Help                |
+
+### Container Management
+
+| Command                      | Description                    |
+| ---------------------------- | ------------------------------ |
+| `docker ps`                  | List running containers        |
+| `docker ps -a`               | List all containers            |
+| `docker logs postgres-db`    | View container logs            |
+| `docker logs -f postgres-db` | Follow container logs          |
+| `docker inspect postgres-db` | Inspect container details      |
+| `docker stats`               | View resource usage            |
+| `docker stop postgres-db`    | Stop container                 |
+| `docker start postgres-db`   | Start container                |
+| `docker restart postgres-db` | Restart container              |
+| `docker rm postgres-db`      | Remove container               |
+| `docker rm -f postgres-db`   | Force remove running container |
+
+### Volume Management
+
+| Command                                        | Description           |
+| ---------------------------------------------- | --------------------- |
+| `docker volume ls`                             | List volumes          |
+| `docker volume inspect my-go-app_pgadmin-data` | Inspect volume        |
+| `docker volume rm my-go-app_pgadmin-data`      | Remove volume         |
+| `docker volume prune`                          | Remove unused volumes |
+
+### Network Commands
+
+| Command                                        | Description     |
+| ---------------------------------------------- | --------------- |
+| `docker network ls`                            | List networks   |
+| `docker network inspect my-go-app_app-network` | Inspect network |
+| `docker network rm my-go-app_app-network`      | Remove network  |
+
+### Quick Cleanup Commands
+
+```bash
+# Stop everything
+docker-compose down
+
+# Stop and remove volumes (WARNING: deletes data!)
+docker-compose down -v
+
+# Remove all stopped containers
+docker container prune
+
+# Remove all unused volumes
+docker volume prune
+
+# Remove all unused images
+docker image prune -a
+
+# Nuclear option: remove everything
+docker system prune -a --volumes
+```
+
+### Development Workflow Commands
+
+```bash
+# Start development environment
+docker-compose up -d && go run main.go
+
+# Check database connection
+docker exec postgres-db psql -U postgres -d myapp_db -c "SELECT 1;"
+
+# Watch logs while developing
+docker-compose logs -f postgres
+
+# Restart database only
+docker-compose restart postgres
+
+# Fresh start (clean database)
+docker-compose down -v && docker-compose up -d
+
+# Backup before major changes
+docker exec postgres-db pg_dump -U postgres myapp_db > backup_$(date +%Y%m%d).sql
+```
+
+---
+
+## Quick Start Summary
+
+```bash
+# 1. Create project and navigate to it
+mkdir my-go-app && cd my-go-app
+
+# 2. Create docker-compose.yml and .env files (use content from above)
+
+# 3. Start Docker services
+docker-compose up -d
+
+# 4. Initialize Go module
+go mod init github.com/yourusername/my-go-app
+
+# 5. Install dependencies
+go get github.com/jackc/pgx/v5
+go get github.com/jackc/pgx/v5/pgxpool
+go get github.com/joho/godotenv
+
+# 6. Create your Go files (database/db.go and main.go)
+
+# 7. Run your application
+go run main.go
+
+# 8. Access pgAdmin at http://localhost:5050
+```
+
+---
+
+## Additional Resources
+
+- [pgx Documentation](https://pkg.go.dev/github.com/jackc/pgx/v5)
+- [PostgreSQL 17 Documentation](https://www.postgresql.org/docs/17/)
+- [Docker Compose Documentation](https://docs.docker.com/compose/)
+- [pgAdmin Documentation](https://www.pgadmin.org/docs/)
+- [Go Database/SQL Tutorial](https://go.dev/doc/database/)
