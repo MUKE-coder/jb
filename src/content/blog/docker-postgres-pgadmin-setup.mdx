@@ -7,37 +7,48 @@ createdAt: 2025-10-03
 updatedAt: 2025-10-03
 ---
 
-# PostgreSQL & pgAdmin with Docker for Go + Gin + GORM
+# Complete Guide: PostgreSQL & pgAdmin Docker Setup for Go Developers
 
 ## Table of Contents
 
 1. [Overview](#overview)
 2. [Prerequisites](#prerequisites)
 3. [Project Setup](#project-setup)
-4. [Docker Compose Configuration](#docker-compose-configuration)
-5. [Starting the Services](#starting-the-services)
-6. [Go Project Structure](#go-project-structure)
-7. [GORM Database Setup](#gorm-database-setup)
-8. [Building REST API with Gin](#building-rest-api-with-gin)
-9. [Complete Implementation](#complete-implementation)
-10. [Testing the API](#testing-the-api)
-11. [Best Practices](#best-practices)
-12. [Troubleshooting](#troubleshooting)
-13. [Docker Commands Cheatsheet](#docker-commands-cheatsheet)
+4. [Understanding the Docker Architecture](#understanding-the-docker-architecture)
+5. [Configuration Files Explained](#configuration-files-explained)
+6. [Docker Compose Configuration](#docker compose-configuration)
+7. [Starting the Services](#starting-the-services)
+8. [Go Project Structure](#go-project-structure)
+9. [GORM Database Setup](#gorm-database-setup)
+10. [Building REST API with Gin](#building-rest-api-with-gin)
+11. [Database Migrations](#database-migrations)
+12. [Complete Implementation](#complete-implementation)
+13. [Essential Docker Commands](#essential-docker-commands)
+14. [Testing the API](#testing-the-api)
+15. [Best Practices](#best-practices)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Overview
 
-This guide shows you how to build a production-ready REST API using:
+This guide demonstrates how to build a production-ready REST API with **all services containerized in Docker**, including:
 
 - **Gin Gonic** - High-performance HTTP web framework
 - **GORM** - Developer-friendly ORM for Go
-- **PostgreSQL 17** - Running in Docker
-- **pgAdmin 4** - Running in Docker
-- **Your Go application** - Running locally on your host machine
+- **PostgreSQL 16** - Database running in Docker
+- **pgAdmin 4** - Database management tool in Docker
+- **Your Go application** - Also running in Docker for consistency
 
-This architecture gives you the best development experience with hot reload, easy debugging, and isolated database management.
+**Why run Go in Docker?**
+
+Running your Go application in Docker alongside PostgreSQL solves several critical issues:
+
+1. **Network connectivity**: Containers on the same Docker network can communicate using service names (e.g., `postgres`) instead of `localhost`, eliminating connection issues
+2. **Environment consistency**: Development environment matches production exactly
+3. **Easy onboarding**: New team members can start with a single `docker compose up` command
+4. **Isolation**: No conflicts with other projects or system services
+5. **Portability**: Works identically on Windows, macOS, and Linux
 
 ---
 
@@ -45,15 +56,15 @@ This architecture gives you the best development experience with hot reload, eas
 
 **Required Software:**
 
-- Docker & Docker Compose
-- Go 1.21 or higher
+- Docker & Docker Compose (Docker Desktop includes both)
+- Go 1.24 or higher (for local development/testing)
 - Your favorite code editor (VS Code, GoLand, etc.)
 
 **Verify installations:**
 
 ```bash
 docker --version
-docker-compose --version
+docker compose --version
 go version
 ```
 
@@ -64,31 +75,33 @@ go version
 ### Step 1: Create Project Structure
 
 ```bash
-mkdir my-gin-api
-cd my-gin-api
+mkdir go-tracker-api
+cd go-tracker-api
 ```
 
 Your final project structure:
 
 ```
-my-gin-api/
-├── docker-compose.yml
-├── .env
-├── .gitignore
-├── go.mod
-├── go.sum
-├── main.go
-├── config/
-│   └── database.go
-├── models/
-│   └── user.go
-├── controllers/
-│   └── user_controller.go
-├── routes/
-│   └── routes.go
-├── middlewares/
-│   └── error_handler.go
-└── postgres-data/          # Auto-created by Docker
+go-tracker-api/
+├── docker compose.yml          # Orchestrates all services
+├── Dockerfile.dev              # Development Docker image
+├── Dockerfile.prod             # Production Docker image
+├── .env                        # Environment variables
+├── .gitignore                  # Files to exclude from Git
+├── go.mod                      # Go module dependencies
+├── go.sum                      # Dependency checksums
+├── main.go                     # Application entry point
+├── initializers/
+│   ├── database.go            # Database connection logic
+│   └── loadEnvVariables.go    # Environment loader
+├── models/                     # Data models
+├── controllers/                # Request handlers
+├── routes/                     # API routes
+├── middlewares/                # Custom middleware
+├── scripts/
+│   ├── migrate-gorm.go        # Migration script
+│   └── migrate.sh             # Shell script to run migrations
+└── postgres-data/             # PostgreSQL data (auto-created, gitignored)
 ```
 
 ### Step 2: Create Configuration Files
@@ -98,63 +111,210 @@ my-gin-api/
 ```bash
 # .gitignore
 postgres-data/
+pgadmin-data/
 .env
 *.log
 tmp/
 ```
+
+**Why we need `.gitignore`:**
+
+- `postgres-data/` contains database files - shouldn't be in version control
+- `.env` contains secrets - must never be committed
+- `tmp/` contains temporary build files
+- `*.log` files contain runtime logs
+
+---
+
+## Understanding the Docker Architecture
+
+When you run your application in Docker, the architecture looks like this:
+
+```
+┌─────────────────────────────────────────┐
+│     Docker Network: app-network         │
+│                                         │
+│  ┌──────────────┐  ┌─────────────────┐ │
+│  │   pgAdmin    │  │   PostgreSQL    │ │
+│  │  Port: 5050  │  │   Port: 5432    │ │
+│  │              │  │                 │ │
+│  └──────────────┘  └─────────────────┘ │
+│         │                    ▲          │
+│         │                    │          │
+│         └────────┬───────────┘          │
+│                  │                      │
+│         ┌────────▼──────────┐           │
+│         │   Go App          │           │
+│         │   Port: 8080      │           │
+│         │   (go-tracker-api)│           │
+│         └───────────────────┘           │
+│                  │                      │
+└──────────────────┼──────────────────────┘
+                   │
+            Host Port: 8080
+         (http://localhost:8080)
+```
+
+**Key points:**
+
+- All containers are on the same Docker network (`app-network`)
+- Containers communicate using service names: `postgres`, `pgadmin`, `app`
+- Your Go app connects to PostgreSQL using `host=postgres` (not `localhost`)
+- Only necessary ports are exposed to your host machine
+
+---
+
+## Configuration Files Explained
+
+### 1. `.env` File
 
 **Create `.env` file:**
 
 ```bash
 # .env
 
-# Application
-PORT=8080
-GIN_MODE=debug
-
 # PostgreSQL Configuration
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your_secure_password_here
-POSTGRES_DB=my_gin_db
+POSTGRES_PASSWORD=titanic101
+POSTGRES_DB=trackerDB
+POSTGRES_PORT=5432
 
 # pgAdmin Configuration
-PGADMIN_EMAIL=admin@example.com
-PGADMIN_PASSWORD=admin_password_here
+PGADMIN_EMAIL=admin@admin.com
+PGADMIN_PASSWORD=Admin@2025
 PGADMIN_PORT=5050
 
-# Database Connection String
-DATABASE_URL=host=localhost user=postgres password=your_secure_password_here dbname=my_gin_db port=5432 sslmode=disable TimeZone=UTC
+# Application
+PORT=8080
+APP_PORT=8080
+GIN_MODE=debug
+SECRET_KEY=w9hXDwVXGKnfK9k4kbPNAfxweEdPkc5uhYaU1S8qMNc=
 ```
 
-**⚠️ Important:** Replace all passwords with your own secure passwords!
+**Environment Variables Explained:**
 
----
+| Variable            | Purpose                                            | Example Value     |
+| ------------------- | -------------------------------------------------- | ----------------- |
+| `POSTGRES_USER`     | PostgreSQL username                                | `postgres`        |
+| `POSTGRES_PASSWORD` | PostgreSQL password (change in production!)        | `titanic101`      |
+| `POSTGRES_DB`       | Database name that will be created                 | `trackerDB`       |
+| `POSTGRES_PORT`     | Port to expose PostgreSQL on host                  | `5432`            |
+| `PGADMIN_EMAIL`     | Login email for pgAdmin web interface              | `admin@admin.com` |
+| `PGADMIN_PASSWORD`  | Login password for pgAdmin                         | `Admin@2025`      |
+| `PGADMIN_PORT`      | Port to access pgAdmin web interface               | `5050`            |
+| `PORT`              | Internal port Go app listens on                    | `8080`            |
+| `APP_PORT`          | External port mapped to host                       | `8080`            |
+| `GIN_MODE`          | Gin framework mode (`debug` or `release`)          | `debug`           |
+| `SECRET_KEY`        | Secret key for JWT/sessions (generate unique key!) | Random string     |
 
-## Docker Compose Configuration
+**⚠️ Security Note:** Always use strong, unique passwords in production and never commit `.env` to version control!
 
-Create `docker-compose.yml`:
+### 2. `Dockerfile.dev` - Development Container
+
+**Create `Dockerfile.dev`:**
+
+```dockerfile
+FROM golang:1.25-alpine
+
+WORKDIR /app
+
+# Copy go.mod and go.sum
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+EXPOSE 8080
+
+# Use go run which will recompile on restart
+CMD ["go", "run", "main.go"]
+```
+
+**Why we need this file:**
+
+- Defines how to build the Docker image for development
+- Uses `go run` for quick iterations (no need to rebuild binary)
+- Lightweight Alpine Linux base image keeps container size small
+- `WORKDIR /app` sets working directory inside container
+- `EXPOSE 8080` documents which port the app uses (informational)
+- `CMD ["go", "run", "main.go"]` runs the application
+
+**Line-by-line breakdown:**
+
+- `FROM golang:1.25-alpine`: Base image with Go 1.25 on Alpine Linux
+- `WORKDIR /app`: All subsequent commands run from `/app` directory
+- `COPY go.mod go.sum ./`: Copy dependency files first (Docker layer caching)
+- `RUN go mod download`: Download dependencies (cached if files don't change)
+- `COPY . .`: Copy all source code into container
+- `EXPOSE 8080`: Metadata - doesn't actually open port
+- `CMD ["go", "run", "main.go"]`: Command to run when container starts
+
+### 3. `Dockerfile.prod` - Production Container
+
+**Create `Dockerfile.prod`:**
+
+```dockerfile
+# Build stage
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+
+# Run stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+COPY --from=builder /app/main .
+
+EXPOSE 8080
+
+CMD ["./main"]
+```
+
+**Why we need this file:**
+
+- Multi-stage build creates smaller production images
+- First stage compiles the Go binary
+- Second stage only includes the compiled binary (no Go toolchain)
+- Results in ~10-15MB image vs ~300MB+ with full Go environment
+- `CGO_ENABLED=0` creates static binary with no external dependencies
+- `ca-certificates` needed for HTTPS requests
+
+**Production vs Development:**
+
+- Development: Fast startup, easy debugging, larger image
+- Production: Optimized size, faster deployment, more secure
+
+### 4. `docker compose.yml` - Service Orchestration
+
+**Create `docker compose.yml`:**
 
 ```yaml
-version: "3.8"
-
 services:
   postgres:
-    image: postgres:17-alpine
-    container_name: postgres-db
+    image: postgres:16-alpine
+    container_name: postgres-traceable-db
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST_AUTH_METHOD: md5
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d trackerDB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -165,15 +325,34 @@ services:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     ports:
-      - "${PGADMIN_PORT}:80"
+      - "${PGADMIN_PORT:-5050}:80"
     volumes:
       - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: go-tracker-api
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres # This is crucial! Use service name, not localhost
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    volumes:
+      - .:/app # Mount source code for hot reload on restart
     depends_on:
       postgres:
         condition: service_healthy
@@ -188,28 +367,242 @@ volumes:
   pgadmin-data:
 ```
 
+**Docker Compose Settings Explained:**
+
+**PostgreSQL Service:**
+
+- `image: postgres:16-alpine`: Official PostgreSQL 16 on Alpine Linux
+- `container_name`: Custom name for easy reference
+- `restart: unless-stopped`: Auto-restart on failure (except manual stops)
+- `env_file`: Load variables from `.env` file
+- `POSTGRES_HOST_AUTH_METHOD: md5`: Password authentication method
+- `ports`: Maps container port 5432 to host port 5432
+- `volumes`: Persists database data to `./postgres-data` directory
+- `healthcheck`: Ensures PostgreSQL is ready before starting dependent services
+  - Runs `pg_isready` command every 10 seconds
+  - Waits 5 seconds for response
+  - Retries 5 times before marking unhealthy
+- `networks`: Joins the `app-network` for inter-container communication
+
+**pgAdmin Service:**
+
+- `depends_on` with `condition: service_healthy`: Waits for PostgreSQL to be healthy
+- `PGADMIN_CONFIG_SERVER_MODE: "False"`: Runs in desktop mode (no login required for initial setup)
+- Named volume `pgadmin-data`: Persists pgAdmin configuration
+
+**App Service:**
+
+- `build`: Builds from `Dockerfile.dev` in current directory
+- `environment: POSTGRES_HOST: postgres`: **Critical!** Overrides `.env` to use Docker service name
+- `volumes: - .:/app`: Mounts current directory into container at `/app`
+  - Changes to code on host immediately reflect in container
+  - Restart container to see changes: `docker compose restart app`
+
+**Networks:**
+
+- `app-network`: Custom bridge network allows containers to find each other by service name
+- Without this, containers couldn't communicate
+
+**Volumes:**
+
+- Named volumes (`pgadmin-data`) are managed by Docker
+- Bind mounts (`./postgres-data`) use host filesystem
+
 ---
 
 ## Starting the Services
 
-### Step 1: Start Docker Containers
+### Essential Docker Commands
+
+These commands are your daily workflow tools. Understanding them is crucial:
+
+#### 1. **Stop Current Containers**
 
 ```bash
-# Start in detached mode
-docker-compose up -d
+docker compose down
+```
+
+**What this does:**
+
+- Stops all running containers defined in `docker compose.yml`
+- Removes the containers (but keeps volumes/data)
+- Removes the network
+- **Does NOT delete**: Database data, images, or volumes
+
+**When to use:**
+
+- Before making changes to `docker compose.yml`
+- When switching between projects
+- Before running `docker compose up` again
+
+#### 2. **Remove PostgreSQL Data Directory**
+
+```bash
+rm -rf postgres-data
+```
+
+**What this does:**
+
+- Deletes all PostgreSQL database files
+- Forces a fresh database on next startup
+- **Warning**: This is destructive! All data is lost!
+
+**When to use:**
+
+- Database is corrupted
+- Need to reset database to clean state
+- Testing migrations from scratch
+- Switching between major PostgreSQL versions
+
+**Windows equivalent:**
+
+```bash
+rmdir /s /q postgres-data
+```
+
+#### 3. **Start Services with Build**
+
+```bash
+docker compose up --build -d
+```
+
+**What this does:**
+
+- `up`: Starts all services
+- `--build`: Rebuilds images even if they exist (ensures latest code)
+- `-d`: Detached mode (runs in background)
+
+**When to use:**
+
+- After changing Dockerfile
+- After `git pull` with new dependencies
+- First time starting project
+- When you suspect image is outdated
+
+**Without `--build`:**
+
+```bash
+docker compose up -d  # Uses cached images
+```
+
+#### 4. **Watch Logs**
+
+```bash
+docker compose logs -f app
+```
+
+**What this does:**
+
+- `logs`: Shows stdout/stderr from containers
+- `-f`: Follow mode (like `tail -f`), shows new logs in real-time
+- `app`: Only show logs from `app` service
+
+**Variations:**
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f postgres
+
+# Last 100 lines
+docker compose logs --tail=100 app
+
+# Since specific time
+docker compose logs --since 2025-01-01T00:00:00 app
+```
+
+**When to use:**
+
+- Debugging startup issues
+- Monitoring application output
+- Watching for errors
+- Checking database connection status
+
+#### 5. **Restart After Code Changes**
+
+```bash
+docker compose restart app
+```
+
+**What this does:**
+
+- Stops the `app` container
+- Starts it again
+- Preserves volumes and network
+- Much faster than `down` + `up`
+
+**Why this works:**
+
+- Source code is mounted via volume (`.:/app`)
+- Container sees file changes immediately
+- Restart picks up changes (since we use `go run`)
+
+**When to use:**
+
+- After editing Go files
+- After changing `.env` variables
+- When application is stuck
+- Testing configuration changes
+
+**Alternative for all services:**
+
+```bash
+docker compose restart
+```
+
+#### 6. **Complete Workflow Example**
+
+```bash
+# Clean start (fresh database)
+docker compose down
+rm -rf postgres-data
+docker compose up --build -d
+docker compose logs -f app
+
+# Make code changes, then:
+docker compose restart app
+
+# Check if services are running
+docker compose ps
+
+# Stop everything when done
+docker compose down
+```
+
+### Step 1: Initial Startup
+
+```bash
+# Start all services
+docker compose up --build -d
 
 # Verify containers are running
-docker-compose ps
+docker compose ps
 
 # Check logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
-Expected output:
+**Expected output:**
 
 ```
-✔ Container postgres-db  Healthy
-✔ Container pgadmin      Started
+✔ Container postgres-traceable-db  Healthy
+✔ Container go-tracker-api         Started
+✔ Container pgadmin                Started
+```
+
+**If you see errors:**
+
+```bash
+# Check specific service logs
+docker compose logs postgres
+docker compose logs app
+
+# Common fix: Remove old data
+docker compose down
+rm -rf postgres-data
+docker compose up --build -d
 ```
 
 ### Step 2: Access pgAdmin
@@ -218,21 +611,28 @@ Open browser: `http://localhost:5050`
 
 **Login with:**
 
-- Email: `admin@example.com`
-- Password: `admin_password_here`
+- Email: `admin@admin.com` (from `.env`)
+- Password: `Admin@2025` (from `.env`)
 
 **Add PostgreSQL Server:**
 
 1. Click **"Add New Server"**
-2. **General Tab:** Name = `Local PostgreSQL`
+2. **General Tab:**
+   - Name = `Tracker Database` (any name you want)
 3. **Connection Tab:**
-   - Host: `postgres` (container name, not localhost!)
+   - Host: `postgres` (**NOT `localhost`!** - this is the Docker service name)
    - Port: `5432`
-   - Database: `my_gin_db`
+   - Maintenance database: `postgres`
    - Username: `postgres`
-   - Password: (from .env)
+   - Password: `titanic101`
 4. Check **"Save password"**
 5. Click **"Save"**
+
+**Why `postgres` instead of `localhost`?**
+
+- pgAdmin runs inside Docker
+- Inside Docker, `localhost` refers to the pgAdmin container itself
+- `postgres` is the service name Docker DNS resolves to the PostgreSQL container
 
 ---
 
@@ -241,7 +641,7 @@ Open browser: `http://localhost:5050`
 ### Step 1: Initialize Go Module
 
 ```bash
-go mod init github.com/yourusername/my-gin-api
+go mod init github.com/yourusername/go-tracker-api
 ```
 
 ### Step 2: Install Dependencies
@@ -257,467 +657,220 @@ go get -u github.com/joho/godotenv
 
 ## GORM Database Setup
 
-### Create `config/database.go`:
+### Create `initializers/database.go`:
 
 ```go
-// config/database.go
-package config
+package initializers
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+var DB *gorm.DB
+
+func ConnectToDB() {
+	var err error
+
+	// Build DSN from environment variables
+	dsn := fmt.Sprintf(
+		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+		getEnv("POSTGRES_HOST", "localhost"),
+		getEnv("POSTGRES_USER", "postgres"),
+		getEnv("POSTGRES_PASSWORD", "titanic101"),
+		getEnv("POSTGRES_DB", "trackerDB"),
+		getEnv("POSTGRES_PORT", "5432"),
+	)
+
+	log.Printf("Connecting to: host=%s db=%s",
+		getEnv("POSTGRES_HOST", "localhost"),
+		getEnv("POSTGRES_DB", "trackerDB"))
+
+	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+	if err != nil {
+		log.Fatal("Failed to connect to the DB:", err)
+	}
+
+	// Test the connection
+	sqlDB, err := DB.DB()
+	if err != nil {
+		log.Fatal("Failed to get DB instance:", err)
+	}
+
+	// Configure connection pool
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatal("Failed to ping database:", err)
+	}
+
+	fmt.Println("✅ Successfully connected to database!")
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+```
+
+### Create `initializers/loadEnvVariables.go`:
+
+```go
+package initializers
 
 import (
 	"fmt"
 	"log"
 	"os"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	"github.com/joho/godotenv"
 )
 
-var DB *gorm.DB
+func LoadEnvVariables() {
+	err := godotenv.Load()
 
-// ConnectDatabase establishes database connection with GORM
-func ConnectDatabase() {
-	var err error
-
-	// Get database connection string from environment
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		log.Fatal("DATABASE_URL environment variable is not set")
-	}
-
-	// Configure GORM
-	config := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
-		NowFunc: func() time.Time {
-			return time.Now().UTC()
-		},
-		QueryFields: true,
-	}
-
-	// Connect to PostgreSQL
-	DB, err = gorm.Open(postgres.Open(dsn), config)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Println("No .env file found, using environment variables from system")
 	}
 
-	// Get underlying SQL database
-	sqlDB, err := DB.DB()
-	if err != nil {
-		log.Fatalf("Failed to get database instance: %v", err)
-	}
-
-	// Set connection pool settings
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
-
-	log.Println("✅ Database connected successfully!")
-}
-
-// GetDB returns the database instance
-func GetDB() *gorm.DB {
-	return DB
-}
-
-// CloseDatabase closes the database connection
-func CloseDatabase() {
-	sqlDB, err := DB.DB()
-	if err != nil {
-		log.Printf("Error getting database instance: %v", err)
-		return
-	}
-
-	if err := sqlDB.Close(); err != nil {
-		log.Printf("Error closing database: %v", err)
-	} else {
-		log.Println("Database connection closed")
-	}
+	// Verify we have the required environment variables
+	fmt.Printf("POSTGRES_HOST: '%s'\n", os.Getenv("POSTGRES_HOST"))
+	fmt.Printf("POSTGRES_USER: '%s'\n", os.Getenv("POSTGRES_USER"))
+	fmt.Printf("POSTGRES_PASSWORD: '%s'\n", os.Getenv("POSTGRES_PASSWORD"))
+	fmt.Printf("POSTGRES_DB: '%s'\n", os.Getenv("POSTGRES_DB"))
 }
 ```
+
+**Why separate these functions?**
+
+- `LoadEnvVariables()`: Loads `.env` file or uses Docker environment variables
+- `ConnectToDB()`: Establishes database connection with proper error handling
+- Separation of concerns makes code more maintainable and testable
 
 ---
 
-## Building REST API with Gin
+## Database Migrations
 
-### Step 1: Create Models
+### Why We Need Migrations
 
-**Create `models/user.go`:**
+Migrations manage database schema changes over time:
 
-```go
-// models/user.go
-package models
+- Create/modify tables
+- Add/remove columns
+- Create indexes
+- Seed initial data
 
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
-
-// User represents a user in the system
-type User struct {
-	ID        uint           `gorm:"primaryKey" json:"id"`
-	Name      string         `gorm:"type:varchar(100);not null" json:"name" binding:"required,min=2,max=100"`
-	Email     string         `gorm:"type:varchar(100);uniqueIndex;not null" json:"email" binding:"required,email"`
-	Age       int            `gorm:"type:int" json:"age" binding:"omitempty,gte=0,lte=150"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
-// UserResponse is used for API responses (excludes soft delete info)
-type UserResponse struct {
-	ID        uint      `json:"id"`
-	Name      string    `json:"name"`
-	Email     string    `json:"email"`
-	Age       int       `json:"age"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-// ToResponse converts User to UserResponse
-func (u *User) ToResponse() UserResponse {
-	return UserResponse{
-		ID:        u.ID,
-		Name:      u.Name,
-		Email:     u.Email,
-		Age:       u.Age,
-		CreatedAt: u.CreatedAt,
-		UpdatedAt: u.UpdatedAt,
-	}
-}
-
-// CreateUserInput for creating new users
-type CreateUserInput struct {
-	Name  string `json:"name" binding:"required,min=2,max=100"`
-	Email string `json:"email" binding:"required,email"`
-	Age   int    `json:"age" binding:"omitempty,gte=0,lte=150"`
-}
-
-// UpdateUserInput for updating existing users
-type UpdateUserInput struct {
-	Name  string `json:"name" binding:"omitempty,min=2,max=100"`
-	Email string `json:"email" binding:"omitempty,email"`
-	Age   *int   `json:"age" binding:"omitempty,gte=0,lte=150"`
-}
-```
-
-### Step 2: Create Controllers
-
-**Create `controllers/user_controller.go`:**
+### Create `scripts/migrate-gorm.go`:
 
 ```go
-// controllers/user_controller.go
-package controllers
+package main
 
 import (
-	"net/http"
-	"strconv"
-
-	"github.com/gin-gonic/gin"
-	"github.com/yourusername/my-gin-api/config"
-	"github.com/yourusername/my-gin-api/models"
-)
-
-// GetUsers retrieves all users
-// @Summary Get all users
-// @Description Get list of all users
-// @Tags users
-// @Produce json
-// @Success 200 {array} models.UserResponse
-// @Router /users [get]
-func GetUsers(c *gin.Context) {
-	var users []models.User
-
-	if err := config.DB.Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve users",
-		})
-		return
-	}
-
-	// Convert to response format
-	var response []models.UserResponse
-	for _, user := range users {
-		response = append(response, user.ToResponse())
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": response,
-		"count": len(response),
-	})
-}
-
-// GetUser retrieves a single user by ID
-// @Summary Get user by ID
-// @Description Get user details by ID
-// @Tags users
-// @Produce json
-// @Param id path int true "User ID"
-// @Success 200 {object} models.UserResponse
-// @Router /users/{id} [get]
-func GetUser(c *gin.Context) {
-	id := c.Param("id")
-
-	var user models.User
-	if err := config.DB.First(&user, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "User not found",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": user.ToResponse(),
-	})
-}
-
-// CreateUser creates a new user
-// @Summary Create new user
-// @Description Create a new user with provided details
-// @Tags users
-// @Accept json
-// @Produce json
-// @Param user body models.CreateUserInput true "User details"
-// @Success 201 {object} models.UserResponse
-// @Router /users [post]
-func CreateUser(c *gin.Context) {
-	var input models.CreateUserInput
-
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	user := models.User{
-		Name:  input.Name,
-		Email: input.Email,
-		Age:   input.Age,
-	}
-
-	if err := config.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to create user",
-		})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "User created successfully",
-		"data":    user.ToResponse(),
-	})
-}
-
-// UpdateUser updates an existing user
-// @Summary Update user
-// @Description Update user details by ID
-// @Tags users
-// @Accept json
-// @Produce json
-// @Param id path int true "User ID"
-// @Param user body models.UpdateUserInput true "Updated user details"
-// @Success 200 {object} models.UserResponse
-// @Router /users/{id} [put]
-func UpdateUser(c *gin.Context) {
-	id := c.Param("id")
-
-	var user models.User
-	if err := config.DB.First(&user, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "User not found",
-		})
-		return
-	}
-
-	var input models.UpdateUserInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	// Update only provided fields
-	if input.Name != "" {
-		user.Name = input.Name
-	}
-	if input.Email != "" {
-		user.Email = input.Email
-	}
-	if input.Age != nil {
-		user.Age = *input.Age
-	}
-
-	if err := config.DB.Save(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update user",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "User updated successfully",
-		"data":    user.ToResponse(),
-	})
-}
-
-// DeleteUser deletes a user (soft delete)
-// @Summary Delete user
-// @Description Soft delete user by ID
-// @Tags users
-// @Param id path int true "User ID"
-// @Success 200 {object} map[string]string
-// @Router /users/{id} [delete]
-func DeleteUser(c *gin.Context) {
-	id := c.Param("id")
-
-	if err := config.DB.Delete(&models.User{}, id).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete user",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "User deleted successfully",
-	})
-}
-
-// SearchUsers searches users by name or email
-// @Summary Search users
-// @Description Search users by name or email
-// @Tags users
-// @Produce json
-// @Param q query string true "Search query"
-// @Success 200 {array} models.UserResponse
-// @Router /users/search [get]
-func SearchUsers(c *gin.Context) {
-	query := c.Query("q")
-
-	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Search query is required",
-		})
-		return
-	}
-
-	var users []models.User
-	searchPattern := "%" + query + "%"
-
-	if err := config.DB.Where("name ILIKE ? OR email ILIKE ?", searchPattern, searchPattern).
-		Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to search users",
-		})
-		return
-	}
-
-	var response []models.UserResponse
-	for _, user := range users {
-		response = append(response, user.ToResponse())
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data":  response,
-		"count": len(response),
-	})
-}
-```
-
-### Step 3: Create Middleware
-
-**Create `middlewares/error_handler.go`:**
-
-```go
-// middlewares/error_handler.go
-package middlewares
-
-import (
+	"fmt"
 	"log"
-	"net/http"
 
-	"github.com/gin-gonic/gin"
+	"github.com/MUKE-coder/go-tracker-api/initializers"
+	"github.com/MUKE-coder/go-tracker-api/models"
 )
 
-// ErrorHandler middleware for handling panics
-func ErrorHandler() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Printf("Panic recovered: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": "Internal server error",
-				})
-				c.Abort()
-			}
-		}()
-		c.Next()
+func main() {
+	// Load environment variables
+	initializers.LoadEnvVariables()
+
+	// Connect to database
+	initializers.ConnectToDB()
+
+	// Auto migrate all models
+	err := initializers.DB.AutoMigrate(
+		&models.User{},
+		&models.Customer{},
+		&models.Supplier{},
+		&models.Farmer{},
+		&models.Order{},
+		&models.Batch{},
+		&models.BatchFarmer{},
+		&models.BatchSupplier{},
+		&models.TraceabilityReport{},
+	)
+
+	if err != nil {
+		log.Fatal("Migration failed:", err)
 	}
-}
 
-// CORS middleware
-func CORS() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	}
+	fmt.Println("✅ Database migration completed successfully!")
 }
 ```
 
-### Step 4: Setup Routes
+**Why we need this file:**
 
-**Create `routes/routes.go`:**
+- Separate executable for running migrations
+- Can be run independently of main application
+- Useful for CI/CD pipelines
+- GORM's `AutoMigrate` creates/updates tables based on struct definitions
 
-```go
-// routes/routes.go
-package routes
+### Create `scripts/migrate.sh`:
 
-import (
-	"github.com/gin-gonic/gin"
-	"github.com/yourusername/my-gin-api/controllers"
-	"github.com/yourusername/my-gin-api/middlewares"
-)
+```bash
+#!/bin/bash
 
-// SetupRoutes configures all application routes
-func SetupRoutes(router *gin.Engine) {
-	// Apply middleware
-	router.Use(middlewares.ErrorHandler())
-	router.Use(middlewares.CORS())
-
-	// Health check endpoint
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status": "ok",
-			"message": "Server is running",
-		})
-	})
-
-	// API v1 routes
-	v1 := router.Group("/api/v1")
-	{
-		// User routes
-		users := v1.Group("/users")
-		{
-			users.GET("", controllers.GetUsers)
-			users.GET("/:id", controllers.GetUser)
-			users.POST("", controllers.CreateUser)
-			users.PUT("/:id", controllers.UpdateUser)
-			users.DELETE("/:id", controllers.DeleteUser)
-			users.GET("/search", controllers.SearchUsers)
-		}
-	}
-}
+echo "Running database migrations..."
+docker exec go-tracker-api go run ./scripts/migrate-gorm.go
 ```
+
+**Why we need this file:**
+
+- Shell script wrapper for easy execution
+- Runs migration inside the Docker container (where database connection works)
+- `docker exec` executes command in running container
+- Easier than typing full docker exec command each time
+
+### Make Script Executable:
+
+```bash
+chmod +x scripts/migrate.sh
+```
+
+**What `chmod +x` does:**
+
+- Adds execute permission to the file
+- Without this, you'd get "Permission denied" error
+- Only needed once (permission is preserved in Git)
+
+### Run Migrations:
+
+```bash
+./scripts/migrate.sh
+```
+
+**Expected output:**
+
+```
+Running database migrations...
+POSTGRES_HOST: 'postgres'
+POSTGRES_USER: 'postgres'
+POSTGRES_PASSWORD: 'titanic101'
+POSTGRES_DB: 'trackerDB'
+Connecting to: host=postgres db=trackerDB
+✅ Successfully connected to database!
+✅ Database migration completed successfully!
+```
+
+**When to run migrations:**
+
+- After adding new models
+- After changing model fields
+- After pulling code with model changes
+- When setting up fresh database
 
 ---
 
@@ -726,7 +879,6 @@ func SetupRoutes(router *gin.Engine) {
 ### Create `main.go`:
 
 ```go
-// main.go
 package main
 
 import (
@@ -740,24 +892,27 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
-	"github.com/yourusername/my-gin-api/config"
-	"github.com/yourusername/my-gin-api/models"
-	"github.com/yourusername/my-gin-api/routes"
+	"github.com/MUKE-coder/go-tracker-api/initializers"
+	"github.com/MUKE-coder/go-tracker-api/models"
+	"github.com/MUKE-coder/go-tracker-api/routes"
 )
 
+func init() {
+	initializers.LoadEnvVariables()
+	initializers.ConnectToDB()
+}
+
 func main() {
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("⚠️  No .env file found, using system environment variables")
-	}
-
-	// Connect to database
-	config.ConnectDatabase()
-	defer config.CloseDatabase()
-
 	// Auto-migrate database schema
-	if err := config.DB.AutoMigrate(&models.User{}); err != nil {
+	if err := initializers.DB.AutoMigrate(
+		&models.User{},
+		&models.Customer{},
+		&models.Supplier{},
+		&models.Farmer{},
+		&models.Order{},
+		&models.Batch{},
+		&models.BatchFarmer{},
+	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 	log.Println("✅ Database migration completed")
@@ -817,23 +972,127 @@ func main() {
 }
 ```
 
-### Run Your Application
+---
+
+## Essential Docker Commands
+
+### Daily Workflow Commands
 
 ```bash
-# Install dependencies
-go mod tidy
+# 1. Clean start (fresh database)
+docker compose down           # Stop all services
+rm -rf postgres-data         # Delete database files
+docker compose up --build -d # Start with fresh build
 
-# Run the application
-go run main.go
+# 2. Watch logs (separate terminal recommended)
+docker compose logs -f app   # Follow app logs
+docker compose logs -f       # Follow all logs
+
+# 3. Make code changes, then restart
+docker compose restart app   # Quick restart to see changes
+
+# 4. Check service status
+docker compose ps           # List running containers
+
+# 5. Stop everything
+docker compose down         # Clean shutdown
 ```
 
-Expected output:
+### Why Each Command Matters
 
+**`docker compose down`**
+
+- Stops containers gracefully
+- Removes containers (but preserves volumes)
+- Clean slate for next startup
+- Use before structural changes
+
+**`rm -rf postgres-data`**
+
+- Nuclear option for database issues
+- Forces PostgreSQL to initialize fresh
+- Solves corruption issues
+- **Warning**: Deletes all data!
+
+**`docker compose up --build -d`**
+
+- `--build`: Rebuilds images (includes code changes)
+- `-d`: Runs in background (detached mode)
+- Without `--build`, uses cached images
+- Essential after code changes
+
+**`docker compose logs -f app`**
+
+- Real-time log viewing
+- `-f` follows new output (like `tail -f`)
+- Filter by service name (`app`, `postgres`)
+- Critical for debugging
+
+**`docker compose restart app`**
+
+- Fastest way to see code changes
+- No rebuild needed (volume mounted)
+- Preserves network and database connection
+- Use after editing Go files
+
+**`chmod +x scripts/migrate.sh`**
+
+- Makes shell scripts executable
+- Unix/Linux/macOS requirement
+- Only needed once per file
+- Prevents "Permission denied" errors
+
+**`./scripts/migrate.sh`**
+
+- Runs migration script
+- `./` means current directory
+- Executes inside running container
+- Safe way to update database schema
+
+### Debugging Commands
+
+```bash
+# Check if containers are running
+docker compose ps
+
+# Inspect specific service
+docker logs go-tracker-api
+docker logs postgres-traceable-db
+
+# Enter container shell
+docker exec -it go-tracker-api sh
+docker exec -it postgres-traceable-db sh
+
+# Check database directly
+docker exec -it postgres-traceable-db psql -U postgres -d trackerDB
+
+# View resource usage
+docker stats
+
+# Remove everything (including volumes)
+docker compose down -v  # DANGER: Deletes data!
 ```
-✅ Database connected successfully!
-✅ Database migration completed
-🚀 Server starting on port 8080
-[GIN-debug] Listening and serving HTTP on :8080
+
+### PostgreSQL Specific Commands
+
+```bash
+# Connect to PostgreSQL
+docker exec -it postgres-traceable-db psql -U postgres -d trackerDB
+
+# Inside psql:
+\dt                    # List tables
+\d users              # Describe users table
+\l                    # List databases
+\q                    # Quit
+
+# Run SQL from host
+docker exec -it postgres-traceable-db psql -U postgres -d trackerDB -c "SELECT * FROM users;"
+
+# Backup database
+docker exec postgres-traceable-db pg_dump -U postgres trackerDB > backup.sql
+
+# Restore database
+docker exec -i postgres-traceable-db psql -U postgres trackerDB < backup.sql
 ```
 
 ---
@@ -842,1013 +1101,568 @@ Expected output:
 
 ### Using cURL
 
-**1. Health Check:**
-
 ```bash
+# Health check
 curl http://localhost:8080/health
-```
 
-**2. Create User:**
-
-```bash
+# Create user
 curl -X POST http://localhost:8080/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{
     "name": "John Doe",
-    "email": "john@example.com",
-    "age": 30
+    "email": "john@example.com"
   }'
-```
 
-**3. Get All Users:**
-
-```bash
+# Get all users
 curl http://localhost:8080/api/v1/users
-```
 
-**4. Get Single User:**
-
-```bash
+# Get single user
 curl http://localhost:8080/api/v1/users/1
-```
 
-**5. Update User:**
-
-```bash
+# Update user
 curl -X PUT http://localhost:8080/api/v1/users/1 \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "John Smith",
-    "age": 31
-  }'
-```
+  -d '{"name": "Jane Doe"}'
 
-**6. Search Users:**
-
-```bash
-curl "http://localhost:8080/api/v1/users/search?q=john"
-```
-
-**7. Delete User:**
-
-```bash
+# Delete user
 curl -X DELETE http://localhost:8080/api/v1/users/1
 ```
-
-### Using Postman
-
-Import this collection or create requests manually:
-
-**Base URL:** `http://localhost:8080/api/v1`
-
-**Endpoints:**
-
-- GET `/users` - Get all users
-- GET `/users/:id` - Get user by ID
-- POST `/users` - Create new user
-- PUT `/users/:id` - Update user
-- DELETE `/users/:id` - Delete user
-- GET `/users/search?q=query` - Search users
 
 ---
 
 ## Best Practices
 
-### 1. Use GORM Hooks for Timestamps
+### 1. Use Strong Passwords
 
-GORM automatically handles `created_at` and `updated_at` when you use `gorm.Model` or define these fields.
+Never use default passwords in production:
 
-### 2. Connection Pooling
+```bash
+# Generate secure password
+openssl rand -base64 32
 
-Already configured in `config/database.go`:
-
-```go
-sqlDB.SetMaxIdleConns(10)      // Maximum idle connections
-sqlDB.SetMaxOpenConns(100)     // Maximum open connections
-sqlDB.SetConnMaxLifetime(time.Hour)  // Connection lifetime
+# Use in .env
+POSTGRES_PASSWORD=<generated-password>
 ```
 
-### 3. Validation with Gin Binding
-
-Use struct tags for automatic validation:
-
-```go
-type CreateUserInput struct {
-    Name  string `json:"name" binding:"required,min=2,max=100"`
-    Email string `json:"email" binding:"required,email"`
-    Age   int    `json:"age" binding:"omitempty,gte=0,lte=150"`
-}
-```
-
-### 4. Use Soft Deletes
-
-GORM's `DeletedAt` field enables soft deletes:
-
-```go
-DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-```
-
-### 5. Environment-Based Configuration
-
-Use different `.env` files:
+### 2. Separate Development and Production Configs
 
 ```bash
 # .env.development
 GIN_MODE=debug
+POSTGRES_PASSWORD=development_password
 
 # .env.production
 GIN_MODE=release
+POSTGRES_PASSWORD=<strong-password>
 ```
 
-Load specific file:
-
-```go
-godotenv.Load(".env.production")
-```
-
-### 6. Database Migrations
-
-GORM AutoMigrate is great for development:
-
-```go
-config.DB.AutoMigrate(&models.User{}, &models.Post{})
-```
-
-For production, consider using migration tools like:
-
-- [golang-migrate](https://github.com/golang-migrate/migrate)
-- [goose](https://github.com/pressly/goose)
-
-### 7. Error Handling
-
-Create custom error types:
-
-```go
-type APIError struct {
-    Code    int    `json:"code"`
-    Message string `json:"message"`
-}
-```
-
-### 8. Logging
-
-Use structured logging with zerolog or zap:
+### 3. Regular Backups
 
 ```bash
-go get github.com/rs/zerolog
+# Backup script
+#!/bin/bash
+DATE=$(date +%Y%m%d_%H%M%S)
+docker exec postgres-traceable-db pg_dump -U postgres trackerDB > backup_$DATE.sql
 ```
 
-### 9. Rate Limiting
-
-Add rate limiting middleware:
+### 4. Monitor Logs
 
 ```bash
-go get github.com/ulule/limiter/v3
+# Keep logs organized by date
+docker compose logs --tail=1000 app > logs_$(date +%Y%m%d).log
 ```
 
-### 10. API Documentation
+### 5. Health Checks
 
-Use Swagger for API documentation:
+Always implement health check endpoints:
+
+```go
+router.GET("/health", func(c *gin.Context) {
+    c.JSON(200, gin.H{
+        "status": "ok",
+        "database": "connected",
+        "timestamp": time.Now(),
+    })
+})
+```
+
+### 6. Environment-Specific Configuration
+
+Use different Docker Compose files:
 
 ```bash
-go get -u github.com/swaggo/swag/cmd/swag
-go get -u github.com/swaggo/gin-swagger
-go get -u github.com/swaggo/files
+# Development
+docker compose -f docker compose.dev.yml up
+
+# Production
+docker compose -f docker compose.prod.yml up
 ```
 
 ---
 
 ## Troubleshooting
 
-### Problem: "Failed to connect to database"
+### Problem 1: "Connection refused" to PostgreSQL
 
-**Solutions:**
+**Symptoms:**
 
-1. Verify PostgreSQL container is running:
-
-   ```bash
-   docker-compose ps
-   ```
-
-2. Check connection string in `.env`:
-
-   ```bash
-   DATABASE_URL=host=localhost user=postgres password=... dbname=my_gin_db port=5432 sslmode=disable
-   ```
-
-3. Test PostgreSQL connection:
-   ```bash
-   docker exec -it postgres-db psql -U postgres -d my_gin_db -c "SELECT 1;"
-   ```
-
-### Problem: "GORM AutoMigrate fails"
-
-**Solutions:**
-
-1. Check database permissions
-2. Verify database exists:
-   ```bash
-   docker exec -it postgres-db psql -U postgres -c "\l"
-   ```
-
-### Problem: "Validation errors not showing"
-
-**Solution:** Gin's validation uses `binding` tags. Make sure you're using `ShouldBindJSON`:
-
-```go
-if err := c.ShouldBindJSON(&input); err != nil {
-    c.JSON(400, gin.H{"error": err.Error()})
-    return
-}
 ```
-
-### Problem: Port already in use
+Failed to connect to database: dial tcp 127.0.0.1:5432: connect: connection refused
+```
 
 **Solution:**
 
 ```bash
-# Find process using port 8080
-lsof -i :8080  # macOS/Linux
-netstat -ano | findstr :8080  # Windows
+# 1. Check if PostgreSQL container is running
+docker compose ps
 
-# Kill the process or change PORT in .env
+# 2. Check PostgreSQL logs
+docker compose logs postgres
+
+# 3. Ensure you're using 'postgres' as host, not 'localhost'
+# In docker compose.yml, verify:
+environment:
+  POSTGRES_HOST: postgres
+
+# 4. Restart services
+docker compose restart
 ```
 
-### Problem: "record not found" error
+**Why this happens:**
 
-**Solution:** GORM returns `gorm.ErrRecordNotFound`. Handle it properly:
+- Using `localhost` instead of `postgres` service name
+- PostgreSQL container not healthy yet
+- Network configuration issues
 
-```go
-if err := db.First(&user, id).Error; err != nil {
-    if errors.Is(err, gorm.ErrRecordNotFound) {
-        c.JSON(404, gin.H{"error": "User not found"})
-        return
-    }
-    c.JSON(500, gin.H{"error": "Database error"})
-    return
-}
+### Problem 2: "Database is unhealthy"
+
+**Symptoms:**
+
+```
+Container postgres-traceable-db is unhealthy
+dependency failed to start
+```
+
+**Solution:**
+
+```bash
+# 1. Check logs
+docker logs postgres-traceable-db
+
+# 2. Remove corrupted data
+docker compose down
+rm -rf postgres-data
+
+# 3. Fresh start
+docker compose up -d
+
+# 4. If still failing, check disk space
+df -h
+```
+
+**Common causes:**
+
+- Corrupted database files
+- Insufficient disk space
+- Port 5432 already in use
+- Incorrect credentials in healthcheck
+
+### Problem 3: "Permission denied" running migrate.sh
+
+**Symptoms:**
+
+```
+bash: ./scripts/migrate.sh: Permission denied
+```
+
+**Solution:**
+
+```bash
+# Make script executable
+chmod +x scripts/migrate.sh
+
+# Verify permissions
+ls -la scripts/migrate.sh
+
+# Should show: -rwxr-xr-x
+```
+
+### Problem 4: Changes not reflecting after restart
+
+**Symptoms:**
+
+- Code changes don't appear after `docker compose restart app`
+
+**Solution:**
+
+```bash
+# 1. Verify volume mount in docker compose.yml
+volumes:
+  - .:/app  # This must be present
+
+# 2. Rebuild if Dockerfile changed
+docker compose up --build -d
+
+# 3. Check if file is actually changed inside container
+docker exec go-tracker-api cat main.go | head -20
+```
+
+### Problem 5: "Port already in use"
+
+**Symptoms:**
+
+```
+Error starting userland proxy: listen tcp 0.0.0.0:8080: bind: address already in use
+```
+
+**Solution:**
+
+```bash
+# Find what's using the port (macOS/Linux)
+lsof -i :8080
+
+# Windows
+netstat -ano | findstr :8080
+
+# Kill the process or change port in .env
+APP_PORT=8081
+```
+
+### Problem 6: Container keeps restarting
+
+**Symptoms:**
+
+```
+docker compose ps
+# Shows container with status "Restarting"
+```
+
+**Solution:**
+
+```bash
+# Check logs for error
+docker compose logs --tail=50 app
+
+# Common issues:
+# - Syntax error in Go code
+# - Missing environment variables
+# - Database connection failing
+
+# Fix code and rebuild
+docker compose up --build -d
+```
+
+### Problem 7: "No .env file found" but variables still empty
+
+**Symptoms:**
+
+```
+POSTGRES_HOST: ''
+POSTGRES_USER: ''
+```
+
+**Solution:**
+
+```bash
+# 1. Verify .env exists
+ls -la .env
+
+# 2. Check docker compose.yml has env_file
+env_file:
+  - .env
+
+# 3. Restart services after .env changes
+docker compose down
+docker compose up -d
+
+# 4. Verify variables inside container
+docker exec go-tracker-api env | grep POSTGRES
+```
+
+### Problem 8: Migration fails
+
+**Symptoms:**
+
+```
+Migration failed: relation "users" already exists
+```
+
+**Solution:**
+
+```bash
+# Option 1: Drop and recreate (development only!)
+docker exec -it postgres-traceable-db psql -U postgres -d trackerDB -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+
+# Option 2: Let GORM handle it (safer)
+# GORM's AutoMigrate is idempotent - it won't fail on existing tables
+
+# Option 3: Fresh database
+docker compose down
+rm -rf postgres-data
+docker compose up -d
+./scripts/migrate.sh
+```
+
+### Problem 9: pgAdmin can't connect to PostgreSQL
+
+**Symptoms:**
+
+- pgAdmin shows "Unable to connect to server"
+
+**Solution:**
+
+**Connection settings must be:**
+
+- Host: `postgres` (NOT `localhost`, NOT `postgres-traceable-db`)
+- Port: `5432`
+- Username: From `.env` file
+- Password: From `.env` file
+- Database: `trackerDB` (or your database name)
+
+**Why:**
+
+- pgAdmin runs in Docker, so it uses internal network
+- Service name is `postgres` as defined in docker compose.yml
+- Container name (`postgres-traceable-db`) doesn't work for DNS
+
+### Problem 10: Docker out of disk space
+
+**Symptoms:**
+
+```
+no space left on device
+```
+
+**Solution:**
+
+```bash
+# Check disk usage
+docker system df
+
+# Clean up unused resources
+docker system prune -a
+
+# Remove specific items
+docker volume prune
+docker image prune -a
+
+# Nuclear option (careful!)
+docker system prune -a --volumes
 ```
 
 ---
 
-## Docker Commands Cheatsheet
+## Advanced Tips
 
-### Docker Compose
+### Hot Reload Without Manual Restart
 
-```bash
-# Start services
-docker-compose up -d
+While the current setup requires manual restart, you can add Air for automatic reload:
 
-# Stop services
-docker-compose down
+**Update `Dockerfile.dev`:**
 
-# View logs
-docker-compose logs -f postgres
+```dockerfile
+FROM golang:1.25-alpine
 
-# Restart PostgreSQL
-docker-compose restart postgres
+WORKDIR /app
 
-# Stop and remove volumes (⚠️ deletes data!)
-docker-compose down -v
+# Install Air
+RUN go install github.com/air-verse/air@latest
 
-# Rebuild containers
-docker-compose up -d --build
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Check service status
-docker-compose ps
-```
+COPY . .
 
-### PostgreSQL Container
+EXPOSE 8080
 
-```bash
-# Connect to psql
-docker exec -it postgres-db psql -U postgres -d my_gin_db
-
-# Run SQL command
-docker exec -it postgres-db psql -U postgres -c "SELECT version();"
-
-# Backup database
-docker exec postgres-db pg_dump -U postgres my_gin_db > backup.sql
-
-# Restore database
-docker exec -i postgres-db psql -U postgres my_gin_db < backup.sql
-
-# List databases
-docker exec -it postgres-db psql -U postgres -c "\l"
-
-# List tables
-docker exec -it postgres-db psql -U postgres -d my_gin_db -c "\dt"
-
-# Describe table
-docker exec -it postgres-db psql -U postgres -d my_gin_db -c "\d users"
-```
-
-### Container Management
-
-```bash
-# View running containers
-docker ps
-
-# View all containers
-docker ps -a
-
-# View container logs
-docker logs postgres-db
-docker logs -f postgres-db  # Follow logs
-
-# Execute command in container
-docker exec -it postgres-db bash
-
-# Inspect container
-docker inspect postgres-db
-
-# View resource usage
-docker stats postgres-db
-
-# Remove container
-docker rm -f postgres-db
-```
-
-### Useful SQL Commands (in psql)
-
-```sql
--- List all databases
-\l
-
--- Connect to database
-\c my_gin_db
-
--- List all tables
-\dt
-
--- Describe table structure
-\d users
-
--- Show table indexes
-\di
-
--- List all users/roles
-\du
-
--- Show current database
-SELECT current_database();
-
--- Show table size
-SELECT pg_size_pretty(pg_total_relation_size('users'));
-
--- Count records
-SELECT COUNT(*) FROM users;
-
--- Show recent activity
-SELECT * FROM pg_stat_activity;
-
--- Quit psql
-\q
-```
-
-### Development Workflow
-
-```bash
-# Complete restart (clean slate)
-docker-compose down -v
-docker-compose up -d
-go run main.go
-
-# Hot reload with Air (recommended)
-go install github.com/cosmtrek/air@latest
-air  # watches for file changes and reloads
-
-# Check database connection
-docker exec postgres-db pg_isready -U postgres
-
-# Monitor logs while developing
-docker-compose logs -f postgres &
-go run main.go
-
-# Quick backup before changes
-docker exec postgres-db pg_dump -U postgres my_gin_db > backup_$(date +%Y%m%d).sql
-
-# Database reset (development only!)
-docker-compose restart postgres
-go run main.go  # AutoMigrate will recreate tables
-```
-
----
-
-## Advanced Features
-
-### 1. Add Pagination
-
-**Update `controllers/user_controller.go`:**
-
-```go
-func GetUsers(c *gin.Context) {
-	// Get pagination parameters
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 10
-	}
-
-	var users []models.User
-	var total int64
-
-	// Count total records
-	config.DB.Model(&models.User{}).Count(&total)
-
-	// Get paginated results
-	offset := (page - 1) * pageSize
-	if err := config.DB.Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve users",
-		})
-		return
-	}
-
-	// Convert to response format
-	var response []models.UserResponse
-	for _, user := range users {
-		response = append(response, user.ToResponse())
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": response,
-		"pagination": gin.H{
-			"page":       page,
-			"page_size":  pageSize,
-			"total":      total,
-			"total_pages": (total + int64(pageSize) - 1) / int64(pageSize),
-		},
-	})
-}
-```
-
-**Usage:**
-
-```bash
-curl "http://localhost:8080/api/v1/users?page=1&page_size=10"
-```
-
-### 2. Add Request Logging Middleware
-
-**Create `middlewares/logger.go`:**
-
-```go
-package middlewares
-
-import (
-	"log"
-	"time"
-
-	"github.com/gin-gonic/gin"
-)
-
-func RequestLogger() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		startTime := time.Now()
-
-		// Process request
-		c.Next()
-
-		// Log request details
-		latency := time.Since(startTime)
-		statusCode := c.Writer.Status()
-		clientIP := c.ClientIP()
-		method := c.Request.Method
-		path := c.Request.URL.Path
-
-		log.Printf("[%s] %s %s | Status: %d | Latency: %v | IP: %s",
-			time.Now().Format("2006-01-02 15:04:05"),
-			method,
-			path,
-			statusCode,
-			latency,
-			clientIP,
-		)
-	}
-}
-```
-
-**Add to routes:**
-
-```go
-router.Use(middlewares.RequestLogger())
-```
-
-### 3. Add Database Seeding
-
-**Create `config/seeder.go`:**
-
-```go
-package config
-
-import (
-	"log"
-
-	"github.com/yourusername/my-gin-api/models"
-)
-
-func SeedDatabase() {
-	// Check if users already exist
-	var count int64
-	DB.Model(&models.User{}).Count(&count)
-
-	if count > 0 {
-		log.Println("Database already seeded")
-		return
-	}
-
-	// Seed data
-	users := []models.User{
-		{Name: "John Doe", Email: "john@example.com", Age: 30},
-		{Name: "Jane Smith", Email: "jane@example.com", Age: 25},
-		{Name: "Bob Johnson", Email: "bob@example.com", Age: 35},
-		{Name: "Alice Williams", Email: "alice@example.com", Age: 28},
-		{Name: "Charlie Brown", Email: "charlie@example.com", Age: 32},
-	}
-
-	if err := DB.Create(&users).Error; err != nil {
-		log.Printf("Failed to seed database: %v", err)
-		return
-	}
-
-	log.Printf("✅ Database seeded with %d users", len(users))
-}
-```
-
-**Add to main.go:**
-
-```go
-config.ConnectDatabase()
-config.DB.AutoMigrate(&models.User{})
-config.SeedDatabase()  // Add this line
-```
-
-### 4. Add Hot Reload with Air
-
-**Install Air:**
-
-```bash
-go install github.com/cosmtrek/air@latest
+CMD ["air", "-c", ".air.toml"]
 ```
 
 **Create `.air.toml`:**
 
 ```toml
 root = "."
-testdata_dir = "testdata"
 tmp_dir = "tmp"
 
 [build]
-  args_bin = []
-  bin = "./tmp/main"
   cmd = "go build -o ./tmp/main ."
-  delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "testdata", "postgres-data"]
-  exclude_file = []
-  exclude_regex = ["_test.go"]
-  exclude_unchanged = false
-  follow_symlink = false
-  full_bin = ""
-  include_dir = []
+  bin = "tmp/main"
   include_ext = ["go", "tpl", "tmpl", "html"]
-  include_file = []
-  kill_delay = "0s"
-  log = "build-errors.log"
-  poll = false
-  poll_interval = 0
-  rerun = false
-  rerun_delay = 500
-  send_interrupt = false
-  stop_on_error = false
-
-[color]
-  app = ""
-  build = "yellow"
-  main = "magenta"
-  runner = "green"
-  watcher = "cyan"
-
-[log]
-  main_only = false
-  time = false
-
-[misc]
-  clean_on_exit = false
-
-[screen]
-  clear_on_rebuild = false
-  keep_scroll = true
+  exclude_dir = ["assets", "tmp", "vendor", "postgres-data"]
+  delay = 1000
 ```
 
-**Run with Air:**
+Now changes auto-reload without manual restart!
+
+### Database Connection Pooling
+
+Already configured in `database.go`, but here's why each setting matters:
+
+```go
+sqlDB.SetMaxIdleConns(10)           // Keep 10 connections ready
+sqlDB.SetMaxOpenConns(100)          // Max 100 concurrent connections
+sqlDB.SetConnMaxLifetime(time.Hour) // Recycle connections after 1 hour
+```
+
+**Tuning guidelines:**
+
+- **Low traffic**: MaxIdleConns=5, MaxOpenConns=25
+- **Medium traffic**: MaxIdleConns=10, MaxOpenConns=100
+- **High traffic**: MaxIdleConns=20, MaxOpenConns=200
+
+### Multiple Environments
+
+**Development:**
 
 ```bash
-air
+docker compose -f docker compose.yml up
 ```
 
-Now your app will automatically reload when you save changes!
+**Production:**
 
-### 5. Add Input Validation Messages
-
-**Create `utils/validator.go`:**
-
-```go
-package utils
-
-import (
-	"fmt"
-	"strings"
-
-	"github.com/go-playground/validator/v10"
-)
-
-func FormatValidationError(err error) map[string]string {
-	errors := make(map[string]string)
-
-	if validationErrors, ok := err.(validator.ValidationErrors); ok {
-		for _, e := range validationErrors {
-			field := strings.ToLower(e.Field())
-			switch e.Tag() {
-			case "required":
-				errors[field] = fmt.Sprintf("%s is required", field)
-			case "email":
-				errors[field] = "Invalid email format"
-			case "min":
-				errors[field] = fmt.Sprintf("%s must be at least %s characters", field, e.Param())
-			case "max":
-				errors[field] = fmt.Sprintf("%s must be at most %s characters", field, e.Param())
-			case "gte":
-				errors[field] = fmt.Sprintf("%s must be greater than or equal to %s", field, e.Param())
-			case "lte":
-				errors[field] = fmt.Sprintf("%s must be less than or equal to %s", field, e.Param())
-			default:
-				errors[field] = fmt.Sprintf("%s is invalid", field)
-			}
-		}
-	}
-
-	return errors
-}
+```bash
+docker compose -f docker compose.prod.yml up
 ```
 
-**Use in controllers:**
+**Testing:**
 
-```go
-if err := c.ShouldBindJSON(&input); err != nil {
-	c.JSON(http.StatusBadRequest, gin.H{
-		"errors": utils.FormatValidationError(err),
-	})
-	return
-}
+```bash
+docker compose -f docker compose.test.yml up
 ```
 
-### 6. Add Response Wrapper
+### Debugging Inside Container
 
-**Create `utils/response.go`:**
+```bash
+# Enter container shell
+docker exec -it go-tracker-api sh
 
-```go
-package utils
+# Check environment variables
+env | grep POSTGRES
 
-import (
-	"github.com/gin-gonic/gin"
-)
+# Test database connection
+apk add postgresql-client
+psql -h postgres -U postgres -d trackerDB
 
-type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   interface{} `json:"error,omitempty"`
-}
+# Check file contents
+cat main.go
 
-func SuccessResponse(c *gin.Context, statusCode int, message string, data interface{}) {
-	c.JSON(statusCode, Response{
-		Success: true,
-		Message: message,
-		Data:    data,
-	})
-}
-
-func ErrorResponse(c *gin.Context, statusCode int, message string, err interface{}) {
-	c.JSON(statusCode, Response{
-		Success: false,
-		Message: message,
-		Error:   err,
-	})
-}
-```
-
-**Usage:**
-
-```go
-utils.SuccessResponse(c, http.StatusOK, "Users retrieved successfully", users)
-utils.ErrorResponse(c, http.StatusNotFound, "User not found", nil)
+# Check running processes
+ps aux
 ```
 
 ---
 
-## Production Deployment
+## Production Deployment Checklist
 
-### 1. Build Docker Image for Go App
+Before deploying to production:
 
-**Create `Dockerfile`:**
+- [ ] Change all default passwords in `.env`
+- [ ] Set `GIN_MODE=release`
+- [ ] Use `Dockerfile.prod` for smaller images
+- [ ] Enable SSL/TLS (`sslmode=require`)
+- [ ] Set up automatic backups
+- [ ] Configure log rotation
+- [ ] Set up monitoring (Prometheus, Grafana)
+- [ ] Use secrets management (Vault, AWS Secrets Manager)
+- [ ] Configure firewall rules
+- [ ] Set up CI/CD pipeline
+- [ ] Add rate limiting
+- [ ] Enable CORS properly
+- [ ] Add authentication/authorization
+- [ ] Set up load balancer
+- [ ] Configure auto-scaling
 
-```dockerfile
-# Build stage
-FROM golang:1.21-alpine AS builder
+---
 
-WORKDIR /app
+## Quick Reference Card
 
-# Copy go mod files
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
-
-# Runtime stage
-FROM alpine:latest
-
-RUN apk --no-cache add ca-certificates
-
-WORKDIR /root/
-
-# Copy binary from builder
-COPY --from=builder /app/main .
-COPY --from=builder /app/.env .
-
-EXPOSE 8080
-
-CMD ["./main"]
-```
-
-### 2. Update docker-compose.yml for Production
-
-```yaml
-version: "3.8"
-
-services:
-  app:
-    build: .
-    container_name: gin-app
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    environment:
-      - GIN_MODE=release
-      - DATABASE_URL=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} port=5432 sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - app-network
-
-  postgres:
-    image: postgres:17-alpine
-    container_name: postgres-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin-data:/var/lib/pgadmin
-    depends_on:
-      - postgres
-    networks:
-      - app-network
-
-networks:
-  app-network:
-    driver: bridge
-
-volumes:
-  postgres-data:
-  pgadmin-data:
-```
-
-### 3. Environment Variables for Production
-
-**Create `.env.production`:**
+### Everyday Commands
 
 ```bash
-# Application
-PORT=8080
-GIN_MODE=release
+# Start project
+docker compose up -d
 
-# PostgreSQL
-POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=very_secure_password_here
-POSTGRES_DB=production_db
+# Stop project
+docker compose down
 
-# pgAdmin
-PGADMIN_EMAIL=admin@production.com
-PGADMIN_PASSWORD=secure_admin_password
+# View logs
+docker compose logs -f app
 
-# Database URL (using container name in production)
-DATABASE_URL=host=postgres user=postgres password=very_secure_password_here dbname=production_db port=5432 sslmode=require TimeZone=UTC
+# Restart after changes
+docker compose restart app
+
+# Run migrations
+./scripts/migrate.sh
+
+# Fresh start (deletes data!)
+docker compose down && rm -rf postgres-data && docker compose up --build -d
 ```
 
-### 4. Deploy
+### When Things Break
 
 ```bash
-# Build and start all services
-docker-compose -f docker-compose.yml --env-file .env.production up -d --build
+# Check what's running
+docker compose ps
 
 # Check logs
-docker-compose logs -f app
+docker compose logs postgres
+docker compose logs app
 
-# Scale the app (if needed)
-docker-compose up -d --scale app=3
+# Full restart
+docker compose restart
+
+# Nuclear option
+docker compose down -v
+rm -rf postgres-data
+docker compose up --build -d
 ```
-
----
-
-## Performance Optimization
-
-### 1. Use Database Indexes
-
-```go
-type User struct {
-    ID    uint   `gorm:"primaryKey"`
-    Email string `gorm:"type:varchar(100);uniqueIndex;not null"`
-    Name  string `gorm:"type:varchar(100);index;not null"`
-    Age   int    `gorm:"type:int;index"`
-}
-```
-
-### 2. Use Preloading for Relations
-
-```go
-// Instead of N+1 queries
-db.Preload("Orders").Find(&users)
-
-// Nested preloading
-db.Preload("Orders.Items").Find(&users)
-```
-
-### 3. Use Select to Load Specific Fields
-
-```go
-// Only load needed fields
-db.Select("id", "name", "email").Find(&users)
-```
-
-### 4. Batch Operations
-
-```go
-// Batch insert
-users := []User{{Name: "User1"}, {Name: "User2"}}
-db.CreateInBatches(users, 100)
-```
-
-### 5. Use Connection Pooling Wisely
-
-```go
-sqlDB.SetMaxIdleConns(10)           // Idle connections
-sqlDB.SetMaxOpenConns(100)          // Max open connections
-sqlDB.SetConnMaxLifetime(time.Hour) // Connection lifetime
-sqlDB.SetConnMaxIdleTime(10 * time.Minute) // Idle timeout
-```
-
----
-
-## Testing
-
-### Create `controllers/user_controller_test.go`:
-
-```go
-package controllers
-
-import (
-	"bytes"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
-	"github.com/yourusername/my-gin-api/config"
-	"github.com/yourusername/my-gin-api/models"
-)
-
-func SetupTestDB() {
-	// Setup test database
-	config.ConnectDatabase()
-	config.DB.AutoMigrate(&models.User{})
-}
-
-func TestGetUsers(t *testing.T) {
-	SetupTestDB()
-
-	gin.SetMode(gin.TestMode)
-	router := gin.Default()
-	router.GET("/users", GetUsers)
-
-	req, _ := http.NewRequest("GET", "/users", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, 200, w.Code)
-}
-
-func TestCreateUser(t *testing.T) {
-	SetupTestDB()
-
-	gin.SetMode(gin.TestMode)
-	router := gin.Default()
-	router.POST("/users", CreateUser)
-
-	user := models.CreateUserInput{
-		Name:  "Test User",
-		Email: "test@example.com",
-		Age:   25,
-	}
-
-	jsonValue, _ := json.Marshal(user)
-	req, _ := http.NewRequest("POST", "/users", bytes.NewBuffer(jsonValue))
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, 201, w.Code)
-}
-```
-
-**Run tests:**
-
-```bash
-go test ./... -v
-```
-
----
-
-## Additional Resources
-
-- **Gin Documentation:** https://gin-gonic.com/docs/
-- **GORM Documentation:** https://gorm.io/docs/
-- **PostgreSQL Documentation:** https://www.postgresql.org/docs/17/
-- **Go by Example:** https://gobyexample.com/
-- **Effective Go:** https://go.dev/doc/effective_go
 
 ---
 
 ## Conclusion
 
-You now have a complete, production-ready REST API using:
+You now have a complete Docker-based development environment with:
 
-✅ **Gin Gonic** for fast HTTP routing  
-✅ **GORM** for elegant database operations  
-✅ **PostgreSQL 17** in Docker for data persistence  
-✅ **pgAdmin** for database management  
-✅ **Best practices** for structure, validation, and error handling  
-✅ **Graceful shutdown** and proper resource management  
-✅ **Hot reload** support for development  
-✅ **Production deployment** configuration
+- **PostgreSQL 16** running in an isolated container
+- **pgAdmin** for visual database management
+- **Your Go application** containerized for consistency
+- **Automatic networking** between containers
+- **Persistent data** via Docker volumes
+- **Easy migrations** with shell scripts
+- **Quick restart workflow** for development
+
+### Key Takeaways
+
+1. **Docker containers communicate by service name**, not localhost
+2. **Volume mounts** let you edit code and restart to see changes
+3. **`docker compose down && rm -rf postgres-data`** fixes most database issues
+4. **`docker compose restart app`** is your friend during development
+5. **Always use `.env` files** for configuration, never hardcode
 
 ### Next Steps
 
-1. Add **authentication** with JWT tokens
-2. Implement **role-based authorization**
-3. Add **rate limiting** to prevent abuse
-4. Set up **monitoring** with Prometheus/Grafana
-5. Implement **caching** with Redis
-6. Add **API documentation** with Swagger
-7. Set up **CI/CD** pipeline
-8. Implement **logging** with structured logs
-
-Happy coding! 🚀
+- Add authentication with JWT tokens
+- Implement role-based access control
+- Set up automated testing
+- Add API documentation with Swagger
+- Configure CI/CD pipeline
+- Implement caching with Redis
+- Add monitoring and alerting
+- Set up staging environment
 
 ---
 
-**Questions or issues?** Feel free to reach out or open an issue on GitHub!
+## Additional Resources
+
+- **Docker Documentation:** https://docs.docker.com/
+- **Docker Compose Reference:** https://docs.docker.com/compose/
+- **Gin Framework:** https://gin-gonic.com/docs/
+- **GORM Documentation:** https://gorm.io/docs/
+- **PostgreSQL Docs:** https://www.postgresql.org/docs/
+- **Go Best Practices:** https://go.dev/doc/effective_go
+
+---
+
+**Need help?** Check logs first with `docker compose logs -f`, then review the Troubleshooting section. Most issues are solved by `docker compose down`, `rm -rf postgres-data`, and `docker compose up --build -d`.
+
+Happy coding!
