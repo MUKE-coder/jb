@@ -1574,6 +1574,225 @@ function makeAnimalSpeak(animal: Animal) {
 
 ---
 
+# Project Series Summary
+
+---
+
+## Project 1: Weather CLI + Web Dashboard
+
+### **Video 1: "Build a Real-Time Weather CLI App in Go | Beginner Go Tutorial"**
+
+**Description:**
+Learn Go by building a practical command-line weather application that fetches real-time weather data from the OpenWeatherMap API. Perfect for beginners who want to understand HTTP requests, JSON parsing, and error handling while creating something useful you'll actually use!
+
+**Features:**
+
+- Fetch current weather for any city worldwide
+- Display temperature (Celsius/Fahrenheit), conditions, and humidity
+- Show 5-day weather forecast
+- Colored terminal output for better readability
+- Proper error handling for invalid cities and API failures
+- Save favorite cities for quick access
+- Command-line arguments parsing (e.g., `weather Kampala --forecast`)
+
+**Tech Stack:** Go standard library, OpenWeatherMap API, `net/http`, `encoding/json`
+
+---
+
+### **Video 2: "Turn Your CLI into a Web App | Go HTTP Server Tutorial"**
+
+**Description:**
+Take your weather CLI to the next level by building a beautiful web dashboard! Learn how to create HTTP servers in Go, use HTML templates, and build a responsive web interface. This tutorial shows you how to transform any CLI tool into a web application.
+
+**Features:**
+
+- Simple HTTP server with multiple routes
+- HTML templates for dynamic content rendering
+- Search weather by city through web form
+- Responsive design that works on mobile
+- Display current weather with icons
+- 5-day forecast cards
+- Error handling with user-friendly messages
+- Cache API responses to reduce API calls (bonus)
+- Auto-refresh every 30 minutes
+
+**Tech Stack:** `net/http`, `html/template`, CSS, OpenWeatherMap API
+
+---
+
+## Project 2: URL Shortener with Analytics
+
+### **"Build Your Own Bit.ly Clone in Go | REST API Tutorial"**
+
+**Description:**
+Create a professional URL shortener service like bit.ly from scratch! This project teaches you how to build REST APIs, handle redirects, track analytics, and persist data. Perfect for intermediate Go developers looking to build portfolio-worthy projects and understand backend development patterns.
+
+**Features:**
+
+- Shorten long URLs into 6-character codes
+- Custom short codes (optional)
+- Redirect short URLs to original destinations
+- Click tracking and analytics
+- View stats: total clicks, creation date, last accessed
+- List all shortened URLs
+- Delete shortened URLs
+- JSON file persistence (or optional database)
+- Thread-safe concurrent access with mutexes
+- Rate limiting (bonus)
+- API authentication (bonus)
+
+**API Endpoints:**
+
+```
+POST   /api/shorten          - Create short URL
+GET    /:code                - Redirect to original URL
+GET    /api/stats/:code      - Get analytics
+GET    /api/urls             - List all URLs
+DELETE /api/urls/:code       - Delete URL
+GET    /                     - Web interface (optional)
+```
+
+**Tech Stack:** `net/http`, `encoding/json`, `sync.RWMutex`, JSON file storage
+
+---
+
+## Project 3: Expense Tracker API + CLI
+
+### **Video 1: "Build a Complete Expense Tracker in Go | CLI Application"**
+
+**Description:**
+Master Go by building a real-world expense tracking application! Learn how to work with dates, perform data aggregations, implement business logic, and create a polished command-line interface. This project covers essential concepts every Go developer needs to know.
+
+**Features:**
+
+- Add expenses with amount, description, category, and date
+- List all expenses with filtering options
+- Filter by month, year, or category
+- Calculate totals by period or category
+- Set monthly budgets per category
+- Budget status warnings (over budget alerts)
+- Monthly/yearly expense reports
+- Export data to CSV
+- Import expenses from CSV
+- Data persistence with JSON
+- Colored output for budget status
+
+**CLI Commands:**
+
+```
+expense add 50.00 "Lunch at cafe" --category food
+expense list --month 10 --year 2025
+expense list --category transport
+expense total --month 10
+expense budget set food 500
+expense budget set transport 200
+expense budget status
+expense report --month 10
+expense export expenses.csv
+```
+
+**Tech Stack:** Go standard library, `time` package, `encoding/json`, `encoding/csv`, `flag` package
+
+---
+
+### **Video 2: "Add a REST API to Your Expense Tracker | Go Backend Tutorial"**
+
+**Description:**
+Transform your CLI expense tracker into a full-featured REST API! Learn how to structure Go applications, handle HTTP requests/responses, validate user input, and implement proper error handling. Build the backend foundation for a mobile or web frontend.
+
+**Features:**
+
+- RESTful API endpoints for all expense operations
+- JSON request/response handling
+- Input validation and error responses
+- CORS support for web frontends
+- Query parameters for filtering
+- Pagination for large datasets
+- Summary endpoints for analytics
+- Budget management endpoints
+- Authentication (optional with JWT)
+- Rate limiting per user
+- API documentation
+
+**API Endpoints:**
+
+```
+POST   /api/expenses              - Create expense
+GET    /api/expenses              - List expenses (with filters)
+GET    /api/expenses/:id          - Get single expense
+PUT    /api/expenses/:id          - Update expense
+DELETE /api/expenses/:id          - Delete expense
+GET    /api/expenses/summary      - Get totals and stats
+GET    /api/expenses/by-category  - Group by category
+POST   /api/budgets               - Set budget
+GET    /api/budgets               - List budgets
+GET    /api/budgets/status        - Check budget status
+GET    /api/reports/monthly       - Monthly report
+```
+
+**Tech Stack:** `net/http`, `encoding/json`, `gorilla/mux` (optional), middleware patterns
+
+---
+
+### **Video 3: "Advanced Features | Data Visualization & Export"** (Optional Bonus)
+
+**Description:**
+Take your expense tracker to the next level with advanced features! Add data visualization, recurring expenses, categories management, and multi-currency support. Learn advanced Go patterns and best practices.
+
+**Features:**
+
+- Recurring expenses (weekly, monthly, yearly)
+- Category management (add, edit, delete categories)
+- Multi-currency support with exchange rates
+- Data visualization endpoint (chart data)
+- PDF report generation
+- Email notifications for budget alerts
+- Backup and restore functionality
+- Data migration tools
+- Search expenses by description
+- Tags for expenses
+- Attachments (receipt images)
+
+**Tech Stack:** Additional packages for PDF generation, charting libraries
+
+---
+
+## 📊 Skills Progression Matrix
+
+| Skill             | Weather App     | URL Shortener      | Expense Tracker      |
+| ----------------- | --------------- | ------------------ | -------------------- |
+| HTTP Requests     | ✅ GET          | ✅ GET/POST/DELETE | ✅ All methods       |
+| JSON Parsing      | ✅ Basic        | ✅ Intermediate    | ✅ Advanced          |
+| Error Handling    | ✅ Basic        | ✅ Intermediate    | ✅ Advanced          |
+| File I/O          | ⚪ Optional     | ✅ JSON            | ✅ JSON + CSV        |
+| Structs & Methods | ✅ Basic        | ✅ Intermediate    | ✅ Advanced          |
+| Time/Date         | ⚪ Display only | ✅ Timestamps      | ✅ Full manipulation |
+| Concurrency       | ⚪ None         | ✅ Mutexes         | ⚪ Optional          |
+| Testing           | ⚪ Optional     | ✅ Unit tests      | ✅ Full coverage     |
+| Web Templates     | ✅ HTML         | ⚪ Optional        | ⚪ Optional          |
+| CLI Arguments     | ✅ Basic        | ⚪ None            | ✅ Advanced          |
+| Business Logic    | ⚪ Light        | ✅ Moderate        | ✅ Complex           |
+
+---
+
+## 💡 Viewer Challenges (End of Each Video)
+
+**Weather App:**
+
+1. Add support for multiple cities at once
+2. Show sunrise/sunset times
+3. Add air quality index
+4. Create a 7-day forecast
+
+**URL Shortener:**
+
+1. Add custom domains support
+2. Implement QR code generation
+3. Add expiration dates for URLs
+4. Create a browser extension
+
+---
+
 # Part 3: Building REST API with Gin & GORM
 
 ## Project Setup

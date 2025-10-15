@@ -34,6 +34,8 @@ npm install -D @types/uuid
 
 ```typescript
 // components/ui/dropzone.tsx
+
+// components/ui/dropzone.tsx
 "use client";
 
 import { cn } from "@/lib/utils";
@@ -43,7 +45,14 @@ import { FileRejection, useDropzone } from "react-dropzone";
 import { useCallback, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
-import { Loader2, Trash2, Upload, File, Image } from "lucide-react";
+import {
+  Loader2,
+  Trash2,
+  Upload,
+  File,
+  Image as ImageIcon,
+  X,
+} from "lucide-react";
 
 export interface FileWithMetadata {
   id: string;
@@ -59,12 +68,30 @@ export interface FileWithMetadata {
 
 interface DropzoneProps {
   provider: "aws-s3" | "cloudflare-r2";
-  variant?: "default" | "compact";
+  variant?: "default" | "compact" | "minimal" | "avatar" | "inline";
   accept?: Record<string, string[]>;
   maxFiles?: number;
   maxSize?: number;
   onFilesChange?: (files: FileWithMetadata[]) => void;
   className?: string;
+  disabled?: boolean;
+  helperText?: string;
+}
+
+/**
+ * Extract key from S3/R2 public URL
+ * Example: https://bucket.s3.region.amazonaws.com/key.png -> key.png
+ */
+export function extractKeyFromUrl(url: string): string | null {
+  if (!url) return null;
+  try {
+    const urlObj = new URL(url);
+    // Remove leading slash and return the path
+    return urlObj.pathname.substring(1);
+  } catch (error) {
+    console.error("Error extracting key from URL:", error);
+    return null;
+  }
 }
 
 export function Dropzone({
@@ -82,6 +109,8 @@ export function Dropzone({
   maxSize = 1024 * 1024 * 10, // 10MB
   onFilesChange,
   className,
+  disabled = false,
+  helperText,
 }: DropzoneProps) {
   const [files, setFiles] = useState<FileWithMetadata[]>([]);
 
@@ -102,26 +131,29 @@ export function Dropzone({
         prevFiles.map((f) => (f.id === fileId ? { ...f, isDeleting: true } : f))
       );
 
-      const endpoint =
-        provider === "aws-s3" ? "/api/s3/delete" : "/api/r2/delete";
-      const response = await fetch(endpoint, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: fileToRemove.key }),
-      });
+      // Only attempt to delete from server if the file was successfully uploaded
+      if (fileToRemove.key && fileToRemove.publicUrl) {
+        const endpoint =
+          provider === "aws-s3" ? "/api/s3/delete" : "/api/r2/delete";
+        const response = await fetch(endpoint, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: fileToRemove.key }),
+        });
 
-      if (!response.ok) {
-        toast.error("Failed to delete file");
-        setFiles((prevFiles) =>
-          prevFiles.map((f) =>
-            f.id === fileId ? { ...f, isDeleting: false, error: true } : f
-          )
-        );
-        return;
+        if (!response.ok) {
+          toast.error("Failed to delete file from server");
+          setFiles((prevFiles) =>
+            prevFiles.map((f) =>
+              f.id === fileId ? { ...f, isDeleting: false, error: true } : f
+            )
+          );
+          return;
+        }
       }
 
       setFiles((prevFiles) => prevFiles.filter((f) => f.id !== fileId));
-      toast.success("File deleted successfully");
+      toast.success("File removed successfully");
     } catch (error) {
       toast.error("Failed to delete file");
       setFiles((prevFiles) =>
@@ -269,7 +301,157 @@ export function Dropzone({
     maxFiles,
     maxSize,
     accept,
+    disabled,
   });
+
+  // Render variants
+  if (variant === "avatar") {
+    const currentFile = files[0];
+    return (
+      <div className={cn("relative", className)}>
+        <div
+          {...getRootProps()}
+          className={cn(
+            "relative h-32 w-32 rounded-full border-2 border-dashed transition-colors cursor-pointer overflow-hidden",
+            isDragActive
+              ? "border-primary bg-primary/10"
+              : "border-border hover:border-primary",
+            disabled && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          <input {...getInputProps()} />
+          {currentFile?.objectUrl ? (
+            <img
+              src={currentFile.objectUrl}
+              alt="Avatar"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-muted">
+              <ImageIcon className="h-8 w-8 text-muted-foreground" />
+            </div>
+          )}
+          {currentFile?.uploading && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <div className="text-white font-medium">
+                {currentFile.progress}%
+              </div>
+            </div>
+          )}
+        </div>
+        {currentFile && (
+          <Button
+            size="icon"
+            variant="destructive"
+            className="absolute -top-2 -right-2 h-8 w-8 rounded-full"
+            onClick={() => removeFile(currentFile.id)}
+            disabled={currentFile.isDeleting || currentFile.uploading}
+          >
+            {currentFile.isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <X className="h-4 w-4" />
+            )}
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  if (variant === "minimal") {
+    return (
+      <div className={cn("space-y-2", className)}>
+        <div {...getRootProps()}>
+          <input {...getInputProps()} />
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={disabled}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Upload Files
+          </Button>
+        </div>
+        {helperText && (
+          <p className="text-xs text-muted-foreground">{helperText}</p>
+        )}
+        {files.length > 0 && (
+          <div className="space-y-2">
+            {files.map((file) => (
+              <div
+                key={file.id}
+                className="flex items-center justify-between rounded-md border p-2"
+              >
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <File className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                  <span className="text-sm truncate">{file.file.name}</span>
+                  {file.uploading && (
+                    <span className="text-xs text-muted-foreground">
+                      {file.progress}%
+                    </span>
+                  )}
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 flex-shrink-0"
+                  onClick={() => removeFile(file.id)}
+                  disabled={file.isDeleting || file.uploading}
+                >
+                  {file.isDeleting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (variant === "inline") {
+    return (
+      <div className={cn("flex items-center gap-2", className)}>
+        <div {...getRootProps()} className="flex-1">
+          <input {...getInputProps()} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={disabled}
+          >
+            <Upload className="mr-2 h-3 w-3" />
+            Choose File
+          </Button>
+        </div>
+        {files.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground truncate max-w-[150px]">
+              {files[0].file.name}
+            </span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={() => removeFile(files[0].id)}
+              disabled={files[0].isDeleting || files[0].uploading}
+            >
+              {files[0].isDeleting ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const isCompact = variant === "compact";
 
@@ -282,26 +464,34 @@ export function Dropzone({
           isCompact ? "h-32" : "h-64",
           isDragActive
             ? "border-primary bg-primary/10 border-solid"
-            : "border-border hover:border-primary"
+            : "border-border hover:border-primary",
+          disabled && "opacity-50 cursor-not-allowed"
         )}
       >
-        <CardContent className="flex items-center justify-center h-full w-full">
+        <CardContent className="flex items-center justify-center h-full w-full p-4">
           <input {...getInputProps()} />
           {isDragActive ? (
             <div className="flex flex-col items-center gap-2">
               <Upload className="h-8 w-8 text-primary" />
-              <p className="text-center">Drop the files here...</p>
+              <p className="text-center text-sm">Drop the files here...</p>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3">
               <div className="flex gap-2">
-                <Image className="h-6 w-6 text-muted-foreground" />
+                <ImageIcon className="h-6 w-6 text-muted-foreground" />
                 <File className="h-6 w-6 text-muted-foreground" />
               </div>
               <p className="text-center text-sm text-muted-foreground">
                 Drag & drop files here, or click to select
               </p>
-              <Button size={isCompact ? "sm" : "default"}>Select Files</Button>
+              <Button size={isCompact ? "sm" : "default"} type="button">
+                Select Files
+              </Button>
+              {helperText && (
+                <p className="text-xs text-muted-foreground text-center">
+                  {helperText}
+                </p>
+              )}
             </div>
           )}
         </CardContent>
@@ -340,8 +530,12 @@ export function Dropzone({
                       variant="destructive"
                       size="icon"
                       className="absolute top-2 right-2 h-6 w-6"
-                      onClick={() => removeFile(id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFile(id);
+                      }}
                       disabled={isDeleting || uploading}
+                      type="button"
                     >
                       {isDeleting ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -377,17 +571,35 @@ export function Dropzone({
   );
 }
 
-// Cleanup hook
-// useEffect(() => {
-//   return () => {
-//     files.forEach((file) => {
-//       if (file.objectUrl) {
-//         URL.revokeObjectURL(file.objectUrl);
-//       }
-//     });
-//   };
-// }, [files]);
+// Cleanup hook on unmount
+export function useDropzoneCleanup(files: FileWithMetadata[]) {
+  useEffect(() => {
+    return () => {
+      files.forEach((file) => {
+        if (file.objectUrl) {
+          URL.revokeObjectURL(file.objectUrl);
+        }
+      });
+    };
+  }, [files]);
+}
 
+
+```
+
+### Usage Examples
+
+- The component has 5 Variants and here are some few
+
+```tsx
+// Avatar variant (single image, round)
+<Dropzone provider="aws-s3" variant="avatar" maxFiles={1} />
+
+// Minimal variant (button only)
+<Dropzone provider="aws-s3" variant="minimal" className="max-w-md" />
+
+// Inline variant (horizontal)
+<Dropzone provider="aws-s3" variant="inline" />
 ```
 
 ---
@@ -652,6 +864,31 @@ export default function HomePage() {
   );
 }
 
+```
+
+In Routes when your deleting a Resource you can use this code
+
+```typescript
+function extractKeyFromUrl(url: string): string | null {
+  if (!url) return null;
+  try {
+    const urlObj = new URL(url);
+    // Remove leading slash and return the path
+    return urlObj.pathname.substring(1);
+  } catch (error) {
+    console.error("Error extracting key from URL:", error);
+    return null;
+  }
+}
+
+const BASE_URL = process.env.API_BASE_URL;
+const key = extractKeyFromUrl(institution.logo ?? "");
+console.log("KEY =", key);
+await fetch(`${BASE_URL}/api/s3/delete`, {
+  method: "DELETE",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ key: key }),
+});
 ```
 
 ### Pros and Cons
