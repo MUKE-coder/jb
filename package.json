@@ -21,7 +21,7 @@
     "url": "git+https://github.com/MUKE-coder/jb.git"
   },
   "scripts": {
-    "dev": "next dev -p 1409 --turbopack",
+    "dev": "next dev -p 1408 --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
     "preview": "next build --turbopack && next start -p 1408",

@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "assets.chanhdai.com",
+        hostname: "*",
         port: "",
       },
     ],
