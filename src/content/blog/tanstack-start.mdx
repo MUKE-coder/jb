@@ -54,12 +54,10 @@ A task management application featuring:
 
 ```bash
 # Create new project with addons
-npm create @tanstack/start@latest my-crud-app
+pnpm create @tanstack/start@latest my-crud-app
 
-# When prompted, select:
-# - TypeScript
-# - Add tRPC integration (optional but recommended)
-# - Add Shadcn/ui
+# create a new TanStack Start project with shadcn/ui:
+pnpm create @tanstack/start@latest --tailwind --add-ons shadcn
 
 cd my-crud-app
 ```
