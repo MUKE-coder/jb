@@ -121,6 +121,54 @@ export const options = {
 };
 ```
 
+#### Example 1 : Simple Test
+
+```tsx
+import { check, sleep } from "k6";
+import http from "k6/http";
+
+export const options = {
+  vus: 1,
+  duration: "10s",
+};
+export default () => {
+  http.get("http://localhost:8000/api/products");
+};
+```
+
+#### Example Two
+
+```tsx
+import { check, sleep } from "k6";
+import http from "k6/http";
+// SCENARIO TWO : STANDARD LOAD TEST with stages normally takes 30minutes
+export const options = {
+  stages: [
+    {
+      duration: "5m",
+      target: 200, //ramp up
+      duration: "20m",
+      target: 200, //stable
+      duration: "5m",
+      target: 0, //ramp down to 0 users
+    },
+  ],
+  thresholds: {
+    http_req_duration: ["p(99)<1000"], // More realistic: 1 second
+    http_req_failed: ["rate<0.1"], // Less than 10% errors
+    checks: ["rate>0.95"], // 95%+ checks pass
+  },
+};
+export default () => {
+  const res = http.get("http://localhost:8000/api/products");
+  check(res, {
+    "status is 200": (r) => r.status === 200, // Fixed: number not string
+    "response has body": (r) => r.body.length > 0,
+  });
+  sleep(1);
+};
+```
+
 ### Understanding k6 Metrics
 
 When you run a k6 test, you'll see various metrics:
@@ -157,6 +205,51 @@ These show the response time at different percentiles:
 - **p(99)**: 99% of requests completed faster than this time
 
 The p(99) is particularly important as it represents the experience of your slowest users.
+
+### Installation
+
+**Option 1: Using Windows Package Manager (winget)**
+This is the recommended method if you have a modern version of Windows and PowerShell or Command Prompt.
+Open your terminal (PowerShell or Command Prompt).
+Run the installation command:
+powershell
+
+```bash
+winget install k6
+```
+
+Verify the installation by checking the version:
+powershell
+
+```bash
+k6 version
+```
+
+**Option 2: Using Chocolatey**
+Chocolatey is a popular open-source package manager for Windows.
+Install Chocolatey (if you don't have it):
+Open PowerShell as Administrator (right-click PowerShell in the Start menu and select "Run as administrator").
+Run the following command to install Chocolatey:
+powershell
+
+```bash
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+```
+
+Close and reopen PowerShell for the changes to take effect.
+Install k6:
+Open your terminal (standard user privileges are fine now).
+Run the installation command:
+
+```bash
+choco install k6
+```
+
+Verify the installation by checking the version:
+
+```bash
+k6 version
+```
 
 ### The k6 Test Lifecycle
 
