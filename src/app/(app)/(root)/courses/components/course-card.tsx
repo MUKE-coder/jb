@@ -43,7 +43,7 @@ export function CourseCard({ course, index }: CourseCardProps) {
           {/* Gradient Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
           {/* Complexity Badge */}
-          <div className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm dark:bg-black/70">
+          <div className="absolute top-3 right-3 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm dark:bg-black/70">
             {course.complexity}
           </div>
         </div>
@@ -98,7 +98,7 @@ export function CourseCard({ course, index }: CourseCardProps) {
           {/* Topics */}
           <div className="space-y-2">
             <h3 className="text-xs font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
-              What You'll Learn
+              What You&apos;ll Learn
             </h3>
             <ul className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm text-neutral-600 sm:grid-cols-2 dark:text-neutral-400">
               {course.topics.slice(0, 6).map((topic) => (
