@@ -48,7 +48,14 @@ export const courses: Course[] = [
       withoutSourceCode: 50,
       withSourceCode: 80,
     },
-    techStack: ["Next.js", "Prisma", "PostgreSQL", "Better Auth", "AWS S3", "Stripe"],
+    techStack: [
+      "Next.js",
+      "Prisma",
+      "PostgreSQL",
+      "Better Auth",
+      "AWS S3",
+      "Stripe",
+    ],
   },
   {
     id: "2",
@@ -87,7 +94,7 @@ export const courses: Course[] = [
     slug: "devops-aws",
     description:
       "Transform your deployment workflow with comprehensive DevOps practices. Master AWS, Docker, Kubernetes, and CI/CD pipelines. Learn infrastructure as code with Terraform and monitoring with Grafana.",
-    thumbnail: "/courses/devops-aws.jpg",
+    thumbnail: "/courses/devops-aws.png",
     duration: "35 hours",
     episodes: 100,
     complexity: "Advanced",
@@ -115,7 +122,14 @@ export const courses: Course[] = [
       withoutSourceCode: 120,
       withSourceCode: 200,
     },
-    techStack: ["AWS", "Docker", "Kubernetes", "Terraform", "Grafana", "GitHub Actions"],
+    techStack: [
+      "AWS",
+      "Docker",
+      "Kubernetes",
+      "Terraform",
+      "Grafana",
+      "GitHub Actions",
+    ],
   },
   {
     id: "4",
@@ -136,16 +150,19 @@ export const courses: Course[] = [
       "AWS S3 File Storage",
       "Prisma & PostgreSQL",
     ],
-    projects: [
-      "Apple-inspired E-commerce Clone",
-      "TanStack Start Starter Kit",
-    ],
+    projects: ["Apple-inspired E-commerce Clone", "TanStack Start Starter Kit"],
     deployment: ["Vercel", "VPS"],
     pricing: {
       withoutSourceCode: 80,
       withSourceCode: 120,
     },
-    techStack: ["TanStack Start", "Prisma", "PostgreSQL", "Better Auth", "AWS S3"],
+    techStack: [
+      "TanStack Start",
+      "Prisma",
+      "PostgreSQL",
+      "Better Auth",
+      "AWS S3",
+    ],
   },
   {
     id: "5",
@@ -153,7 +170,7 @@ export const courses: Course[] = [
     slug: "laravel-react-fullstack",
     description:
       "Master the classic yet modern combination of Laravel and React. Build a complete e-commerce application with robust authentication, file storage, and all essential Laravel concepts for enterprise-grade applications.",
-    thumbnail: "/courses/laravel-react.jpg",
+    thumbnail: "/courses/laravel-react.png",
     duration: "45 hours",
     episodes: 130,
     complexity: "Intermediate",
@@ -213,7 +230,7 @@ export const courses: Course[] = [
     slug: "electron-golang-desktop",
     description:
       "Create powerful desktop applications that work both offline and online. Combine Electron's cross-platform capabilities with Golang's performance to build an advanced POS system with barcode scanning and receipt printing.",
-    thumbnail: "/courses/electron-golang.svg",
+    thumbnail: "/courses/electron-golang.png",
     duration: "60 hours",
     episodes: 180,
     complexity: "Advanced",
@@ -238,7 +255,14 @@ export const courses: Course[] = [
       withoutSourceCode: 200,
       withSourceCode: 300,
     },
-    techStack: ["Electron", "Golang", "React", "SQLite", "PostgreSQL", "Tailwind CSS"],
+    techStack: [
+      "Electron",
+      "Golang",
+      "React",
+      "SQLite",
+      "PostgreSQL",
+      "Tailwind CSS",
+    ],
   },
   {
     id: "8",
@@ -246,7 +270,7 @@ export const courses: Course[] = [
     slug: "nhpc-stack",
     description:
       "Learn the cutting-edge NHPC stack combining Next.js, Hono, Prisma, and PostgreSQL. Build a feature-rich job portal with modern authentication, API documentation, and rate limiting for production-ready applications.",
-    thumbnail: "/courses/nhpc-stack.svg",
+    thumbnail: "/courses/nhpc-stack.png",
     duration: "35 hours",
     episodes: 100,
     complexity: "Intermediate",
@@ -259,15 +283,19 @@ export const courses: Course[] = [
       "Scalar API Documentation",
       "Next.js Frontend",
     ],
-    projects: [
-      "Job Portal Application",
-      "NHPC Stack Starter Kit",
-    ],
+    projects: ["Job Portal Application", "NHPC Stack Starter Kit"],
     deployment: ["Vercel for Frontend", "Cloudflare Workers for Hono API"],
     pricing: {
       withoutSourceCode: 100,
       withSourceCode: 150,
     },
-    techStack: ["Next.js", "Hono", "Prisma", "PostgreSQL", "Better Auth", "Cloudflare"],
+    techStack: [
+      "Next.js",
+      "Hono",
+      "Prisma",
+      "PostgreSQL",
+      "Better Auth",
+      "Cloudflare",
+    ],
   },
 ];
