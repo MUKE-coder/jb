@@ -154,22 +154,35 @@ export function CourseCard({ course, index }: CourseCardProps) {
           {/* Pricing & CTA */}
           <div className="mt-auto flex flex-col items-start justify-between gap-4 border-t border-neutral-200 pt-4 sm:flex-row sm:items-center dark:border-neutral-800">
             <div className="flex flex-col gap-4 sm:flex-row">
-              <div className="space-y-1">
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Without Source Code
-                </p>
-                <p className="text-2xl font-bold text-neutral-900 dark:text-white">
-                  ${course.pricing.withoutSourceCode}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  With Source Code
-                </p>
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  ${course.pricing.withSourceCode}
-                </p>
-              </div>
+              {course.pricing.withoutSourceCode === 0 ? (
+                <div className="space-y-1">
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    Price
+                  </p>
+                  <p className="text-2xl font-bold text-neutral-900 dark:text-white">
+                    Free
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                      Without Source Code
+                    </p>
+                    <p className="text-2xl font-bold text-neutral-900 dark:text-white">
+                      ${course.pricing.withoutSourceCode}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                      With Source Code
+                    </p>
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      ${course.pricing.withSourceCode}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             <Link
@@ -178,7 +191,11 @@ export function CourseCard({ course, index }: CourseCardProps) {
               rel="noopener noreferrer"
               className="group/btn inline-flex items-center gap-2 rounded-full bg-neutral-900 px-6 py-3 text-sm font-semibold text-white transition-all hover:gap-3 hover:shadow-lg hover:shadow-neutral-900/20 dark:bg-white dark:text-neutral-900 dark:hover:shadow-white/20"
             >
-              <span>Enroll Now</span>
+              <span>
+                {course.pricing.withoutSourceCode === 0
+                  ? "Watch on YouTube"
+                  : "Enroll Now"}
+              </span>
               <ArrowUpRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
             </Link>
           </div>

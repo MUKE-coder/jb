@@ -307,4 +307,42 @@ export const courses: Course[] = [
     ],
     releaseDate: "Aug 1st 2026",
   },
+  {
+    id: "0",
+    title: "Tailwind for SaaS Builders with Framer Animations",
+    slug: "tailwind-saas-framer",
+    description:
+      "The ultimate requirement for all our masterclasses. Master Tailwind CSS, Framer Motion animations, and build stunning SaaS interfaces. Learn to use component libraries like shadcn/ui and generate components with AI.",
+    thumbnail: "/courses/tailwind-saas-framer.png",
+    duration: "15 hours",
+    episodes: 1,
+    complexity: "Beginner",
+    websiteLink: "https://youtube.com/@desishub",
+    topics: [
+      "Tailwind CSS & Responsive Design",
+      "Framer Motion Animations",
+      "Shadcn/ui & Simple UI",
+      "AI Component Generation",
+      "SaaS Dashboards & Charts",
+      "Design Systems & Inspirations",
+    ],
+    projects: [
+      "Modern SaaS Dashboard",
+      "Animated Landing Page",
+      "AI-Generated Component Library",
+    ],
+    deployment: ["Vercel", "Netlify"],
+    pricing: {
+      withoutSourceCode: 0,
+      withSourceCode: 0,
+    },
+    techStack: [
+      "Tailwind CSS",
+      "Framer Motion",
+      "React",
+      "Shadcn/ui",
+      "AI Tools",
+    ],
+    releaseDate: "Available Now",
+  },
 ];
