@@ -3,6 +3,7 @@
 import {
   ArrowUpRight,
   BookOpen,
+  Calendar,
   Clock,
   ExternalLink,
   Layers,
@@ -75,6 +76,10 @@ export function CourseCard({ course, index }: CourseCardProps) {
               <span className="font-medium">
                 {course.techStack.length} Technologies
               </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
+              <Calendar className="h-4 w-4" />
+              <span className="font-medium">{course.releaseDate}</span>
             </div>
           </div>
 
