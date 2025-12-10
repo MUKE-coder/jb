@@ -116,7 +116,7 @@ Now, let's set up the backend with Hono and Cloudflare Workers.
     cd ..
     npm create hono@latest api
     # Select the following options:
-    # - Template: cloudflare-workers
+    # - Template: Nodejs
     # - Install dependencies: Yes
     ```
 
@@ -129,11 +129,16 @@ Now, let's set up the backend with Hono and Cloudflare Workers.
 3.  **Configure Port 8000:**
     Open `package.json` and update the `dev` script to run on port 8000.
 
-    ```json
-    "scripts": {
-      "dev": "wrangler dev --port 8000",
-      // ... other scripts
-    }
+    ```tsx
+    serve(
+      {
+        fetch: app.fetch,
+        port: 8787,
+      },
+      (info) => {
+        console.log(`Server is running on http://localhost:${info.port}`);
+      }
+    );
     ```
 
 4.  **Create a POST Endpoint:**
@@ -166,7 +171,7 @@ Now, let's set up the backend with Hono and Cloudflare Workers.
     ```bash
     npm run dev
     ```
-    The server is now listening on `http://localhost:8000`.
+    The server is now listening on `http://localhost:8787`.
 
 ---
 
@@ -221,14 +226,14 @@ Let's add a database to store our contacts.
 1.  **Install Prisma and Postgres driver in `api`:**
 
     ```bash
-    npm install prisma --save-dev
-    npm install @prisma/client @prisma/extension-accelerate
+    pnpm install prisma tsx @types/pg --save-dev
+    pnpm install @prisma/client @prisma/adapter-pg dotenv pg
     ```
 
 2.  **Initialize Prisma:**
 
     ```bash
-    npx prisma init
+    npx prisma init --db --output ../src/generated/prisma
     ```
 
 3.  **Configure Database URL:**
@@ -244,72 +249,152 @@ Let's add a database to store our contacts.
     Open `prisma/schema.prisma` and add the Contact model.
 
     ```prisma
-    // prisma/schema.prisma
-    generator client {
-      provider = "prisma-client-js"
-    }
 
-    datasource db {
-      provider = "postgresql"
-      url      = env("DATABASE_URL")
-    }
+        generator client {
+          provider = "prisma-client"
+          output   = "../src/generated/prisma"
+        }
 
-    model Contact {
-      id        String   @id @default(uuid())
-      name      String
-      phone     String
-      createdAt DateTime @default(now())
-    }
+        datasource db {
+          provider = "postgresql"
+        }
+
+        model Invoice {
+          id            String        @id @default(cuid())
+          invoice       String        @unique
+          paymentStatus PaymentStatus @default(Pending)
+          totalAmount   Float
+          paymentMethod String
+          createdAt     DateTime      @default(now())
+          updatedAt     DateTime      @updatedAt
+        }
+
+        enum PaymentStatus {
+          Paid
+          Pending
+          Failed
+        }
+
     ```
 
-5.  **Push to Database:**
+5.  **Run Migrations:**
 
     ```bash
-    npx prisma db push
+    npx prisma migrate dev --name init
     ```
 
 6.  **Generate Client:**
 
-    ```bash
-    npx prisma generate
+        ```bash
+        npx prisma generate
+        ```
+
+        ### Create Prisma global Instance
+
+        ```tsx
+            // import { PrismaClient } from "../app/generated/prisma/client";
+            import { PrismaPg } from "@prisma/adapter-pg";
+            import { PrismaClient } from "../generated/prisma/client.js";
+            import "dotenv/config";
+
+            const globalForPrisma = global as unknown as {
+            prisma: PrismaClient;
+            };
+
+            const adapter = new PrismaPg({
+            connectionString: process.env.DATABASE_URL,
+            });
+
+            const prisma =
+            globalForPrisma.prisma ||
+            new PrismaClient({
+            adapter,
+            });
+
+            if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+            export default prisma;
+
+    ```
+
     ```
 
 7.  **Update Hono Handler:**
     Update `src/index.ts` to save data to the database.
 
     ```typescript
-    // src/index.ts
+    import { serve } from "@hono/node-server";
     import { Hono } from "hono";
     import { cors } from "hono/cors";
-    import { PrismaClient } from "@prisma/client/edge";
-    import { withAccelerate } from "@prisma/extension-accelerate";
+    // import db from "./lib/db.js";
+    import prisma from "./lib/db.js";
+    // import type { PrismaClient } from "./generated/prisma/client.js";
 
-    // Initialize Prisma Client with Accelerate for Edge compatibility
-    const prisma = new PrismaClient().$extends(withAccelerate());
+    // type ContextWithPrisma = {
+    //   Variables: {
+    //     prisma: PrismaClient;
+    //   };
+    // };
 
     const app = new Hono();
+    // const app = new Hono<ContextWithPrisma>();
+
     app.use("/*", cors());
+    app.get("/", (c) => {
+      return c.json({
+        message: "Hello World",
+      });
+    });
+    app.get("/invoices", async (c) => {
+      // console.log(prisma);
+      // const invoices: any = [];
+      const invoices = await prisma.invoice.findMany();
+      return c.json(invoices);
+    });
+    app.post("/invoices", async (c) => {
+      const data = await c.req.json();
+      const index = await prisma.invoice.count({
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
 
-    app.post("/contacts", async (c) => {
-      const body = await c.req.json();
-
-      try {
-        const contact = await prisma.contact.create({
-          data: {
-            name: body.name,
-            phone: body.phone,
-          },
-        });
-        return c.json({ message: "Contact created", contact });
-      } catch (e) {
-        return c.json({ error: "Failed to create contact" }, 500);
-      }
+      const stringIndex = (index + 1).toString().padStart(4, "000");
+      const invoiceNumber = `INV${stringIndex}`;
+      console.log("INVOICE NUMBER", invoiceNumber);
+      const payload = {
+        invoice: invoiceNumber,
+        totalAmount: data.amount,
+        paymentMethod: data.paymentMethod,
+      };
+      console.log("PAYLOAD", payload);
+      const newInvoice = await prisma.invoice.create({
+        data: {
+          invoice: payload.invoice,
+          totalAmount: Number(payload.totalAmount),
+          paymentMethod: payload.paymentMethod,
+        },
+      });
+      console.log("RECEIVED DATA", newInvoice);
+      return c.json(data);
     });
 
-    export default app;
+    serve(
+      {
+        fetch: app.fetch,
+        port: 8787,
+      },
+      (info) => {
+        console.log(`Server is running on http://localhost:${info.port}`);
+      }
+    );
     ```
 
 ---
+
+## CLONE A STARTER HERE :
+
+(https://github.com/MUKE-coder/nhpc-invoice-starterkit)
 
 ## Step 5: Add Zod Validation
 
@@ -433,3 +518,7 @@ Finally, let's document our API.
 
 3.  **View Docs:**
     Run the server and visit `http://localhost:8000/reference`. You will see interactive API documentation generated by Scalar!
+
+```
+
+```
