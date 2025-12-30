@@ -1,0 +1,1649 @@
+---
+title: Complete Next.js Setup Guide - ESLint, Prettier, Husky & lint-staged Configuration
+description: A comprehensive step-by-step guide to setting up code quality tools in your Next.js TypeScript project with pnpm. Learn how to configure ESLint, Prettier, Husky, and lint-staged for automatic code formatting and linting on every commit. Includes troubleshooting, VS Code integration, and best practices for teams.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwft3Mg132iVG7KkMc0Z9LTeyBRuPQlIEYzv36N
+category: tutorial
+createdAt: 2025-12-30
+updatedAt: 2025-12-30
+---
+
+# Complete Next.js Setup Guide: ESLint, Prettier, Husky & lint-staged
+
+> **A comprehensive guide for setting up code quality tools in your Next.js TypeScript project with pnpm**
+
+---
+
+## 📋 Table of Contents
+
+1. [Overview](#overview)
+2. [Prerequisites](#prerequisites)
+3. [What You'll Get](#what-youll-get)
+4. [Complete Setup Process](#complete-setup-process)
+5. [Configuration Files Explained](#configuration-files-explained)
+6. [How It Works](#how-it-works)
+7. [Available Scripts](#available-scripts)
+8. [VS Code Integration](#vs-code-integration)
+9. [Testing Your Setup](#testing-your-setup)
+10. [Troubleshooting](#troubleshooting)
+11. [Customization Guide](#customization-guide)
+12. [Best Practices](#best-practices)
+
+---
+
+## Overview
+
+This setup ensures consistent code quality across your team by automatically:
+
+- ✅ Formatting code with **Prettier**
+- ✅ Linting code with **ESLint**
+- ✅ Fixing issues automatically before commits
+- ✅ Sorting imports consistently
+- ✅ Enforcing TypeScript best practices
+- ✅ Integrating with VS Code for real-time feedback
+
+---
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+- **Node.js** 20 or higher
+- **pnpm** 9 or higher
+- **Git** initialized in your project
+- **Next.js** 15+ with TypeScript
+- **VS Code** (recommended for best experience)
+
+Check your versions:
+
+```bash
+node --version   # Should be 20 or higher
+pnpm --version   # Should be 9 or higher
+git --version    # Any recent version
+```
+
+---
+
+## What You'll Get
+
+After completing this setup:
+
+### Automatic Code Quality Checks
+
+When you commit code (`git commit -m "message"`):
+
+1. **Prettier** formats your staged files
+2. **ESLint** checks and auto-fixes issues
+3. **Import sorting** organizes your imports
+4. Only **unfixable errors** will block your commit
+
+### File Type Coverage
+
+- **JavaScript/TypeScript**: `.js`, `.jsx`, `.ts`, `.tsx` → ESLint + Prettier
+- **Styles**: `.css` → Prettier
+- **Markdown**: `.mdx` → Prettier
+- **Config**: `.json` → Prettier
+
+### VS Code Integration
+
+- Format on save
+- Auto-fix ESLint issues on save
+- Real-time error highlighting
+- Tailwind CSS IntelliSense
+
+---
+
+## Complete Setup Process
+
+### Step 1: Create or Navigate to Your Next.js Project
+
+```bash
+# Create new project (if starting fresh)
+pnpm create next-app@latest my-app
+# Follow the prompts:
+# ✔ Would you like to use TypeScript? › Yes
+# ✔ Would you like to use ESLint? › Yes
+# (Other options as per your preference)
+
+# Navigate to your project
+cd my-app
+```
+
+### Step 2: Install Required Dependencies
+
+```bash
+pnpm add -D prettier eslint-config-prettier husky lint-staged eslint-plugin-simple-import-sort
+```
+
+**What each package does:**
+
+- `prettier` - Opinionated code formatter
+- `eslint-config-prettier` - Disables ESLint rules that conflict with Prettier
+- `husky` - Git hooks manager for running scripts before commits
+- `lint-staged` - Run linters only on staged Git files
+- `eslint-plugin-simple-import-sort` - Automatically sort imports
+
+### Step 3: Initialize Husky
+
+```bash
+pnpm exec husky init
+```
+
+This creates:
+
+- `.husky/` folder in your project root
+- A `prepare` script in your `package.json`
+- A default `pre-commit` hook
+
+### Step 4: Create Configuration Files
+
+Now create the following files in your project root:
+
+#### 4.1 Create `.lintstagedrc.mjs`
+
+```javascript
+import path from "path";
+
+// See https://nextjs.org/docs/app/api-reference/config/eslint#running-lint-on-staged-files for details
+const buildEslintCommand = (filenames) =>
+  `next lint --fix --file ${filenames
+    .map((f) => path.relative(process.cwd(), f))
+    .join(" --file ")}`;
+
+/**
+ * @type {import('lint-staged').Configuration}
+ */
+const lintStagedConfig = {
+  // Run ESLint with --fix and Prettier on JS/TS files
+  "*.{js,jsx,ts,tsx}": [buildEslintCommand, "prettier --write"],
+
+  // Run Prettier on MDX files
+  "*.mdx": ["prettier --write"],
+
+  // Run Prettier on JSON and CSS files
+  "*.{json,css}": ["prettier --write"],
+
+  // Optional: Type check TypeScript files
+  // Uncomment the line below if you want to check types on commit
+  // "*.{ts,tsx}": () => "pnpm check-types",
+};
+
+export default lintStagedConfig;
+```
+
+#### 4.2 Create `.prettierrc`
+
+```json
+{
+  "semi": true,
+  "tabWidth": 2,
+  "printWidth": 80,
+  "singleQuote": false,
+  "trailingComma": "es5",
+  "bracketSpacing": true,
+  "endOfLine": "lf",
+  "arrowParens": "always",
+  "plugins": ["prettier-plugin-tailwindcss"],
+  "tailwindFunctions": ["clsx", "cn", "cva"],
+  "tailwindStylesheet": "./src/styles/globals.css"
+}
+```
+
+**Note:** Remove the Tailwind-specific lines if you're not using Tailwind CSS:
+
+```json
+{
+  "semi": true,
+  "tabWidth": 2,
+  "printWidth": 80,
+  "singleQuote": false,
+  "trailingComma": "es5",
+  "bracketSpacing": true,
+  "endOfLine": "lf",
+  "arrowParens": "always"
+}
+```
+
+#### 4.3 Create `.prettierignore`
+
+```
+# Build outputs
+.next
+.turbo
+out
+build
+dist
+
+# Dependencies
+node_modules
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Cache
+.cache
+.history
+*.log
+
+# Husky
+.husky
+
+# Public assets
+public
+
+# Generated files
+src/__registry__/index.tsx
+src/__registry__/registry.autogenerated.json
+
+# Coverage
+coverage
+.nyc_output
+
+# OS files
+.DS_Store
+Thumbs.db
+```
+
+#### 4.4 Create `eslint.config.mjs`
+
+```javascript
+import { FlatCompat } from "@eslint/eslintrc";
+import simpleImportSort from "eslint-plugin-simple-import-sort";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const compat = new FlatCompat({
+  baseDirectory: __dirname,
+});
+
+/**
+ * @type {import("eslint").Linter.Config}
+ */
+const eslintConfig = [
+  // Extend Next.js recommended configs and Prettier
+  ...compat.extends("next/core-web-vitals", "next/typescript", "prettier"),
+
+  // TypeScript-specific rules
+  {
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      // Enforce consistent type imports
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        {
+          prefer: "type-imports",
+          fixStyle: "separate-type-imports",
+        },
+      ],
+      "@typescript-eslint/no-import-type-side-effects": "error",
+
+      // Warn about unused variables
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+
+      // Disable explicit any warnings (optional - remove if you want strict mode)
+      "@typescript-eslint/no-explicit-any": "warn",
+    },
+  },
+
+  // Import sorting rules for all files
+  {
+    plugins: {
+      "simple-import-sort": simpleImportSort,
+    },
+    rules: {
+      "simple-import-sort/imports": "error",
+      "simple-import-sort/exports": "error",
+    },
+  },
+];
+
+export default eslintConfig;
+```
+
+#### 4.5 Create `.eslintignore`
+
+```
+# Build outputs
+.next
+.turbo
+out
+build
+dist
+
+# Dependencies
+node_modules
+
+# Generated files
+src/__registry__/index.tsx
+src/__registry__/registry.autogenerated.json
+
+# Config files
+*.config.js
+*.config.mjs
+*.config.ts
+
+# Cache
+.cache
+.eslintcache
+
+# Coverage
+coverage
+.nyc_output
+
+# Public
+public
+```
+
+#### 4.6 Update `.husky/pre-commit`
+
+Replace the contents of `.husky/pre-commit` with:
+
+```bash
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run lint-staged on pre-commit
+pnpm exec lint-staged
+```
+
+Then make it executable:
+
+```bash
+chmod +x .husky/pre-commit
+```
+
+#### 4.7 Update `package.json` Scripts
+
+Add these scripts to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "check-types": "tsc --noEmit --pretty",
+    "format:check": "prettier --check \"**/*.{ts,tsx,mdx,json,css}\" --cache",
+    "format:write": "prettier --write \"**/*.{ts,tsx,mdx,json,css}\" --cache",
+    "format": "prettier --write \"**/*.{ts,tsx,mdx,json,css}\" --cache",
+    "test-all": "pnpm check-types && pnpm lint && pnpm format:check && pnpm build",
+    "prepare": "husky"
+  }
+}
+```
+
+### Step 5: Set Up VS Code (Optional but Recommended)
+
+Create `.vscode/settings.json`:
+
+```json
+{
+  // Editor settings
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "never"
+  },
+  "editor.quickSuggestions": {
+    "strings": "on"
+  },
+
+  // File associations
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+
+  // Language-specific formatters
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[mdx]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  // TypeScript settings
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // ESLint settings
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ]
+}
+```
+
+### Step 6: Install VS Code Extensions
+
+Install these essential extensions:
+
+```bash
+# Using VS Code command palette (Ctrl+P / Cmd+P)
+ext install dbaeumer.vscode-eslint
+ext install esbenp.prettier-vscode
+ext install bradlc.vscode-tailwindcss  # If using Tailwind
+```
+
+Or install manually from the VS Code marketplace:
+
+- **ESLint** by Microsoft
+- **Prettier - Code formatter** by Prettier
+- **Tailwind CSS IntelliSense** by Tailwind Labs (optional)
+
+---
+
+## Configuration Files Explained
+
+### `.lintstagedrc.mjs` - What Runs on Commit
+
+This file configures what happens when you commit:
+
+```javascript
+"*.{js,jsx,ts,tsx}": [buildEslintCommand, "prettier --write"]
+```
+
+- Runs ESLint with `--fix` on JavaScript/TypeScript files
+- Then runs Prettier to format them
+- Only processes files you're committing (staged files)
+
+```javascript
+"*.{json,css}": ["prettier --write"]
+```
+
+- Formats JSON and CSS files with Prettier only
+
+**Optional Type Checking:**
+Uncomment this line to add TypeScript type checking:
+
+```javascript
+"*.{ts,tsx}": () => "pnpm check-types"
+```
+
+⚠️ **Warning**: This will slow down commits but catches type errors earlier.
+
+### `.prettierrc` - Formatting Rules
+
+Key settings explained:
+
+- `"semi": true` - Add semicolons at the end of statements
+- `"tabWidth": 2` - Use 2 spaces for indentation
+- `"printWidth": 80` - Wrap lines at 80 characters
+- `"singleQuote": false` - Use double quotes
+- `"trailingComma": "es5"` - Add trailing commas where valid in ES5
+- `"endOfLine": "lf"` - Use Unix-style line endings
+- `"arrowParens": "always"` - Always include parentheses around arrow function parameters
+
+**Tailwind-specific:**
+
+- `"plugins": ["prettier-plugin-tailwindcss"]` - Auto-sort Tailwind classes
+- `"tailwindFunctions": ["clsx", "cn", "cva"]` - Apply sorting to these functions
+
+### `eslint.config.mjs` - Linting Rules
+
+Key rules explained:
+
+**Consistent Type Imports:**
+
+```javascript
+"@typescript-eslint/consistent-type-imports": "error"
+```
+
+Enforces using `import type` for type-only imports:
+
+```typescript
+// ❌ Bad
+import { User } from "./types";
+
+// ✅ Good
+import type { User } from "./types";
+```
+
+**Unused Variables:**
+
+```javascript
+"@typescript-eslint/no-unused-vars": ["warn", {
+  argsIgnorePattern: "^_",
+  varsIgnorePattern: "^_",
+  caughtErrorsIgnorePattern: "^_"
+}]
+```
+
+Warns about unused variables, but ignores those starting with `_`:
+
+```typescript
+// ✅ OK - underscore prefix indicates intentionally unused
+function handler(_req, res) {
+  res.send("ok");
+}
+```
+
+**Import Sorting:**
+
+```javascript
+"simple-import-sort/imports": "error"
+```
+
+Automatically organizes imports in this order:
+
+1. Node built-ins (`fs`, `path`)
+2. External packages (`react`, `next`)
+3. Internal packages (`@/components`)
+4. Relative imports (`./utils`, `../types`)
+
+---
+
+## How It Works
+
+### The Commit Flow
+
+Here's exactly what happens when you run `git commit -m "your message"`:
+
+```
+┌─────────────────────────────────────────┐
+│  You: git commit -m "add new feature"  │
+└────────────────┬────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────┐
+│  Husky pre-commit hook triggers         │
+└────────────────┬────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────┐
+│  lint-staged identifies staged files    │
+│  - src/App.tsx                          │
+│  - src/utils.ts                         │
+│  - styles/globals.css                   │
+└────────────────┬────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────┐
+│  For .ts/.tsx files:                    │
+│  1. Run: next lint --fix --file ...    │
+│     - Fixes import sorting              │
+│     - Auto-fixes ESLint issues          │
+│  2. Run: prettier --write               │
+│     - Formats code consistently         │
+└────────────────┬────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────┐
+│  For .css/.json files:                  │
+│  1. Run: prettier --write               │
+│     - Formats code consistently         │
+└────────────────┬────────────────────────┘
+                 │
+                 ▼
+        ┌────────┴────────┐
+        │                 │
+        ▼                 ▼
+┌───────────────┐  ┌──────────────┐
+│  All checks   │  │  Has errors  │
+│  passed ✅    │  │  that can't  │
+│               │  │  be fixed ❌ │
+└───────┬───────┘  └──────┬───────┘
+        │                 │
+        ▼                 ▼
+┌───────────────┐  ┌──────────────┐
+│  Commit       │  │  Commit      │
+│  succeeds     │  │  blocked     │
+│  🎉           │  │  😢          │
+└───────────────┘  └──────────────┘
+```
+
+### What Gets Auto-Fixed
+
+**ESLint auto-fixes:**
+
+- ✅ Import sorting and organization
+- ✅ Missing/extra semicolons
+- ✅ Type import conversions
+- ✅ Some unused imports
+- ✅ Spacing issues
+
+**Prettier auto-fixes:**
+
+- ✅ Indentation (tabs vs spaces)
+- ✅ Line width (wrapping long lines)
+- ✅ Quote style (single vs double)
+- ✅ Trailing commas
+- ✅ Object/array formatting
+- ✅ Arrow function parentheses
+
+**What Won't Be Auto-Fixed:**
+
+- ❌ Type errors
+- ❌ Unused variables (just warned)
+- ❌ Logic errors
+- ❌ Missing return statements
+- ❌ Complex ESLint violations
+
+---
+
+## Available Scripts
+
+### Formatting Scripts
+
+**Format all files:**
+
+```bash
+pnpm format
+# or
+pnpm format:write
+```
+
+Formats all `.ts`, `.tsx`, `.mdx`, `.json`, `.css` files in your project.
+
+**Check if files are formatted:**
+
+```bash
+pnpm format:check
+```
+
+Checks formatting without modifying files. Useful in CI/CD.
+
+### Linting Scripts
+
+**Run ESLint:**
+
+```bash
+pnpm lint
+```
+
+Checks for linting errors without fixing them.
+
+**Run ESLint with auto-fix:**
+
+```bash
+pnpm lint:fix
+```
+
+Automatically fixes what it can.
+
+### Type Checking
+
+**Check TypeScript types:**
+
+```bash
+pnpm check-types
+```
+
+Runs `tsc --noEmit` to check for type errors without building.
+
+### Combined Scripts
+
+**Run all checks + build:**
+
+```bash
+pnpm test-all
+```
+
+Equivalent to:
+
+```bash
+pnpm check-types && pnpm lint && pnpm format:check && pnpm build
+```
+
+Perfect to run before pushing to ensure everything passes.
+
+---
+
+## VS Code Integration
+
+### Real-Time Feedback
+
+With the VS Code setup, you get:
+
+**On Save (Ctrl+S / Cmd+S):**
+
+1. ✅ Prettier formats the file
+2. ✅ ESLint auto-fixes issues
+3. ✅ Imports get sorted
+
+**While Typing:**
+
+1. ✅ Red squiggles under errors
+2. ✅ Yellow squiggles under warnings
+3. ✅ Hover for error details
+
+### Quick Fixes
+
+**To fix all ESLint issues in current file:**
+
+- Windows/Linux: `Ctrl+Shift+P` → "ESLint: Fix all auto-fixable problems"
+- Mac: `Cmd+Shift+P` → "ESLint: Fix all auto-fixable problems"
+
+**To format current file:**
+
+- Windows/Linux: `Shift+Alt+F`
+- Mac: `Shift+Option+F`
+
+### Recommended Keyboard Shortcuts
+
+Add these to your VS Code keybindings for faster workflow:
+
+```json
+// Open: Preferences > Keyboard Shortcuts > keybindings.json
+[
+  {
+    "key": "ctrl+shift+f",
+    "command": "editor.action.formatDocument",
+    "when": "editorTextFocus"
+  },
+  {
+    "key": "ctrl+shift+l",
+    "command": "eslint.executeAutofix",
+    "when": "editorTextFocus"
+  }
+]
+```
+
+---
+
+## Testing Your Setup
+
+### Step-by-Step Verification
+
+**1. Test Prettier Formatting**
+
+Create a test file `test-format.ts`:
+
+```typescript
+const greeting = "hello world";
+const numbers = [1, 2, 3, 4, 5];
+function greet(name: string) {
+  return `Hello, ${name}`;
+}
+```
+
+Run:
+
+```bash
+pnpm format
+```
+
+Expected result - file should be formatted to:
+
+```typescript
+const greeting = "hello world";
+const numbers = [1, 2, 3, 4, 5];
+function greet(name: string) {
+  return `Hello, ${name}`;
+}
+```
+
+**2. Test ESLint Fixing**
+
+Create a test file `test-lint.ts`:
+
+```typescript
+import { useState } from 'react'
+import type { FC } from 'react'
+
+const unused = 123
+const Component: FC = () => {
+  return <div>Test</div>
+}
+```
+
+Run:
+
+```bash
+pnpm lint:fix
+```
+
+Expected result:
+
+```typescript
+import type { FC } from "react";
+import { useState } from "react"; // Imports sorted!
+
+const Component: FC = () => {
+  return <div>Test</div>;
+};
+```
+
+Warning for `unused` variable should appear (but won't be auto-fixed).
+
+**3. Test Pre-Commit Hook**
+
+Create a messy file:
+
+```typescript
+// src/test-commit.ts
+const test = "messy";
+```
+
+Stage and commit:
+
+```bash
+git add .
+git commit -m "test: testing pre-commit hook"
+```
+
+Expected result:
+
+- ✅ File should be auto-formatted
+- ✅ Changes should be auto-added to the commit
+- ✅ Commit should succeed
+- ✅ File should now be properly formatted
+
+**4. Test Blocking on Errors**
+
+Create a file with type errors:
+
+```typescript
+// src/test-error.ts
+const num: number = "not a number"; // Type error
+```
+
+Stage and commit:
+
+```bash
+git add .
+git commit -m "test: should fail"
+```
+
+Expected result if you enabled type checking in lint-staged:
+
+- ❌ Commit should be blocked
+- ❌ Type error should be shown
+- You must fix the error manually
+
+**5. Test VS Code Integration**
+
+Open any `.ts` file and:
+
+1. Add some messy formatting
+2. Press `Ctrl+S` / `Cmd+S` to save
+3. File should be auto-formatted
+4. Imports should be auto-sorted
+
+---
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### Issue 1: Pre-commit hook not running
+
+**Symptoms:**
+
+- Committing works but no formatting/linting happens
+- No "Running lint-staged" message appears
+
+**Solutions:**
+
+**Solution A: Reinstall Husky**
+
+```bash
+rm -rf .husky
+pnpm exec husky install
+```
+
+**Solution B: Check hook permissions**
+
+```bash
+chmod +x .husky/pre-commit
+ls -la .husky/pre-commit  # Should show as executable
+```
+
+**Solution C: Verify hook content**
+
+```bash
+cat .husky/pre-commit
+```
+
+Should contain:
+
+```bash
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+pnpm exec lint-staged
+```
+
+**Solution D: Check Git hooks path**
+
+```bash
+git config core.hooksPath
+# Should output: .husky
+```
+
+If not:
+
+```bash
+git config core.hooksPath .husky
+```
+
+#### Issue 2: "Command not found" errors
+
+**Symptoms:**
+
+```
+.husky/pre-commit: line 4: lint-staged: command not found
+```
+
+**Solutions:**
+
+**Solution A: Use pnpm exec**
+Update `.husky/pre-commit` to use:
+
+```bash
+pnpm exec lint-staged
+```
+
+instead of:
+
+```bash
+lint-staged
+```
+
+**Solution B: Reinstall dependencies**
+
+```bash
+rm -rf node_modules
+pnpm install
+```
+
+#### Issue 3: Prettier and ESLint conflicts
+
+**Symptoms:**
+
+- ESLint complains about formatting
+- Formatting keeps changing back and forth
+
+**Solutions:**
+
+**Solution A: Verify eslint-config-prettier is installed**
+
+```bash
+pnpm add -D eslint-config-prettier
+```
+
+**Solution B: Check ESLint config extends**
+Make sure "prettier" is LAST in extends:
+
+```javascript
+...compat.extends("next/core-web-vitals", "next/typescript", "prettier")
+//                                                             ^^^^^^^^^ Must be last!
+```
+
+**Solution C: Clear ESLint cache**
+
+```bash
+rm -rf .eslintcache
+pnpm lint
+```
+
+#### Issue 4: Type checking is too slow
+
+**Symptoms:**
+
+- Commits take forever
+- `tsc --noEmit` is slow
+
+**Solutions:**
+
+**Solution A: Disable type checking in pre-commit**
+Comment out in `.lintstagedrc.mjs`:
+
+```javascript
+// "*.{ts,tsx}": () => "pnpm check-types",  // Commented out
+```
+
+**Solution B: Run type checking in CI instead**
+Add to your CI pipeline instead of pre-commit hook.
+
+**Solution C: Use incremental type checking**
+In `tsconfig.json`, add:
+
+```json
+{
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo"
+  }
+}
+```
+
+#### Issue 5: Imports not sorting correctly
+
+**Symptoms:**
+
+- Imports are not being organized
+- Import order seems random
+
+**Solutions:**
+
+**Solution A: Verify plugin is installed**
+
+```bash
+pnpm add -D eslint-plugin-simple-import-sort
+```
+
+**Solution B: Check ESLint config**
+Verify `eslint.config.mjs` has:
+
+```javascript
+{
+  plugins: {
+    "simple-import-sort": simpleImportSort,
+  },
+  rules: {
+    "simple-import-sort/imports": "error",
+    "simple-import-sort/exports": "error",
+  },
+}
+```
+
+**Solution C: Run lint --fix**
+
+```bash
+pnpm lint:fix
+```
+
+#### Issue 6: VS Code not formatting on save
+
+**Symptoms:**
+
+- Manual formatting works (`Shift+Alt+F`)
+- But nothing happens on save
+
+**Solutions:**
+
+**Solution A: Check settings**
+Verify `.vscode/settings.json` has:
+
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode"
+}
+```
+
+**Solution B: Verify Prettier extension is enabled**
+
+1. Open VS Code Extensions (Ctrl+Shift+X)
+2. Search "Prettier"
+3. Make sure it's enabled (not just installed)
+
+**Solution C: Check output panel**
+
+1. View → Output
+2. Select "Prettier" from dropdown
+3. Look for error messages
+
+**Solution D: Reload VS Code**
+
+```
+Ctrl+Shift+P → "Developer: Reload Window"
+```
+
+#### Issue 7: Husky not installing
+
+**Symptoms:**
+
+```
+husky - command not found
+```
+
+**Solutions:**
+
+**Solution A: Manual installation**
+
+```bash
+pnpm add -D husky
+pnpm exec husky install
+```
+
+**Solution B: Check prepare script**
+Verify `package.json` has:
+
+```json
+{
+  "scripts": {
+    "prepare": "husky"
+  }
+}
+```
+
+**Solution C: Run prepare manually**
+
+```bash
+pnpm prepare
+```
+
+#### Issue 8: Lint-staged not finding files
+
+**Symptoms:**
+
+```
+No staged files found
+```
+
+**Solutions:**
+
+**Solution A: Stage your files**
+
+```bash
+git add .
+git commit -m "message"
+```
+
+**Solution B: Check .lintstagedrc.mjs patterns**
+Verify patterns match your files:
+
+```javascript
+"*.{js,jsx,ts,tsx}": [...]  // Matches .ts, .tsx files
+```
+
+#### Issue 9: Permission denied on .husky/pre-commit
+
+**Symptoms:**
+
+```
+.husky/pre-commit: Permission denied
+```
+
+**Solutions:**
+
+```bash
+chmod +x .husky/pre-commit
+```
+
+#### Issue 10: Getting errors for generated files
+
+**Symptoms:**
+
+- ESLint/Prettier complaining about files in `.next/` or `node_modules/`
+
+**Solutions:**
+
+**Solution A: Update ignore files**
+Verify `.eslintignore` and `.prettierignore` contain:
+
+```
+.next
+node_modules
+build
+dist
+```
+
+**Solution B: Clear cache**
+
+```bash
+rm -rf .next .turbo
+pnpm build
+```
+
+---
+
+## Customization Guide
+
+### Adjusting Prettier Rules
+
+Edit `.prettierrc`:
+
+**Use single quotes instead of double:**
+
+```json
+{
+  "singleQuote": true
+}
+```
+
+**No semicolons:**
+
+```json
+{
+  "semi": false
+}
+```
+
+**Wider line width:**
+
+```json
+{
+  "printWidth": 120
+}
+```
+
+**Use tabs instead of spaces:**
+
+```json
+{
+  "useTabs": true
+}
+```
+
+**All common options:**
+
+```json
+{
+  "semi": true, // Add semicolons
+  "singleQuote": false, // Use double quotes
+  "tabWidth": 2, // Spaces per indent
+  "printWidth": 80, // Max line length
+  "trailingComma": "es5", // Trailing commas where valid in ES5
+  "bracketSpacing": true, // Spaces in object literals { foo: bar }
+  "arrowParens": "always", // Always parens around arrow function params
+  "endOfLine": "lf", // Line ending style
+  "useTabs": false // Use spaces instead of tabs
+}
+```
+
+### Adjusting ESLint Rules
+
+Edit `eslint.config.mjs`:
+
+**Make unused variables errors instead of warnings:**
+
+```javascript
+rules: {
+  "@typescript-eslint/no-unused-vars": ["error", {
+    argsIgnorePattern: "^_",
+  }]
+}
+```
+
+**Disallow explicit `any` completely:**
+
+```javascript
+rules: {
+  "@typescript-eslint/no-explicit-any": "error"
+}
+```
+
+**Require return types on functions:**
+
+```javascript
+rules: {
+  "@typescript-eslint/explicit-function-return-type": "warn"
+}
+```
+
+**Add custom rules:**
+
+```javascript
+rules: {
+  "no-console": ["warn", { allow: ["warn", "error"] }], // Allow console.warn and console.error
+  "prefer-const": "error",                               // Prefer const over let
+  "no-var": "error",                                     // Disallow var
+}
+```
+
+### Customizing Import Sort Order
+
+The `simple-import-sort` plugin automatically sorts imports. To customize:
+
+**For complex projects:**
+Install and configure `eslint-plugin-import` instead:
+
+```bash
+pnpm add -D eslint-plugin-import
+```
+
+Then configure in `eslint.config.mjs`:
+
+```javascript
+import importPlugin from "eslint-plugin-import";
+
+// In config:
+{
+  plugins: {
+    import: importPlugin,
+  },
+  rules: {
+    "import/order": [
+      "error",
+      {
+        groups: [
+          "builtin",   // Node built-ins
+          "external",  // External packages
+          "internal",  // Internal packages
+          "parent",    // Parent imports
+          "sibling",   // Sibling imports
+          "index",     // Index imports
+        ],
+        "newlines-between": "always",
+      },
+    ],
+  },
+}
+```
+
+### Adding More File Types to lint-staged
+
+Edit `.lintstagedrc.mjs`:
+
+**Add SCSS/SASS:**
+
+```javascript
+"*.{scss,sass}": ["prettier --write"]
+```
+
+**Add HTML:**
+
+```javascript
+"*.html": ["prettier --write"]
+```
+
+**Add GraphQL:**
+
+```javascript
+"*.{graphql,gql}": ["prettier --write"]
+```
+
+**Add custom scripts:**
+
+```javascript
+"*.{ts,tsx}": [
+  buildEslintCommand,
+  "prettier --write",
+  () => "pnpm check-types",  // Add type checking
+  () => "pnpm test --related", // Run related tests
+]
+```
+
+### Excluding Specific Files
+
+**Exclude specific paths from Prettier:**
+Edit `.prettierignore`:
+
+```
+# Exclude specific files
+src/generated/**
+src/legacy/**
+```
+
+**Exclude specific paths from ESLint:**
+Edit `.eslintignore`:
+
+```
+# Exclude specific files
+src/vendor/**
+scripts/legacy/**
+```
+
+**Exclude specific files from lint-staged:**
+Edit `.lintstagedrc.mjs`:
+
+```javascript
+"*.{ts,tsx}": (filenames) => {
+  // Filter out files you don't want to lint
+  const filtered = filenames.filter(
+    (file) => !file.includes("generated")
+  );
+  return [
+    `next lint --fix --file ${filtered.join(" --file ")}`,
+    "prettier --write"
+  ];
+}
+```
+
+---
+
+## Best Practices
+
+### 1. Commit Frequently
+
+With auto-fixing enabled, make small, frequent commits:
+
+```bash
+git add .
+git commit -m "feat: add user profile component"
+```
+
+The hooks will ensure quality without slowing you down.
+
+### 2. Don't Skip Hooks (Usually)
+
+Avoid using `--no-verify` except in emergencies:
+
+```bash
+# ❌ Bad - skips all quality checks
+git commit --no-verify -m "quick fix"
+
+# ✅ Good - let the tools help you
+git commit -m "quick fix"
+```
+
+### 3. Run Full Checks Before Pushing
+
+Before pushing to remote:
+
+```bash
+pnpm test-all
+```
+
+This ensures:
+
+- ✅ Types are valid
+- ✅ Linting passes
+- ✅ Formatting is correct
+- ✅ Project builds successfully
+
+### 4. Keep Config Synced Across Team
+
+Add configuration files to Git:
+
+```bash
+git add .prettierrc .eslintrc.mjs .lintstagedrc.mjs
+git commit -m "chore: add code quality configs"
+```
+
+This ensures everyone on the team uses the same rules.
+
+### 5. Update Dependencies Regularly
+
+Keep tools updated for bug fixes and new features:
+
+```bash
+pnpm update eslint prettier lint-staged husky
+```
+
+### 6. Use EditorConfig for Basic Settings
+
+Create `.editorconfig` for cross-editor compatibility:
+
+```ini
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false
+```
+
+### 7. Document Custom Rules
+
+If you add custom rules, document why:
+
+```javascript
+// eslint.config.mjs
+rules: {
+  // We use console.log for debugging in development
+  // but want to ensure we don't ship them to production
+  "no-console": ["warn", { allow: ["warn", "error"] }],
+}
+```
+
+### 8. Set Up CI/CD Checks
+
+In your CI pipeline (GitHub Actions, etc.), run:
+
+```yaml
+- name: Check formatting
+  run: pnpm format:check
+
+- name: Lint
+  run: pnpm lint
+
+- name: Type check
+  run: pnpm check-types
+
+- name: Build
+  run: pnpm build
+```
+
+### 9. Educate Your Team
+
+Share this guide with your team and explain:
+
+- Why these tools matter
+- How they make development easier
+- What to do when checks fail
+
+### 10. Monitor Performance
+
+If pre-commit hooks become slow:
+
+- Remove type checking from pre-commit (move to CI)
+- Use `--cache` flags for Prettier and ESLint
+- Consider using `lint-staged` with fewer file types
+
+---
+
+## Quick Reference
+
+### File Structure
+
+```
+your-project/
+├── .husky/
+│   └── pre-commit              # Git hook
+├── .vscode/
+│   └── settings.json           # VS Code config
+├── .eslintignore               # ESLint ignore patterns
+├── .lintstagedrc.mjs           # What runs on commit
+├── .prettierignore             # Prettier ignore patterns
+├── .prettierrc                 # Formatting rules
+├── eslint.config.mjs           # Linting rules
+└── package.json                # Scripts and dependencies
+```
+
+### Essential Commands
+
+```bash
+# Formatting
+pnpm format                     # Format all files
+pnpm format:check               # Check formatting
+
+# Linting
+pnpm lint                       # Check for errors
+pnpm lint:fix                   # Fix errors
+
+# Type checking
+pnpm check-types                # Check TypeScript types
+
+# Combined
+pnpm test-all                   # Run all checks + build
+
+# Husky
+pnpm exec husky install         # Install hooks
+chmod +x .husky/pre-commit      # Make hook executable
+
+# Committing
+git add .                       # Stage files
+git commit -m "message"         # Commit (runs hooks)
+git commit --no-verify          # Skip hooks (emergency only)
+```
+
+### Common Patterns
+
+**Fix everything before commit:**
+
+```bash
+pnpm format && pnpm lint:fix && git add . && git commit -m "fix: formatting and linting"
+```
+
+**Check what would run on commit:**
+
+```bash
+pnpm exec lint-staged --diff
+```
+
+**Run lint-staged manually:**
+
+```bash
+git add .
+pnpm exec lint-staged
+```
+
+---
+
+## Summary
+
+You now have a complete code quality setup that:
+
+✅ **Automatically formats** code with Prettier  
+✅ **Automatically fixes** linting issues with ESLint  
+✅ **Sorts imports** consistently  
+✅ **Enforces TypeScript** best practices  
+✅ **Integrates with VS Code** for real-time feedback  
+✅ **Runs on every commit** via Husky and lint-staged  
+✅ **Prevents bad code** from entering your repository
+
+### Next Steps
+
+1. ✅ Complete the setup process above
+2. ✅ Test with the verification steps
+3. ✅ Share this guide with your team
+4. ✅ Customize rules to fit your project
+5. ✅ Set up CI/CD checks
+6. ✅ Start committing with confidence! 🎉
+
+---
+
+## Need Help?
+
+If you run into issues:
+
+1. Check the [Troubleshooting](#troubleshooting) section
+2. Verify all steps in [Complete Setup Process](#complete-setup-process)
+3. Clear caches: `rm -rf .next .turbo node_modules && pnpm install`
+4. Reinstall Husky: `pnpm exec husky install`
+
+---
+
+**Happy coding with consistent, high-quality code! 🚀**
