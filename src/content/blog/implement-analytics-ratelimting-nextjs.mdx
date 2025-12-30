@@ -1,0 +1,972 @@
+---
+title: Analytics & Rate Limiting Implementation Guide
+description: Complete step-by-step guide to implement analytics and DDoS rate limiting in a new Next.js application using Prisma ORM and Neon PostgreSQL.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwft3OfWI2iVG7KkMc0Z9LTeyBRuPQlIEYzv36N
+category: tutorial
+createdAt: 2025-12-30
+updatedAt: 2025-12-30
+---
+
+# Analytics & Rate Limiting Implementation Guide
+
+Complete step-by-step guide to implement analytics and DDoS rate limiting in a new Next.js application using Prisma ORM and Neon PostgreSQL.
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Project Setup](#project-setup)
+3. [Database Configuration](#database-configuration)
+4. [Rate Limiting Implementation](#rate-limiting-implementation)
+5. [Analytics Tracking](#analytics-tracking)
+6. [Analytics Dashboard](#analytics-dashboard)
+7. [API Endpoints](#api-endpoints)
+8. [Testing & Deployment](#testing--deployment)
+
+---
+
+## Prerequisites
+
+- Node.js 18+ installed
+- A Neon PostgreSQL database
+- Basic understanding of Next.js, TypeScript, and Prisma
+- Git for version control
+
+---
+
+## Project Setup
+
+### Step 1: Create a New Next.js Application
+
+```bash
+npx create-next-app@latest my-analytics-app --typescript --tailwind
+cd my-analytics-app
+```
+
+### Step 2: Install Required Dependencies
+
+```bash
+npm install @prisma/client prisma
+npm install ua-parser-js
+npm install --save-dev @types/ua-parser-js
+```
+
+**Package Explanation:**
+
+- `@prisma/client` - Prisma ORM client
+- `prisma` - Prisma CLI for migrations
+- `ua-parser-js` - Parse user agent strings to get browser, OS, device info
+
+### Step 3: Initialize Prisma
+
+```bash
+npx prisma init
+```
+
+This creates:
+
+- `prisma/schema.prisma` - Database schema
+- `.env.local` - Environment variables
+
+---
+
+## Database Configuration
+
+### Step 1: Configure Environment Variables
+
+Update `.env.local` with your Neon database URL:
+
+```env
+DATABASE_URL="postgresql://user:password@host.neon.tech/database_name"
+```
+
+Get your connection string from the Neon dashboard → Database → Connection string.
+
+### Step 2: Define Prisma Schema
+
+Replace the contents of `prisma/schema.prisma` with:
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Analytics {
+  id            Int      @id @default(autoincrement())
+  ipAddress     String   @map("ip_address") @db.VarChar(45)
+  country       String?  @db.VarChar(100)
+  city          String?  @db.VarChar(100)
+  browser       String?  @db.VarChar(255)
+  browserVersion String? @map("browser_version") @db.VarChar(50)
+  deviceType    String?  @map("device_type") @db.VarChar(50)
+  deviceName    String?  @map("device_name") @db.VarChar(255)
+  os            String?  @db.VarChar(100)
+  osVersion     String?  @map("os_version") @db.VarChar(50)
+  pagePath      String?  @map("page_path") @db.VarChar(500)
+  referrer      String?  @db.VarChar(500)
+  userAgent     String?  @map("user_agent") @db.Text
+  timestamp     DateTime @default(now()) @db.Timestamptz()
+  sessionId     String?  @map("session_id") @db.VarChar(100)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([ipAddress])
+  @@index([country])
+  @@index([timestamp])
+  @@index([sessionId])
+  @@map("analytics")
+}
+
+model RateLimitTracking {
+  id            Int      @id @default(autoincrement())
+  ipAddress     String   @unique @map("ip_address") @db.VarChar(45)
+  requestCount  Int      @default(1) @map("request_count")
+  lastReset     DateTime @default(now()) @map("last_reset") @db.Timestamptz()
+  blockedUntil  DateTime? @map("blocked_until") @db.Timestamptz()
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([ipAddress])
+  @@index([blockedUntil])
+  @@map("rate_limit_tracking")
+}
+```
+
+### Step 3: Create Database Tables
+
+Run Prisma migrations:
+
+```bash
+npx prisma migrate dev --name init
+```
+
+This creates the analytics and rate_limit_tracking tables in your Neon database.
+
+### Step 4: Create Prisma Database Client
+
+Create `lib/db.ts`:
+
+```typescript
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+
+export const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient({
+    log: ["query"],
+  });
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+```
+
+**Why a singleton pattern?** Prevents creating multiple Prisma client instances in development, which can exhaust database connections.
+
+---
+
+## Rate Limiting Implementation
+
+### Step 1: Create Rate Limiter Utility
+
+Create `lib/rate-limiter.ts`:
+
+```typescript
+import { prisma } from "./db";
+import { headers } from "next/headers";
+
+const REQUESTS_PER_MINUTE = 100;
+const REQUESTS_PER_HOUR = 1000;
+const BAN_DURATION_MINUTES = 15;
+
+export async function checkRateLimit(): Promise<{
+  allowed: boolean;
+  remaining: number;
+  resetTime: Date | null;
+  reason?: string;
+}> {
+  try {
+    const headersList = await headers();
+    const forwardedFor = headersList.get("x-forwarded-for") || "";
+    const ipAddress = forwardedFor.split(",")[0]?.trim() || "unknown";
+
+    if (ipAddress === "unknown") {
+      return { allowed: true, remaining: REQUESTS_PER_MINUTE };
+    }
+
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+
+    // Check if IP is blocked
+    const blocked = await prisma.rateLimitTracking.findUnique({
+      where: { ipAddress },
+    });
+
+    if (blocked && blocked.blockedUntil && blocked.blockedUntil > now) {
+      const resetTime = blocked.blockedUntil;
+      return {
+        allowed: false,
+        remaining: 0,
+        resetTime,
+        reason: "IP temporarily blocked due to rate limit violation",
+      };
+    }
+
+    // Count requests in the last minute
+    const requestsThisMinute = await prisma.analytics.count({
+      where: {
+        ipAddress,
+        timestamp: {
+          gt: oneMinuteAgo,
+        },
+      },
+    });
+
+    if (requestsThisMinute >= REQUESTS_PER_MINUTE) {
+      // Block the IP for 15 minutes
+      const blockTime = new Date(
+        now.getTime() + BAN_DURATION_MINUTES * 60 * 1000
+      );
+
+      await prisma.rateLimitTracking.upsert({
+        where: { ipAddress },
+        update: {
+          blockedUntil: blockTime,
+          updatedAt: now,
+        },
+        create: {
+          ipAddress,
+          blockedUntil: blockTime,
+        },
+      });
+
+      return {
+        allowed: false,
+        remaining: 0,
+        resetTime: blockTime,
+        reason: "Rate limit exceeded",
+      };
+    }
+
+    // Count requests in the last hour
+    const requestsThisHour = await prisma.analytics.count({
+      where: {
+        ipAddress,
+        timestamp: {
+          gt: oneHourAgo,
+        },
+      },
+    });
+
+    const remaining = Math.max(0, REQUESTS_PER_HOUR - requestsThisHour);
+
+    // Update or create rate limit tracking record
+    await prisma.rateLimitTracking.upsert({
+      where: { ipAddress },
+      update: {
+        requestCount: requestsThisHour,
+        lastReset: now,
+        updatedAt: now,
+      },
+      create: {
+        ipAddress,
+        requestCount: requestsThisHour,
+        lastReset: now,
+      },
+    });
+
+    return { allowed: true, remaining, resetTime: null };
+  } catch (error) {
+    console.error("Rate limit check failed:", error);
+    // On error, allow the request but log it
+    return { allowed: true, remaining: REQUESTS_PER_MINUTE };
+  }
+}
+```
+
+**Key Features:**
+
+- **Per-minute limit**: 100 requests/minute per IP
+- **Per-hour limit**: 1000 requests/hour per IP
+- **Automatic blocking**: IPs exceeding limits are blocked for 15 minutes
+- **X-Forwarded-For support**: Works with reverse proxies and load balancers
+- **Graceful degradation**: If database fails, request is allowed (fail-open)
+
+### Step 2: Create Middleware with Rate Limiting
+
+Create `proxy.ts` in the root directory:
+
+```typescript
+import { type NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "./lib/rate-limiter";
+
+export async function proxy(request: NextRequest) {
+  // Check rate limit
+  const rateLimit = await checkRateLimit();
+
+  if (!rateLimit.allowed) {
+    return new NextResponse(
+      JSON.stringify({
+        error: "Too many requests. Please try again later.",
+        retryAfter: rateLimit.resetTime,
+      }),
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": rateLimit.resetTime
+            ? Math.ceil(
+                (rateLimit.resetTime.getTime() - Date.now()) / 1000
+              ).toString()
+            : "900",
+        },
+      }
+    );
+  }
+
+  // Add rate limit headers to response
+  const response = NextResponse.next();
+  response.headers.set("X-RateLimit-Remaining", rateLimit.remaining.toString());
+
+  return response;
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
+```
+
+**What it does:**
+
+- Intercepts every request except static assets and images
+- Checks rate limits using `checkRateLimit()`
+- Returns 429 (Too Many Requests) if limit exceeded
+- Includes `Retry-After` header to tell clients when they can retry
+
+---
+
+## Analytics Tracking
+
+### Step 1: Create Analytics Library
+
+Create `lib/analytics.ts`:
+
+```typescript
+import { prisma } from "./db";
+import { headers } from "next/headers";
+import { UAParser } from "ua-parser-js";
+import { randomUUID } from "crypto";
+
+interface TrackPageViewResponse {
+  success: boolean;
+  sessionId: string;
+}
+
+export async function trackPageView(
+  pagePath: string
+): Promise<TrackPageViewResponse> {
+  try {
+    const headersList = await headers();
+
+    // Extract IP from headers (supports proxies)
+    const forwardedFor = headersList.get("x-forwarded-for") || "";
+    const ipAddress =
+      forwardedFor.split(",")[0]?.trim() ||
+      headersList.get("x-real-ip") ||
+      "unknown";
+
+    // Get referrer
+    const referrer = headersList.get("referer") || undefined;
+
+    // Parse user agent
+    const userAgent = headersList.get("user-agent") || "";
+    const parser = new UAParser(userAgent);
+    const result = parser.getResult();
+
+    // Generate or retrieve session ID
+    const sessionId = randomUUID();
+
+    // Extract country from header (if available from reverse proxy like Cloudflare)
+    const country = headersList.get("cf-ipcountry") || undefined;
+
+    // Save to database
+    await prisma.analytics.create({
+      data: {
+        ipAddress,
+        country,
+        browser: result.browser.name || undefined,
+        browserVersion: result.browser.version || undefined,
+        deviceType: result.device.type || "desktop",
+        deviceName: result.device.name || undefined,
+        os: result.os.name || undefined,
+        osVersion: result.os.version || undefined,
+        pagePath,
+        referrer,
+        userAgent,
+        sessionId,
+      },
+    });
+
+    return {
+      success: true,
+      sessionId,
+    };
+  } catch (error) {
+    console.error("Analytics tracking error:", error);
+    return {
+      success: false,
+      sessionId: "",
+    };
+  }
+}
+
+// Get analytics summary for last N days
+export async function getAnalyticsSummary(days: number = 7) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const totalVisitors = await prisma.analytics.groupBy({
+    by: ["ipAddress"],
+    where: {
+      timestamp: {
+        gte: since,
+      },
+    },
+  });
+
+  const pageViews = await prisma.analytics.count({
+    where: {
+      timestamp: {
+        gte: since,
+      },
+    },
+  });
+
+  return {
+    visitors: totalVisitors.length,
+    pageViews,
+    bounceRate: calculateBounceRate(totalVisitors.length, pageViews),
+  };
+}
+
+function calculateBounceRate(visitors: number, pageViews: number): number {
+  if (visitors === 0) return 0;
+  const avgPagesPerVisitor = pageViews / visitors;
+  // Simple bounce rate calculation (single page visits)
+  return Math.round((1 / avgPagesPerVisitor) * 100);
+}
+
+// Get top pages
+export async function getTopPages(days: number = 7) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const pages = await prisma.analytics.groupBy({
+    by: ["pagePath"],
+    where: {
+      timestamp: {
+        gte: since,
+      },
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _count: {
+        id: "desc",
+      },
+    },
+    take: 10,
+  });
+
+  return pages.map((page) => ({
+    path: page.pagePath,
+    visitors: page._count.id,
+  }));
+}
+
+// Get visitor breakdown by country
+export async function getVisitorsByCountry(days: number = 7) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const countries = await prisma.analytics.groupBy({
+    by: ["country"],
+    where: {
+      timestamp: {
+        gte: since,
+      },
+      country: {
+        not: null,
+      },
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _count: {
+        id: "desc",
+      },
+    },
+  });
+
+  return countries.map((country) => ({
+    country: country.country,
+    visitors: country._count.id,
+  }));
+}
+
+// Get browser breakdown
+export async function getBrowserStats(days: number = 7) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const browsers = await prisma.analytics.groupBy({
+    by: ["browser"],
+    where: {
+      timestamp: {
+        gte: since,
+      },
+      browser: {
+        not: null,
+      },
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _count: {
+        id: "desc",
+      },
+    },
+  });
+
+  return browsers.map((browser) => ({
+    name: browser.browser,
+    visitors: browser._count.id,
+  }));
+}
+
+// Get device type breakdown
+export async function getDeviceStats(days: number = 7) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const devices = await prisma.analytics.groupBy({
+    by: ["deviceType"],
+    where: {
+      timestamp: {
+        gte: since,
+      },
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _count: {
+        id: "desc",
+      },
+    },
+  });
+
+  return devices.map((device) => ({
+    type: device.deviceType || "unknown",
+    visitors: device._count.id,
+  }));
+}
+
+// Get OS breakdown
+export async function getOSStats(days: number = 7) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const osStats = await prisma.analytics.groupBy({
+    by: ["os"],
+    where: {
+      timestamp: {
+        gte: since,
+      },
+      os: {
+        not: null,
+      },
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      _count: {
+        id: "desc",
+      },
+    },
+  });
+
+  return osStats.map((stat) => ({
+    name: stat.os,
+    visitors: stat._count.id,
+  }));
+}
+
+// Get analytics daily breakdown
+export async function getDailyAnalytics(days: number = 7) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const dailyData = await prisma.analytics.groupBy({
+    by: ["timestamp"],
+    where: {
+      timestamp: {
+        gte: since,
+      },
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      timestamp: "asc",
+    },
+  });
+
+  // Group by date (not exact timestamp)
+  const grouped: { [key: string]: number } = {};
+
+  dailyData.forEach((item) => {
+    const date = new Date(item.timestamp).toISOString().split("T")[0];
+    grouped[date] = (grouped[date] || 0) + item._count.id;
+  });
+
+  return Object.entries(grouped).map(([date, count]) => ({
+    date,
+    pageViews: count,
+  }));
+}
+```
+
+**Key Functions:**
+
+- `trackPageView()` - Records a page visit with full user context
+- `getAnalyticsSummary()` - Returns visitors, page views, bounce rate
+- `getTopPages()` - Most visited pages
+- `getVisitorsByCountry()` - Breakdown by geographic location
+- `getBrowserStats()` - Browser usage breakdown
+- `getDeviceStats()` - Desktop vs mobile vs tablet
+- `getOSStats()` - Operating system breakdown
+- `getDailyAnalytics()` - Daily trend data for charting
+
+### Step 2: Create Analytics Tracking Component
+
+Create `components/analytics-tracker.tsx`:
+
+```typescript
+"use client";
+
+import { useEffect } from "react";
+
+export function AnalyticsTracker({ pagePath }: { pagePath: string }) {
+  useEffect(() => {
+    async function track() {
+      try {
+        await fetch("/api/analytics/track", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            pagePath,
+            timestamp: new Date().toISOString(),
+          }),
+        });
+      } catch (error) {
+        console.error("Analytics tracking failed:", error);
+        // Silently fail - don't break the app
+      }
+    }
+
+    track();
+  }, [pagePath]);
+
+  return null;
+}
+```
+
+### Step 3: Use Analytics Tracker in Layout
+
+Update `app/layout.tsx`:
+
+```typescript
+import { AnalyticsTracker } from "@/components/analytics-tracker"
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <AnalyticsTracker pagePath={typeof window !== "undefined" ? window.location.pathname : "/"} />
+        {children}
+      </body>
+    </html>
+  )
+}
+```
+
+---
+
+## API Endpoints
+
+### Step 1: Create Analytics Track Endpoint
+
+Create `app/api/analytics/track/route.ts`:
+
+```typescript
+import { type NextRequest, NextResponse } from "next/server";
+import { trackPageView } from "@/lib/analytics";
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { pagePath } = body;
+
+    if (!pagePath) {
+      return NextResponse.json(
+        { error: "pagePath is required" },
+        { status: 400 }
+      );
+    }
+
+    const result = await trackPageView(pagePath);
+
+    return NextResponse.json({
+      success: result.success,
+      sessionId: result.sessionId,
+    });
+  } catch (error) {
+    console.error("Analytics track route error:", error);
+    return NextResponse.json(
+      { error: "Failed to track analytics" },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### Step 2: Create Analytics Summary Endpoint
+
+Create `app/api/analytics/summary/route.ts`:
+
+```typescript
+import { type NextRequest, NextResponse } from "next/server";
+import { getAnalyticsSummary } from "@/lib/analytics";
+
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const days = parseInt(searchParams.get("days") || "7");
+
+    const summary = await getAnalyticsSummary(days);
+
+    return NextResponse.json(summary);
+  } catch (error) {
+    console.error("Analytics summary error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch analytics" },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### Step 3: Create Detailed Analytics Endpoint
+
+Create `app/api/analytics/detailed/route.ts`:
+
+```typescript
+import { type NextRequest, NextResponse } from "next/server";
+import {
+  getAnalyticsSummary,
+  getTopPages,
+  getVisitorsByCountry,
+  getBrowserStats,
+  getDeviceStats,
+  getOSStats,
+  getDailyAnalytics,
+} from "@/lib/analytics";
+
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const days = parseInt(searchParams.get("days") || "7");
+
+    const [summary, pages, countries, browsers, devices, os, dailyData] =
+      await Promise.all([
+        getAnalyticsSummary(days),
+        getTopPages(days),
+        getVisitorsByCountry(days),
+        getBrowserStats(days),
+        getDeviceStats(days),
+        getOSStats(days),
+        getDailyAnalytics(days),
+      ]);
+
+    return NextResponse.json({
+      summary,
+      pages,
+      countries,
+      browsers,
+      devices,
+      os,
+      dailyData,
+    });
+  } catch (error) {
+    console.error("Detailed analytics error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch analytics" },
+      { status: 500 }
+    );
+  }
+}
+```
+
+---
+
+## Analytics Dashboard
+
+### Step 1: Create Dashboard Page
+
+Create `app/admin/analytics/page.tsx`:
+
+See the reference implementation from the existing project.
+
+---
+
+## Testing & Deployment
+
+### Step 1: Test Rate Limiting
+
+```bash
+# Test from command line - should succeed for first 100 requests
+for i in {1..150}; do
+  curl http://localhost:3000
+done
+
+# Check that you get 429 after 100 requests in a minute
+```
+
+### Step 2: Test Analytics Tracking
+
+1. Open your app at `http://localhost:3000`
+2. Navigate between pages
+3. Check the database:
+
+```bash
+npx prisma studio
+```
+
+You should see records in the `analytics` table.
+
+### Step 3: Deploy to Production
+
+**On your hosting provider (AWS, Heroku, etc.):**
+
+1. Set the `DATABASE_URL` environment variable to your production Neon database
+2. Push code to your repository
+3. Your hosting provider automatically runs migrations or you manually run:
+
+```bash
+npx prisma migrate deploy
+```
+
+### Step 4: Configure Rate Limiting for Production
+
+Adjust limits in `lib/rate-limiter.ts` based on your traffic:
+
+```typescript
+const REQUESTS_PER_MINUTE = 100; // Adjust per your app's needs
+const REQUESTS_PER_HOUR = 1000; // Adjust per your app's needs
+const BAN_DURATION_MINUTES = 15; // How long to block abusive IPs
+```
+
+---
+
+## Monitoring & Maintenance
+
+### View Analytics in Prisma Studio
+
+```bash
+npx prisma studio
+```
+
+### Query Analytics Programmatically
+
+```typescript
+// Get recent analytics
+const recentAnalytics = await prisma.analytics.findMany({
+  take: 100,
+  orderBy: { timestamp: "desc" },
+});
+
+// Get blocked IPs
+const blockedIPs = await prisma.rateLimitTracking.findMany({
+  where: {
+    blockedUntil: {
+      gt: new Date(),
+    },
+  },
+});
+```
+
+### Regular Cleanup
+
+Add a cron job to clean old analytics data:
+
+```typescript
+// Clean analytics older than 90 days
+const ninetyDaysAgo = new Date();
+ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+await prisma.analytics.deleteMany({
+  where: {
+    createdAt: {
+      lt: ninetyDaysAgo,
+    },
+  },
+});
+```
+
+---
+
+## Troubleshooting
+
+### Issue: Database connection fails
+
+**Solution:** Check `DATABASE_URL` is set correctly in environment variables
+
+### Issue: Analytics not tracking
+
+**Solution:** Verify `AnalyticsTracker` component is in your layout and the API endpoint exists
+
+### Issue: Rate limiting too aggressive
+
+**Solution:** Adjust `REQUESTS_PER_MINUTE` and `REQUESTS_PER_HOUR` in `lib/rate-limiter.ts`
+
+### Issue: Missing user data
+
+**Solution:** Some data like country requires a proxy header (Cloudflare, AWS CloudFront, etc.) to be set
+
+---
+
+## Summary
+
+You now have a production-ready analytics and rate limiting system that:
+
+- Tracks detailed user analytics (browser, device, OS, location, pages)
+- Protects against DDoS attacks with intelligent rate limiting
+- Stores data in Neon PostgreSQL via Prisma ORM
+- Provides comprehensive API endpoints for querying analytics
+- Includes an admin dashboard for visualization
+
+For questions or issues, refer to the Prisma documentation: https://www.prisma.io/docs/
