@@ -225,13 +225,14 @@ importScripts(
 
 // Initialize the Firebase app in the service worker
 // Replace with your actual Firebase config
+
 firebase.initializeApp({
-  apiKey: "your_api_key",
-  authDomain: "your_project.firebaseapp.com",
-  projectId: "your_project_id",
-  storageBucket: "your_project.appspot.com",
-  messagingSenderId: "your_sender_id",
-  appId: "your_app_id",
+  apiKey: "AIzaSyBdArVFvaYodhomq8KIwF2Eiwu8pR9xN0k",
+  authDomain: "bazaarug.firebaseapp.com",
+  projectId: "bazaarug",
+  storageBucket: "bazaarug.firebasestorage.app",
+  messagingSenderId: "324253700286",
+  appId: "1:324253700286:web:235201d7dcf4a2efcf4eef",
 });
 
 // Retrieve an instance of Firebase Messaging
@@ -247,7 +248,12 @@ messaging.onBackgroundMessage((payload) => {
     icon: "/icon-192x192.png",
     badge: "/badge-72x72.png",
     vibrate: [200, 100, 200],
-    data: payload.data,
+    data: {
+      url: "/orders", // ← This is where the user will go when they click
+      ...payload.data,
+    },
+    requireInteraction: true, // ← Keeps notification visible until clicked
+    tag: "order-notification",
   };
 
   return self.registration.showNotification(
@@ -259,20 +265,30 @@ messaging.onBackgroundMessage((payload) => {
 // Handle notification clicks
 self.addEventListener("notificationclick", (event) => {
   console.log("Notification clicked:", event);
-  event.notification.close();
+  event.notification.close(); // Close the notification
+
+  // Get the URL from notification data (default to orders page)
+  const urlToOpen = event.notification.data?.url || "/orders";
 
   event.waitUntil(
     clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((windowClients) => {
+        // Check if there is already a window/tab open with the app
         for (let i = 0; i < windowClients.length; i++) {
           const client = windowClients[i];
-          if (client.url === "/" && "focus" in client) {
+          // If app is already open, navigate to the URL and focus
+          if (
+            client.url.includes(self.registration.scope) &&
+            "focus" in client
+          ) {
+            client.navigate(urlToOpen);
             return client.focus();
           }
         }
+        // If app is not open, open it with the URL
         if (clients.openWindow) {
-          return clients.openWindow("/");
+          return clients.openWindow(urlToOpen);
         }
       })
   );
@@ -498,6 +514,7 @@ export async function POST(request: Request) {
         body: `Your order of ${itemsList} has been placed successfully. Total: $${total.toFixed(2)}`,
       },
       data: {
+        url: "/orders", // ← Add this to tell the service worker where to navigate
         total: total.toString(),
         itemCount: items.length.toString(),
       },
@@ -879,17 +896,21 @@ export default function FCMCart({
 Update `app/page.tsx`:
 
 ```typescript
-'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+"use client";
 
-import { useState, useEffect } from 'react';
-import { requestNotificationPermission, onMessageListener } from '@/lib/firebase';
-import ProductCard from '@/components/ProductCard';
-import Cart from '@/components/Cart';
-import { useCart } from '@/contexts/CartContext';
-import { PRODUCTS } from '@/data/products';
+import { useState, useEffect } from "react";
+import {
+  requestNotificationPermission,
+  onMessageListener,
+} from "@/lib/firebase";
+import { useCart } from "../cart/CartProvider";
+import { PRODUCTS } from "@/data";
+import ProductCard from "../global/ProductCard";
+import FCMCart from "../cart/FCMCart";
 
-export default function Home() {
- const [isSupported, setIsSupported] = useState(false);
+export default function PushNotifications() {
+  const [isSupported, setIsSupported] = useState(false);
   const [fcmToken, setFcmToken] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
     title: string;
@@ -908,15 +929,28 @@ export default function Home() {
   }
 
   // Show system notification (for foreground messages)
-  const showSystemNotification = (title: string, body: string) => {
+  const showSystemNotification = (title: string, body: string, data?: any) => {
     if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(title, {
+      const notification = new Notification(title, {
         body: body,
         icon: "/icon-192x192.png",
         badge: "/badge-72x72.png",
         vibrate: [200, 100, 200],
         tag: "order-notification",
+        requireInteraction: true, // ← Keeps notification visible until clicked
+        data: {
+          url: "/orders", // ← URL to navigate to
+          ...data,
+        },
       });
+
+      // Handle notification click
+      notification.onclick = (event) => {
+        event.preventDefault(); // Prevent default behavior
+        window.focus(); // Focus the window
+        window.location.href = "/orders"; // Navigate to orders page
+        notification.close(); // Close the notification
+      };
     }
   };
 
@@ -964,8 +998,8 @@ export default function Home() {
         setNotification({ title, body });
         setTimeout(() => setNotification(null), 5000);
 
-        // IMPORTANT: Also show system notification
-        showSystemNotification(title, body);
+        // IMPORTANT: Also show system notification with data
+        showSystemNotification(title, body, payload.data);
       })
       .catch((err) => console.log("Failed to receive message: ", err));
 
@@ -1079,6 +1113,7 @@ export default function Home() {
     </div>
   );
 }
+
 ```
 
 ### Step 23: Update Global Styles
