@@ -1176,6 +1176,34 @@ Update `app/globals.css`:
 │ → Service Worker AUTOMATICALLY shows notification │
 │ │
 └─────────────────────────────────────────────────────┘
+Do You Need Both? YES! Here's Why:
+Scenario 1: User Has App Open (Foreground)
+typescriptUser is browsing your PWA Shop...
+└─> Notification arrives
+└─> Firebase sends it to onMessageListener()
+└─> Your React code handles it
+└─> Must call new Notification() manually
+└─> If you DON'T handle this, user sees NOTHING!
+Without foreground handling:
+
+❌ User places order
+❌ No notification appears (even though it was sent!)
+❌ User thinks the order failed
+❌ Bad user experience
+
+Scenario 2: User Minimized/Closed App (Background)
+typescriptUser minimized the browser...
+└─> Notification arrives
+└─> Firebase sends it to Service Worker
+└─> Service Worker handles it automatically
+└─> Shows system notification
+└─> If you DON'T have service worker, user sees NOTHING!
+Without background handling:
+
+❌ User isn't looking at app
+❌ No notification appears
+❌ Defeats the purpose of push notifications
+❌ User misses important updates
 
 ## PART 8: Testing Your PWA
 
