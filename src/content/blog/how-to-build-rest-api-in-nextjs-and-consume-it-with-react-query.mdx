@@ -1,0 +1,1345 @@
+---
+title: Building APIs in Next.js 16 with React Query - Complete Developer Guide
+description: Master Next.js API development with Route Handlers and React Query (TanStack Query). Learn to create RESTful APIs, handle HTTP methods (GET, POST, PUT, DELETE), implement dynamic routes, and manage server state with React Query mutations. Includes 15-slide presentation and comprehensive tutorial with working code examples. Perfect for developers building full-stack Next.js applications.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwf07xo3UtvnF3cx4uPCTU9aqg2f0oY8klybGQI
+category: tutorial
+createdAt: 2026-01-04
+updatedAt: 2026-01-04
+---
+
+# Building APIs in Next.js 15/16 with React Query
+
+**Author:** JB WEB DEVELOPER  
+**Organization:** Desishub Technologies  
+**Last Updated:** January 2026
+
+---
+
+## Table of Contents
+
+1. [Introduction to Next.js](#introduction-to-nextjs)
+2. [Understanding the App Router](#understanding-the-app-router)
+3. [Creating API Routes with Route Handlers](#creating-api-routes-with-route-handlers)
+4. [HTTP Methods in Next.js](#http-methods-in-nextjs)
+5. [Dynamic API Routes](#dynamic-api-routes)
+6. [Introduction to React Query (TanStack Query)](#introduction-to-react-query)
+7. [Setting Up React Query in Next.js](#setting-up-react-query-in-nextjs)
+8. [Consuming APIs with useQuery](#consuming-apis-with-usequery)
+9. [Mutations with useMutation](#mutations-with-usemutation)
+10. [Best Practices](#best-practices)
+11. [Complete Example Project](#complete-example-project)
+
+---
+
+## Introduction to Next.js
+
+### What is Next.js?
+
+**Next.js** is a modern React framework for building full-stack web applications. It extends React with powerful features that make it easier to build production-ready applications:
+
+- **File-based routing:** Automatically maps files in the `app/` directory to routes
+- **Server-side rendering (SSR):** Renders pages on the server for better performance and SEO
+- **Static site generation (SSG):** Pre-renders pages at build time
+- **API routes:** Build backend functionality directly within your Next.js app
+- **App Router:** Introduced in Next.js 13, provides a new way to build applications with nested layouts, loading states, and streaming
+- **Server Components:** React components that run only on the server
+- **Edge functions:** Run server-side code close to users for better performance
+
+### Common Use Cases
+
+Next.js is perfect for building:
+
+- E-commerce platforms
+- SaaS applications
+- Corporate websites
+- Blogs and content sites
+- Dashboards and admin panels
+- Mobile-first web applications
+
+### Why Next.js?
+
+1. **Full-stack in one framework:** Build both frontend and backend in the same project
+2. **Excellent performance:** Automatic code splitting, image optimization, and more
+3. **Great developer experience:** Hot reload, TypeScript support, intuitive API
+4. **Production-ready:** Used by companies like Netflix, TikTok, Twitch, and more
+5. **Active ecosystem:** Large community, extensive documentation, many plugins
+
+---
+
+## Understanding the App Router
+
+### App Router vs Pages Router
+
+Next.js offers two routing approaches:
+
+#### Pages Router (Legacy)
+
+- **Location:** `pages/api/*`
+- **API Style:** Node.js `req`/`res` objects (Express-like)
+- **Status:** Being phased out, but still supported
+- **Use when:** Maintaining existing projects
+
+**Example:**
+
+```javascript
+// pages/api/users.js
+export default function handler(req, res) {
+  if (req.method === "GET") {
+    res.status(200).json({ users: [] });
+  }
+}
+```
+
+#### App Router (Modern) ✨
+
+- **Location:** `app/api/*/route.ts`
+- **API Style:** Web Standard `Request`/`Response` APIs
+- **Status:** Current recommendation for new projects
+- **Benefits:** Simpler, faster, better developer experience
+
+**Example:**
+
+```typescript
+// app/api/users/route.ts
+export async function GET(request: Request) {
+  return new Response(JSON.stringify({ users: [] }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+```
+
+### Why Use the App Router?
+
+1. **Web Standards:** Uses native `Request` and `Response` APIs
+2. **Simpler:** Less boilerplate than Pages Router
+3. **Future-proof:** This is the direction Next.js is heading
+4. **Better DX:** More intuitive and easier to learn
+5. **Streaming:** Built-in support for response streaming
+
+---
+
+## Creating API Routes with Route Handlers
+
+### What is route.ts?
+
+In the App Router, `route.ts` (or `route.js`) files define API endpoints. These files can be placed anywhere in the `app/` directory to create server-side API routes.
+
+### File Structure
+
+```
+app/
+└── api/
+    └── users/
+        └── route.ts  ← Handles /api/users
+```
+
+This structure automatically creates an endpoint at `/api/users`.
+
+### Basic Route Handler
+
+Here's the simplest possible route handler:
+
+```typescript
+// app/api/hello/route.ts
+export async function GET() {
+  return new Response("Hello, Next.js!");
+}
+```
+
+Access this at: `http://localhost:3000/api/hello`
+
+### Returning JSON
+
+Most APIs return JSON data:
+
+```typescript
+// app/api/users/route.ts
+export async function GET() {
+  const users = [
+    { id: 1, name: "Alice" },
+    { id: 2, name: "Bob" },
+  ];
+
+  return new Response(JSON.stringify(users), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+```
+
+### Using NextResponse (Helper)
+
+Next.js provides `NextResponse` for convenience:
+
+```typescript
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  const users = [
+    { id: 1, name: "Alice" },
+    { id: 2, name: "Bob" },
+  ];
+
+  return NextResponse.json(users);
+}
+```
+
+This is cleaner and automatically sets the correct headers.
+
+---
+
+## HTTP Methods in Next.js
+
+Route handlers support all standard HTTP methods. Each method is exported as a separate function.
+
+### Supported Methods
+
+| Method      | Purpose                | Example Use Case         |
+| ----------- | ---------------------- | ------------------------ |
+| **GET**     | Retrieve data          | Fetch list of users      |
+| **POST**    | Create new resource    | Add a new user           |
+| **PUT**     | Update entire resource | Replace user data        |
+| **PATCH**   | Partially update       | Update user email only   |
+| **DELETE**  | Remove resource        | Delete a user            |
+| **HEAD**    | Get headers only       | Check if resource exists |
+| **OPTIONS** | Get allowed methods    | CORS preflight           |
+
+### GET - Retrieve Data
+
+```typescript
+// app/api/users/route.ts
+import { NextResponse } from "next/server";
+
+export async function GET(request: Request) {
+  // In a real app, fetch from database
+  const users = [
+    { id: 1, name: "Alice", email: "alice@example.com" },
+    { id: 2, name: "Bob", email: "bob@example.com" },
+  ];
+
+  return NextResponse.json(users);
+}
+```
+
+**Testing:**
+
+```bash
+curl http://localhost:3000/api/users
+```
+
+### POST - Create Resource
+
+```typescript
+// app/api/users/route.ts
+import { NextResponse } from "next/server";
+
+export async function POST(request: Request) {
+  // Parse request body
+  const body = await request.json();
+  const { name, email } = body;
+
+  // Validate input
+  if (!name || !email) {
+    return NextResponse.json(
+      { error: "Name and email are required" },
+      { status: 400 }
+    );
+  }
+
+  // In a real app, save to database
+  const newUser = {
+    id: Date.now(),
+    name,
+    email,
+    createdAt: new Date().toISOString(),
+  };
+
+  return NextResponse.json(newUser, { status: 201 });
+}
+```
+
+**Testing:**
+
+```bash
+curl -X POST http://localhost:3000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Charlie","email":"charlie@example.com"}'
+```
+
+### PUT - Update Resource
+
+```typescript
+// app/api/users/[id]/route.ts
+import { NextResponse } from "next/server";
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const body = await request.json();
+
+  // In a real app, update in database
+  const updatedUser = {
+    id: parseInt(id),
+    ...body,
+    updatedAt: new Date().toISOString(),
+  };
+
+  return NextResponse.json(updatedUser);
+}
+```
+
+### DELETE - Remove Resource
+
+```typescript
+// app/api/users/[id]/route.ts
+import { NextResponse } from "next/server";
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  // In a real app, delete from database
+
+  return NextResponse.json(
+    { message: `User ${id} deleted successfully` },
+    { status: 200 }
+  );
+}
+```
+
+---
+
+## Dynamic API Routes
+
+Dynamic routes allow you to create flexible API endpoints that accept parameters.
+
+### Creating Dynamic Routes
+
+Use square brackets `[param]` in folder names to create dynamic segments:
+
+```
+app/
+└── api/
+    └── users/
+        └── [id]/
+            └── route.ts  ← Handles /api/users/:id
+```
+
+### Accessing Route Parameters
+
+```typescript
+// app/api/users/[id]/route.ts
+import { NextResponse } from "next/server";
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  // In a real app, fetch from database
+  const user = {
+    id: parseInt(id),
+    name: `User ${id}`,
+    email: `user${id}@example.com`,
+  };
+
+  return NextResponse.json(user);
+}
+```
+
+**Access:** `GET /api/users/123`
+
+### Multiple Dynamic Segments
+
+```
+app/
+└── api/
+    └── posts/
+        └── [postId]/
+            └── comments/
+                └── [commentId]/
+                    └── route.ts
+```
+
+```typescript
+// app/api/posts/[postId]/comments/[commentId]/route.ts
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ postId: string; commentId: string }> }
+) {
+  const { postId, commentId } = await params;
+
+  return NextResponse.json({
+    postId,
+    commentId,
+    content: "Comment content here",
+  });
+}
+```
+
+**Access:** `GET /api/posts/456/comments/789`
+
+### Catch-All Routes
+
+Use `[...slug]` for catch-all routes:
+
+```
+app/
+└── api/
+    └── [...slug]/
+        └── route.ts  ← Matches /api/* and /api/*/*
+```
+
+```typescript
+// app/api/[...slug]/route.ts
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ slug: string[] }> }
+) {
+  const { slug } = await params;
+
+  return NextResponse.json({
+    path: slug.join("/"),
+    segments: slug,
+  });
+}
+```
+
+---
+
+## Introduction to React Query
+
+### What is React Query (TanStack Query)?
+
+**React Query** (now called **TanStack Query**) is a powerful data-fetching and state management library for React applications. It simplifies server state management by handling:
+
+- **Caching:** Automatically caches data to avoid unnecessary requests
+- **Background updates:** Refetches data in the background to keep UI fresh
+- **Loading states:** Manages loading, error, and success states automatically
+- **Mutations:** Handles creating, updating, and deleting data
+- **Optimistic updates:** Update UI before server responds
+- **Polling:** Automatically refetch data at intervals
+- **Offline support:** Works when network is unavailable
+
+### Why Use React Query?
+
+Traditional data fetching in React requires manual management of:
+
+```javascript
+// Without React Query
+const [data, setData] = useState(null);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState(null);
+
+useEffect(() => {
+  setLoading(true);
+  fetch("/api/users")
+    .then((res) => res.json())
+    .then((data) => {
+      setData(data);
+      setLoading(false);
+    })
+    .catch((err) => {
+      setError(err);
+      setLoading(false);
+    });
+}, []);
+```
+
+**With React Query:**
+
+```javascript
+// With React Query
+const { data, isLoading, error } = useQuery({
+  queryKey: ["users"],
+  queryFn: () => fetch("/api/users").then((res) => res.json()),
+});
+```
+
+Much cleaner and handles caching, refetching, and more automatically!
+
+### Key Features
+
+1. **Automatic caching:** Data is cached by default
+2. **Background refetching:** Keeps data fresh automatically
+3. **Window focus refetching:** Refetches when user returns to tab
+4. **Request deduplication:** Prevents duplicate requests
+5. **Pagination & infinite scroll:** Built-in support
+6. **Mutations:** Easy create/update/delete operations
+7. **DevTools:** Visual debugging tools
+8. **TypeScript:** Excellent TypeScript support
+
+---
+
+## Setting Up React Query in Next.js
+
+### Installation
+
+Install React Query (TanStack Query v5):
+
+```bash
+npm install @tanstack/react-query
+```
+
+### Step 1: Create QueryProvider
+
+React Query requires a client-side provider. Create a new component:
+
+```typescript
+// lib/providers/QueryProvider.tsx
+'use client'
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useState } from 'react'
+
+export default function QueryProvider({ children }: { children: React.ReactNode }) {
+  // Create a client - do this inside component to ensure isolation
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 1000, // 1 minute
+        refetchOnWindowFocus: false
+      }
+    }
+  }))
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  )
+}
+```
+
+**Important:** The `'use client'` directive is required because React Query uses client-side hooks.
+
+### Step 2: Wrap Your App
+
+Add the provider to your root layout:
+
+```typescript
+// app/layout.tsx
+import QueryProvider from '@/lib/providers/QueryProvider'
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <QueryProvider>
+          {children}
+        </QueryProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+### Step 3: Install DevTools (Optional)
+
+For development, add React Query DevTools:
+
+```bash
+npm install @tanstack/react-query-devtools
+```
+
+Update your QueryProvider:
+
+```typescript
+// lib/providers/QueryProvider.tsx
+'use client'
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { useState } from 'react'
+
+export default function QueryProvider({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient())
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  )
+}
+```
+
+Now you'll see a DevTools button in the bottom-right of your app!
+
+---
+
+## Consuming APIs with useQuery
+
+### Basic Usage
+
+The `useQuery` hook fetches data and manages its state:
+
+```typescript
+// app/users/page.tsx
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+
+// Define fetch function
+const fetchUsers = async () => {
+  const response = await fetch('/api/users')
+  if (!response.ok) {
+    throw new Error('Failed to fetch users')
+  }
+  return response.json()
+}
+
+export default function UsersPage() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['users'],
+    queryFn: fetchUsers
+  })
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+
+  return (
+    <div>
+      <h1>Users</h1>
+      <ul>
+        {data.map((user: any) => (
+          <li key={user.id}>{user.name}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+### Query Keys
+
+Query keys uniquely identify queries. They can be simple or complex:
+
+```typescript
+// Simple key
+["users"][
+  // With parameters
+  ("users", userId)
+][
+  // With filters
+  ("users", { status: "active", role: "admin" })
+][
+  // Nested data
+  ("users", userId, "posts", { limit: 10 })
+];
+```
+
+React Query uses keys to cache and invalidate queries.
+
+### Query Options
+
+```typescript
+const { data, isLoading, error, refetch } = useQuery({
+  queryKey: ["users"],
+  queryFn: fetchUsers,
+  staleTime: 5 * 60 * 1000, // Consider fresh for 5 minutes
+  cacheTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+  refetchOnWindowFocus: true, // Refetch when window gains focus
+  refetchOnMount: true, // Refetch on component mount
+  retry: 3, // Retry failed requests 3 times
+  enabled: true, // Only run query if true
+});
+```
+
+### Dependent Queries
+
+Only run a query when another query succeeds:
+
+```typescript
+// First, get user
+const { data: user } = useQuery({
+  queryKey: ["user", userId],
+  queryFn: () => fetchUser(userId),
+});
+
+// Then, get user's posts (only if user exists)
+const { data: posts } = useQuery({
+  queryKey: ["posts", userId],
+  queryFn: () => fetchPosts(userId),
+  enabled: !!user, // Only run if user exists
+});
+```
+
+### Parallel Queries
+
+Fetch multiple queries simultaneously:
+
+```typescript
+function Dashboard() {
+  const users = useQuery({ queryKey: ['users'], queryFn: fetchUsers })
+  const posts = useQuery({ queryKey: ['posts'], queryFn: fetchPosts })
+  const comments = useQuery({ queryKey: ['comments'], queryFn: fetchComments })
+
+  if (users.isLoading || posts.isLoading || comments.isLoading) {
+    return <div>Loading...</div>
+  }
+
+  return (
+    <div>
+      <div>Users: {users.data.length}</div>
+      <div>Posts: {posts.data.length}</div>
+      <div>Comments: {comments.data.length}</div>
+    </div>
+  )
+}
+```
+
+### Pagination
+
+```typescript
+function PaginatedUsers() {
+  const [page, setPage] = useState(1)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['users', page],
+    queryFn: () => fetchUsers(page),
+    keepPreviousData: true // Show old data while fetching new page
+  })
+
+  return (
+    <div>
+      {data?.users.map(user => <div key={user.id}>{user.name}</div>)}
+      <button onClick={() => setPage(p => p - 1)} disabled={page === 1}>
+        Previous
+      </button>
+      <button onClick={() => setPage(p => p + 1)} disabled={!data?.hasMore}>
+        Next
+      </button>
+    </div>
+  )
+}
+```
+
+---
+
+## Mutations with useMutation
+
+Mutations are for creating, updating, or deleting data.
+
+### Basic Mutation
+
+```typescript
+'use client'
+
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function CreateUserForm() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: async (newUser: { name: string; email: string }) => {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser)
+      })
+      return response.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch users query
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+    }
+  })
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    mutation.mutate({
+      name: formData.get('name') as string,
+      email: formData.get('email') as string
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="name" placeholder="Name" required />
+      <input name="email" type="email" placeholder="Email" required />
+      <button type="submit" disabled={mutation.isPending}>
+        {mutation.isPending ? 'Creating...' : 'Create User'}
+      </button>
+      {mutation.isError && <div>Error: {mutation.error.message}</div>}
+      {mutation.isSuccess && <div>User created!</div>}
+    </form>
+  )
+}
+```
+
+### Mutation Callbacks
+
+```typescript
+const mutation = useMutation({
+  mutationFn: createUser,
+  onMutate: async (newUser) => {
+    // Called before mutation function
+    console.log("Creating user:", newUser);
+  },
+  onSuccess: (data) => {
+    // Called on success
+    console.log("User created:", data);
+    queryClient.invalidateQueries({ queryKey: ["users"] });
+  },
+  onError: (error) => {
+    // Called on error
+    console.error("Failed to create user:", error);
+  },
+  onSettled: () => {
+    // Called after mutation completes (success or error)
+    console.log("Mutation completed");
+  },
+});
+```
+
+### Optimistic Updates
+
+Update UI immediately before server responds:
+
+```typescript
+const mutation = useMutation({
+  mutationFn: updateUser,
+  onMutate: async (updatedUser) => {
+    // Cancel outgoing refetches
+    await queryClient.cancelQueries({ queryKey: ["users", updatedUser.id] });
+
+    // Snapshot previous value
+    const previousUser = queryClient.getQueryData(["users", updatedUser.id]);
+
+    // Optimistically update cache
+    queryClient.setQueryData(["users", updatedUser.id], updatedUser);
+
+    // Return context with snapshot
+    return { previousUser };
+  },
+  onError: (err, updatedUser, context) => {
+    // Rollback on error
+    if (context?.previousUser) {
+      queryClient.setQueryData(["users", updatedUser.id], context.previousUser);
+    }
+  },
+  onSettled: (updatedUser) => {
+    // Refetch to ensure data is correct
+    queryClient.invalidateQueries({ queryKey: ["users", updatedUser.id] });
+  },
+});
+```
+
+### Multiple Mutations
+
+```typescript
+function UserActions({ userId }: { userId: string }) {
+  const queryClient = useQueryClient()
+
+  const updateMutation = useMutation({
+    mutationFn: (data) => updateUser(userId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users', userId] })
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteUser(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+    }
+  })
+
+  return (
+    <div>
+      <button onClick={() => updateMutation.mutate({ name: 'New Name' })}>
+        Update
+      </button>
+      <button onClick={() => deleteMutation.mutate()}>
+        Delete
+      </button>
+    </div>
+  )
+}
+```
+
+---
+
+## Best Practices
+
+### 1. Use Descriptive Query Keys
+
+✅ **Good:**
+
+```typescript
+["users", userId, "posts", { status: "published", limit: 10 }];
+```
+
+❌ **Bad:**
+
+```typescript
+["data"];
+```
+
+Query keys should describe exactly what data is being fetched.
+
+### 2. Set Appropriate staleTime
+
+```typescript
+const { data } = useQuery({
+  queryKey: ["users"],
+  queryFn: fetchUsers,
+  staleTime: 5 * 60 * 1000, // Data is fresh for 5 minutes
+});
+```
+
+This prevents unnecessary refetches for data that doesn't change often.
+
+### 3. Handle Loading and Error States
+
+Always provide feedback to users:
+
+```typescript
+if (isLoading) {
+  return <LoadingSpinner />
+}
+
+if (error) {
+  return (
+    <ErrorMessage>
+      Something went wrong: {error.message}
+      <button onClick={() => refetch()}>Try Again</button>
+    </ErrorMessage>
+  )
+}
+```
+
+### 4. Use TypeScript
+
+Define types for your data:
+
+```typescript
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+const { data } = useQuery<User[]>({
+  queryKey: ["users"],
+  queryFn: fetchUsers,
+});
+
+// Now 'data' is typed as User[] | undefined
+```
+
+### 5. Validate Input Data
+
+Always validate before sending to API:
+
+```typescript
+const mutation = useMutation({
+  mutationFn: async (data: CreateUserInput) => {
+    // Validate
+    if (!data.email.includes("@")) {
+      throw new Error("Invalid email");
+    }
+
+    // Send to API
+    return createUser(data);
+  },
+});
+```
+
+### 6. Use React Query DevTools
+
+Enable DevTools in development:
+
+```typescript
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+<QueryClientProvider client={queryClient}>
+  {children}
+  {process.env.NODE_ENV === 'development' && (
+    <ReactQueryDevtools initialIsOpen={false} />
+  )}
+</QueryClientProvider>
+```
+
+### 7. Invalidate Queries After Mutations
+
+```typescript
+const mutation = useMutation({
+  mutationFn: createUser,
+  onSuccess: () => {
+    // Refetch users list
+    queryClient.invalidateQueries({ queryKey: ["users"] });
+  },
+});
+```
+
+### 8. Use Error Boundaries
+
+Wrap your app in an error boundary to catch query errors:
+
+```typescript
+import { ErrorBoundary } from 'react-error-boundary'
+
+<ErrorBoundary fallback={<ErrorFallback />}>
+  <YourApp />
+</ErrorBoundary>
+```
+
+### 9. Organize API Functions
+
+Keep API functions in separate files:
+
+```
+lib/
+└── api/
+    ├── users.ts
+    ├── posts.ts
+    └── comments.ts
+```
+
+```typescript
+// lib/api/users.ts
+export const fetchUsers = async (): Promise<User[]> => {
+  const res = await fetch("/api/users");
+  if (!res.ok) throw new Error("Failed to fetch");
+  return res.json();
+};
+
+export const createUser = async (data: CreateUserInput): Promise<User> => {
+  const res = await fetch("/api/users", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create");
+  return res.json();
+};
+```
+
+### 10. Configure Sensible Defaults
+
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // 1 minute
+      cacheTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+      refetchOnMount: false,
+    },
+  },
+});
+```
+
+---
+
+## Complete Example Project
+
+Let's build a complete TODO app using everything we've learned.
+
+### Project Structure
+
+```
+my-todo-app/
+├── app/
+│   ├── layout.tsx
+│   ├── page.tsx
+│   └── api/
+│       └── todos/
+│           ├── route.ts
+│           └── [id]/
+│               └── route.ts
+└── lib/
+    ├── providers/
+    │   └── QueryProvider.tsx
+    └── api/
+        └── todos.ts
+```
+
+### 1. API Routes
+
+```typescript
+// app/api/todos/route.ts
+import { NextResponse } from "next/server";
+
+// In-memory storage (use database in production)
+let todos = [
+  { id: 1, title: "Learn Next.js", completed: false },
+  { id: 2, title: "Build an API", completed: false },
+];
+
+export async function GET() {
+  return NextResponse.json(todos);
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const newTodo = {
+    id: Date.now(),
+    title: body.title,
+    completed: false,
+  };
+  todos.push(newTodo);
+  return NextResponse.json(newTodo, { status: 201 });
+}
+```
+
+```typescript
+// app/api/todos/[id]/route.ts
+import { NextResponse } from "next/server";
+
+let todos = [
+  { id: 1, title: "Learn Next.js", completed: false },
+  { id: 2, title: "Build an API", completed: false },
+];
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const body = await request.json();
+  const todoIndex = todos.findIndex((t) => t.id === parseInt(id));
+
+  if (todoIndex === -1) {
+    return NextResponse.json({ error: "Todo not found" }, { status: 404 });
+  }
+
+  todos[todoIndex] = { ...todos[todoIndex], ...body };
+  return NextResponse.json(todos[todoIndex]);
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  todos = todos.filter((t) => t.id !== parseInt(id));
+  return NextResponse.json({ message: "Deleted" });
+}
+```
+
+### 2. API Functions
+
+```typescript
+// lib/api/todos.ts
+export interface Todo {
+  id: number;
+  title: string;
+  completed: boolean;
+}
+
+export const fetchTodos = async (): Promise<Todo[]> => {
+  const res = await fetch("/api/todos");
+  if (!res.ok) throw new Error("Failed to fetch todos");
+  return res.json();
+};
+
+export const createTodo = async (title: string): Promise<Todo> => {
+  const res = await fetch("/api/todos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error("Failed to create todo");
+  return res.json();
+};
+
+export const toggleTodo = async (
+  id: number,
+  completed: boolean
+): Promise<Todo> => {
+  const res = await fetch(`/api/todos/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ completed }),
+  });
+  if (!res.ok) throw new Error("Failed to update todo");
+  return res.json();
+};
+
+export const deleteTodo = async (id: number): Promise<void> => {
+  const res = await fetch(`/api/todos/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete todo");
+};
+```
+
+### 3. Todo Component
+
+```typescript
+// app/page.tsx
+'use client'
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { fetchTodos, createTodo, toggleTodo, deleteTodo, Todo } from '@/lib/api/todos'
+import { useState } from 'react'
+
+export default function TodoApp() {
+  const [newTodoTitle, setNewTodoTitle] = useState('')
+  const queryClient = useQueryClient()
+
+  // Fetch todos
+  const { data: todos, isLoading, error } = useQuery<Todo[]>({
+    queryKey: ['todos'],
+    queryFn: fetchTodos
+  })
+
+  // Create todo mutation
+  const createMutation = useMutation({
+    mutationFn: createTodo,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      setNewTodoTitle('')
+    }
+  })
+
+  // Toggle todo mutation
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, completed }: { id: number; completed: boolean }) =>
+      toggleTodo(id, completed),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    }
+  })
+
+  // Delete todo mutation
+  const deleteMutation = useMutation({
+    mutationFn: deleteTodo,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    }
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (newTodoTitle.trim()) {
+      createMutation.mutate(newTodoTitle)
+    }
+  }
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+
+  return (
+    <div style={{ maxWidth: 600, margin: '0 auto', padding: 20 }}>
+      <h1>My Todos</h1>
+
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          value={newTodoTitle}
+          onChange={(e) => setNewTodoTitle(e.target.value)}
+          placeholder="Add a new todo..."
+          style={{ padding: 8, width: '100%', marginBottom: 10 }}
+        />
+        <button type="submit" disabled={createMutation.isPending}>
+          {createMutation.isPending ? 'Adding...' : 'Add Todo'}
+        </button>
+      </form>
+
+      <ul style={{ listStyle: 'none', padding: 0 }}>
+        {todos?.map((todo) => (
+          <li
+            key={todo.id}
+            style={{
+              padding: 10,
+              marginBottom: 8,
+              background: '#f5f5f5',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={todo.completed}
+                onChange={(e) =>
+                  toggleMutation.mutate({
+                    id: todo.id,
+                    completed: e.target.checked
+                  })
+                }
+              />
+              <span
+                style={{
+                  textDecoration: todo.completed ? 'line-through' : 'none',
+                  color: todo.completed ? '#999' : '#000'
+                }}
+              >
+                {todo.title}
+              </span>
+            </div>
+            <button
+              onClick={() => deleteMutation.mutate(todo.id)}
+              style={{ padding: '4px 8px', cursor: 'pointer' }}
+            >
+              Delete
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {todos?.length === 0 && (
+        <p style={{ textAlign: 'center', color: '#999' }}>
+          No todos yet. Add one above!
+        </p>
+      )}
+    </div>
+  )
+}
+```
+
+---
+
+## Summary
+
+Congratulations! You now know how to:
+
+✅ Create API routes in Next.js using the App Router  
+✅ Handle GET, POST, PUT, PATCH, DELETE requests  
+✅ Create dynamic API routes with parameters  
+✅ Set up React Query in a Next.js project  
+✅ Fetch data with `useQuery`  
+✅ Create, update, and delete data with `useMutation`  
+✅ Follow best practices for API development
+
+### Next Steps
+
+1. **Build your first Next.js API** - Start with a simple CRUD application
+2. **Add a database** - Integrate Prisma, Drizzle, or your preferred ORM
+3. **Implement authentication** - Use NextAuth.js or your auth solution
+4. **Add validation** - Use Zod or Yup for request validation
+5. **Error handling** - Implement proper error handling and logging
+6. **Testing** - Write tests for your API routes
+7. **Deployment** - Deploy to Vercel, Railway, or your platform of choice
+
+### Additional Resources
+
+- [Next.js Documentation](https://nextjs.org/docs)
+- [TanStack Query Documentation](https://tanstack.com/query)
+- [Next.js Examples](https://github.com/vercel/next.js/tree/canary/examples)
+- [React Query Examples](https://tanstack.com/query/latest/docs/framework/react/examples)
+
+---
+
+**Happy Coding! 🚀**
+
+**Prepared by JB WEB DEVELOPER**  
+**Desishub Technologies**  
+**January 2026**
