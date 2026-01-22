@@ -245,7 +245,7 @@ export default function FeaturesPage() {
                 you
               </p>
               <Link
-                href={`/section/${goCourse.sections[0].id}`}
+                href={`/golang/section/${goCourse.sections[0].id}`}
                 className="inline-flex items-center gap-2 rounded-lg bg-accent px-8 py-3 font-semibold text-accent-foreground transition-opacity hover:opacity-90"
               >
                 Start Learning Now →

@@ -22,7 +22,7 @@ export default function CourseRoadmap({ sections }: CourseRoadmapProps) {
         {sections.map((section) => (
           <Link
             key={section.id}
-            href={`/section/${section.id}`}
+            href={`/golang/section/${section.id}`}
             className="group block border border-border p-4 transition-colors hover:bg-card"
           >
             <div className="mb-2 flex items-start justify-between gap-4">
