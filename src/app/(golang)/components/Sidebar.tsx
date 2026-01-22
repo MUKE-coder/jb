@@ -21,12 +21,13 @@ export default function Sidebar() {
     );
   };
 
-  const isActive = (sectionId: string) => pathname === `/section/${sectionId}`;
+  const isActive = (sectionId: string) =>
+    pathname === `/golang/section/${sectionId}`;
 
   return (
     <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border fixed top-0 left-0 h-screen w-64 overflow-y-auto border-r pt-6">
       <div className="border-sidebar-border border-b px-6 pb-6">
-        <Link href="/" className="block">
+        <Link href="/golang" className="block">
           <h1 className="text-sidebar-foreground font-mono text-lg font-bold">
             GO /
           </h1>
@@ -72,7 +73,7 @@ export default function Sidebar() {
           {goCourse.sections.map((section) => (
             <div key={section.id}>
               <Link
-                href={`/section/${section.id}`}
+                href={`/golang/section/${section.id}`}
                 className={`block border px-3 py-2 font-mono text-xs transition-all ${
                   isActive(section.id)
                     ? "bg-sidebar-foreground text-sidebar-primary-foreground border-sidebar-foreground"

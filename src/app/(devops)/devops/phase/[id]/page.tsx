@@ -30,7 +30,7 @@ export default async function PhasePage({ params }: PageProps) {
       <header className="border-b border-border px-8 py-12 md:px-16">
         <div className="mx-auto max-w-6xl">
           <Link
-            href="/"
+            href="/devops"
             className="mb-8 inline-block text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             ← back to phases
