@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import type { Exercise } from "@/lib/courseData";
 
+// import type { Exercise } from "@/lib/courseData";
 import CodeBlock from "./CodeBlock";
 
 interface ExerciseCardProps {

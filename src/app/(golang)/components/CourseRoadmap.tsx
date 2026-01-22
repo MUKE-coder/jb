@@ -5,6 +5,8 @@ import Link from "next/link";
 
 import type { Section } from "@/lib/courseData";
 
+// import type { Section } from "@/lib/courseData";
+
 interface CourseRoadmapProps {
   sections: Section[];
 }
