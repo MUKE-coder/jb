@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  ArrowUpRight,
-  BookOpen,
-  Calendar,
-  Clock,
-  ExternalLink,
-  Layers,
-} from "lucide-react";
+import { ArrowUpRight, BookOpen, Calendar, Clock, Layers } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 

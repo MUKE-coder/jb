@@ -16,16 +16,20 @@ export const META_THEME_COLORS = {
 
 export const MAIN_NAV: NavItem[] = [
   {
-    title: "Portfolio",
-    href: "/",
-  },
-  {
     title: "Courses",
     href: "/courses",
   },
   {
     title: "Tools",
     href: "/tools",
+  },
+  {
+    title: "Devops",
+    href: "/devops",
+  },
+  {
+    title: "Golang",
+    href: "/golang",
   },
   {
     title: "Ebooks",
@@ -36,10 +40,10 @@ export const MAIN_NAV: NavItem[] = [
     title: "Blogs",
     href: "/blog",
   },
-  {
-    title: "Components",
-    href: "/components",
-  },
+  // {
+  //   title: "Components",
+  //   href: "/components",
+  // },
 ];
 
 export const SOURCE_CODE_GITHUB_REPO =
