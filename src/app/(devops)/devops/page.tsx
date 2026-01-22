@@ -17,7 +17,7 @@ export default function Home() {
               devops
             </h1>
             <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
-              roadmap 2026 / the open agent skills ecosystem
+              roadmap 2026 / the top tier developer skills ecosystem
             </p>
           </div>
           <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
