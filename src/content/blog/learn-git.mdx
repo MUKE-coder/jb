@@ -1,0 +1,3117 @@
+---
+title: Learn Git - The Foundation of Modern DevOps
+description: This comprehensive guide will take you from zero to confident Git user through hands-on contribution to **NomadAPI Platform**, a real-world open-source project.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfzY3vslTeyn0fq9gWKtVvhX5FjYNu18oJ4mRd
+category: tutorial
+createdAt: 2026-01-23
+updatedAt: 2026-01-23
+---
+
+# 📚 Learn Git: The Foundation of Modern DevOps
+
+## 🎯 What You'll Learn
+
+This comprehensive guide will take you from zero to confident Git user through hands-on contribution to **NomadAPI Platform**, a real-world open-source project. By the end, you'll understand version control, team collaboration, GitHub project management, and modern development workflows.
+
+---
+
+## 🤔 Chapter 0: Understanding Git & GitHub - The Simple Story
+
+### The Problem Git Solves
+
+Imagine you're writing a book with five friends. Without a system, you'd face chaos:
+
+- Sarah emails version 3 while John is still editing version 2
+- Someone deletes an important chapter by accident
+- Two people write different endings, and now you need to manually combine them
+- You can't remember who wrote what or why changes were made
+
+**This is exactly what happened in software development before Git.**
+
+### The Birth of Git: A Quick History
+
+In 2005, Linus Torvalds (creator of Linux) needed a better way to manage the Linux kernel project, which had thousands of contributors worldwide. Existing tools were either too slow, too expensive, or too restrictive.
+
+So he created **Git** in just a few weeks. His goals were simple:
+
+1. **Speed** - Operations should be lightning fast
+2. **Distributed** - Everyone should have a full copy of the project history
+3. **Data Integrity** - Protect against corruption or tampering
+4. **Branching** - Make it easy to experiment without breaking the main code
+
+Today, Git powers virtually every modern software project, from small startups to tech giants like Google, Microsoft, and Netflix.
+
+### Git vs GitHub: What's the Difference?
+
+This confuses many beginners, so let's clarify:
+
+| Tool       | What It Is                                                                                      | Analogy                                                                |
+| :--------- | :---------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------- |
+| **Git**    | The version control software that runs on your computer. It tracks changes to your files.       | Like Microsoft Word's "Track Changes" feature, but incredibly powerful |
+| **GitHub** | A website (owned by Microsoft) where you can store your Git repositories online and collaborate | Like Google Drive, but specifically designed for code projects         |
+
+**Other alternatives to GitHub:** GitLab, Bitbucket, Gitea (self-hosted)
+
+### How Git Works: The Mental Model
+
+Think of Git as a **time machine for your project**:
+
+1. **Snapshots, Not Differences**: Git doesn't just save what changed; it saves complete snapshots of your entire project at each checkpoint (called a "commit")
+2. **Like a Tree**: Your project history branches out like a tree - you can explore different ideas on different branches, then combine the good ones back into the main trunk
+3. **Everyone Has Everything**: Unlike tools where there's one "master" copy, with Git every developer has the complete history on their machine
+
+**Visual Representation:**
+
+```
+main branch:      A --- B --- C --- D
+                           \
+feature branch:             E --- F
+```
+
+Each letter (A, B, C...) is a "commit" - a saved snapshot of your project.
+
+### Why Teams Can't Live Without Git
+
+1. **Parallel Development**: 10 developers can work on 10 different features simultaneously without stepping on each other's toes
+2. **Safe Experimentation**: Create a branch, try a risky idea. If it works, merge it. If not, delete the branch. The main code stays safe.
+3. **Complete History**: See every change ever made, who made it, and why
+4. **Code Review**: Before changes go live, teammates can review and suggest improvements
+5. **Rollback Capability**: If a bug gets deployed, you can instantly revert to the last working version
+
+---
+
+## 🚀 Introducing NomadAPI Platform - Our Learning Project
+
+### What is NomadAPI?
+
+**NomadAPI Platform** is a No-Code API generator that we're building as an open-source learning project. It solves a common problem for developers and non-technical makers: integrating with third-party services.
+
+### The Problem We're Solving
+
+Let's say you're building a mobile app and want to:
+
+- Store user feedback in a Google Sheet
+- Manage your content in Notion
+- Track inventory in Airtable
+- Store user data in PostgreSQL
+
+Normally, you'd need to:
+
+1. Learn each platform's API documentation (could take days)
+2. Handle authentication for each service
+3. Write CRUD operations (Create, Read, Update, Delete) for each
+4. Maintain this code as APIs change
+
+**This is tedious and time-consuming.**
+
+### Our Solution
+
+NomadAPI provides a simple interface where you:
+
+1. Connect your Google Sheet / Notion / Airtable / PostgreSQL
+2. Configure your data structure
+3. Get instant REST API endpoints:
+   - `POST /api/sheets/add-row` - Add data
+   - `GET /api/sheets/get-rows` - Retrieve data
+   - `PUT /api/sheets/update-row` - Update data
+   - `DELETE /api/sheets/delete-row` - Delete data
+
+**No coding required.** Just copy the endpoints into your app.
+
+### Real-World Example: The Coffee Shop App
+
+Imagine you're building an app for a coffee shop:
+
+**Without NomadAPI:**
+
+```javascript
+// You'd write hundreds of lines like this
+async function addOrder(order) {
+  const auth = await authenticateGoogleSheets();
+  const sheets = google.sheets({ version: "v4", auth });
+  const response = await sheets.spreadsheets.values.append({
+    spreadsheetId: "your-sheet-id",
+    range: "Orders!A:E",
+    valueInputOption: "USER_ENTERED",
+    resource: { values: [[order.name, order.drink, order.size]] },
+  });
+  // Error handling, validation, etc.
+}
+```
+
+**With NomadAPI:**
+
+```javascript
+// Simple API call
+fetch("https://nomadapi.io/api/coffee-orders/add", {
+  method: "POST",
+  body: JSON.stringify({
+    name: "Alice",
+    drink: "Cappuccino",
+    size: "Large",
+  }),
+});
+```
+
+### Inspiration: NoCodeAPI.com
+
+We're inspired by [NoCodeAPI.com](https://nocodeapi.com/), which offers similar functionality as a commercial service. NomadAPI aims to be the **open-source, community-driven alternative** that also serves as a learning platform for DevOps practices.
+
+### Our Tech Stack
+
+- **Frontend:** Next.js 14 (App Router) - Modern React framework
+- **Backend:** Golang with Gin framework - Fast, efficient API server
+- **Database:** PostgreSQL for user data, Redis for caching
+- **Authentication:** JWT tokens + API Keys
+- **DevOps:** Docker, GitHub Actions, Terraform, Kubernetes
+
+### Why This Project is Perfect for Learning
+
+1. **Real-World Complexity**: You'll work with databases, APIs, authentication, and cloud deployment
+2. **Team Collaboration**: Experience pull requests, code reviews, and merge conflicts
+3. **Modern Stack**: Learn technologies that companies actually use
+4. **Incremental Contributions**: Tasks range from documentation to full features
+5. **DevOps Focus**: We emphasize CI/CD, monitoring, and infrastructure as code
+
+---
+
+## 🛠 Chapter 1: Getting Started with Git
+
+Before we can start contributing to the **NomadAPI** project, you need to install and configure Git on your machine.
+
+### 1.1 Download and Installation
+
+Git is available for all major operating systems.
+
+| Operating System          | Installation Method                                                                                                                            |
+| :------------------------ | :--------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Windows**               | Download the official installer from [git-scm.com/downloads/win](https://git-scm.com/downloads/win). Use default settings during installation. |
+| **macOS**                 | Install via Homebrew: `brew install git` or install Xcode Command Line Tools: `xcode-select --install`                                         |
+| **Linux (Debian/Ubuntu)** | Use the package manager: `sudo apt update && sudo apt install git -y`                                                                          |
+| **Linux (Fedora/RHEL)**   | Use the package manager: `sudo dnf install git`                                                                                                |
+
+**Verify Installation:**
+
+```bash
+git --version
+# Should output something like: git version 2.43.0
+```
+
+### 1.2 Initial Configuration
+
+After installation, you must tell Git who you are. This information is attached to every commit you make, which is crucial for team collaboration and accountability.
+
+**Action: Set your Name and Email**
+
+Replace the placeholders with your actual name and the email address you use for GitHub.
+
+```bash
+# Set your full name
+git config --global user.name "Your Name"
+
+# Set your email address (use your GitHub email)
+git config --global user.email "your.email@example.com"
+```
+
+> **Practical Tip:** The `--global` flag applies these settings to all your Git projects. If you need a different identity for a specific project (e.g., work vs personal), run the same commands without the `--global` flag inside that project's directory.
+
+**Action: Set Default Branch Name**
+
+Modern Git uses `main` as the default branch name (replacing the older `master` convention):
+
+```bash
+git config --global init.defaultBranch main
+```
+
+**Action: Set Default Editor**
+
+```bash
+# Use your preferred editor (vim, nano, code, etc.)
+git config --global core.editor "code --wait"  # VS Code
+# or
+git config --global core.editor "nano"  # Nano
+```
+
+**Action: Verify your Configuration**
+
+You can check your settings at any time:
+
+```bash
+git config --list
+```
+
+### 1.3 Setting Up GitHub
+
+Since NomadAPI is hosted on GitHub, you need an account:
+
+1. **Create Account**: Go to [github.com](https://github.com) and sign up
+2. **Set Up SSH (Recommended)**: This allows you to push/pull without entering passwords
+
+**Generate SSH Key:**
+
+```bash
+ssh-keygen -t ed25519 -C "your.email@example.com"
+# Press Enter to accept default location
+# Enter a passphrase (or leave blank)
+```
+
+**Add SSH Key to GitHub:**
+
+```bash
+# Copy your public key
+cat ~/.ssh/id_ed25519.pub
+# On Windows: type %USERPROFILE%\.ssh\id_ed25519.pub
+```
+
+Go to GitHub → Settings → SSH and GPG keys → New SSH key → Paste the key
+
+**Test Connection:**
+
+```bash
+ssh -T git@github.com
+# Should say: "Hi username! You've successfully authenticated"
+```
+
+---
+
+## 💡 Chapter 2: The Core Git Workflow
+
+This chapter covers the essential commands you will use every day to track your progress.
+
+### 2.1 Creating and Cloning Repositories
+
+A **repository** (or "repo") is a project folder that Git tracks.
+
+| Command           | Description                                                          | Individual Use                                      | Team Use (NomadAPI)                                                    |
+| :---------------- | :------------------------------------------------------------------- | :-------------------------------------------------- | :--------------------------------------------------------------------- |
+| `git init`        | Initializes a new, empty Git repository in the current directory.    | Starting a brand new personal project from scratch. | **Not used for NomadAPI.** The repo already exists.                    |
+| `git clone <url>` | Downloads an existing repository from a remote server (like GitHub). | **The starting point for NomadAPI.**                | `git clone git@github.com:your-username/NomadAPI.git` (after forking). |
+
+### 2.2 Understanding the Three States
+
+Git tracks your files in three main states. Understanding this is crucial:
+
+```
+Working Directory → Staging Area → Git Repository
+     (edit)            (add)          (commit)
+```
+
+1. **Working Directory**: The files you are currently editing on your computer
+2. **Staging Area (Index)**: A "loading dock" where you prepare changes before committing
+3. **Git Repository**: Where Git permanently stores your project history
+
+**Why the Staging Area?**
+
+It gives you control. You might change 10 files but only want to commit 3 of them. The staging area lets you be selective.
+
+### 2.3 Essential Commands
+
+| Command                   | Description                                                    | Example                                                  |
+| :------------------------ | :------------------------------------------------------------- | :------------------------------------------------------- |
+| `git status`              | Shows which files are modified, staged, or untracked.          | Check before committing to see what you're about to save |
+| `git add <file>`          | Moves specific files to the Staging Area.                      | `git add src/handlers/sheet.go`                          |
+| `git add .`               | Stages ALL modified files in the current directory.            | Quick way to stage everything (use carefully!)           |
+| `git commit -m "message"` | Permanently records staged changes with a descriptive message. | `git commit -m "feat: add Google Sheets integration"`    |
+| `git log`                 | Shows commit history for the current branch.                   | See what you or your team has been working on            |
+| `git log --oneline`       | Condensed version of git log (easier to read).                 | Quick overview of recent commits                         |
+| `git diff`                | Shows changes between working directory and staging area.      | Review what you changed before committing                |
+| `git diff --staged`       | Shows changes between staging area and last commit.            | Review what you're about to commit                       |
+
+### 2.4 Practical Example: Your First Commit
+
+Let's walk through making your first change to NomadAPI:
+
+```bash
+# 1. Check current status
+git status
+# Output: On branch main, nothing to commit, working tree clean
+
+# 2. Create or modify a file
+echo "# My Notes" > NOTES.md
+
+# 3. Check status again
+git status
+# Output: Untracked files: NOTES.md
+
+# 4. Stage the file
+git add NOTES.md
+
+# 5. Check status again
+git status
+# Output: Changes to be committed: new file: NOTES.md
+
+# 6. Commit with a message
+git commit -m "docs: add personal notes file"
+
+# 7. View your commit
+git log --oneline
+```
+
+### 2.5 Writing Good Commit Messages
+
+Your commit message is documentation for your team. Follow these rules:
+
+**Conventional Commits Format:**
+
+```
+<type>(<scope>): <subject>
+
+[optional body]
+
+[optional footer]
+```
+
+**Types:**
+
+- `feat:` - New feature (e.g., "feat: add Redis caching layer")
+- `fix:` - Bug fix (e.g., "fix: handle null values in API response")
+- `docs:` - Documentation changes (e.g., "docs: update README installation steps")
+- `style:` - Code formatting, no logic change (e.g., "style: format Go code with gofmt")
+- `refactor:` - Code restructuring, no behavior change (e.g., "refactor: extract database logic into separate package")
+- `test:` - Adding or updating tests (e.g., "test: add unit tests for auth middleware")
+- `devops:` - CI/CD, infrastructure (e.g., "devops: add Docker health check")
+- `chore:` - Maintenance tasks (e.g., "chore: update dependencies")
+
+**Good vs Bad Examples:**
+
+❌ Bad: `git commit -m "fixed stuff"`
+✅ Good: `git commit -m "fix: resolve database connection timeout in production"`
+
+❌ Bad: `git commit -m "updated files"`
+✅ Good: `git commit -m "feat: implement JWT refresh token rotation"`
+
+---
+
+## 🌿 Chapter 3: Branching - The Superpower of Git
+
+Branching is what makes Git truly revolutionary. It allows you to:
+
+- Work on features without breaking the main code
+- Experiment freely
+- Collaborate with dozens of developers simultaneously
+
+### 3.1 What is a Branch?
+
+Think of branches as parallel universes for your code:
+
+```
+main branch:      A --- B --- C --- D
+                           \
+feature/login:              E --- F --- G
+```
+
+- The `main` branch contains stable, production-ready code
+- Your `feature/login` branch is where you experiment with new login functionality
+- Changes in one don't affect the other until you merge them
+
+### 3.2 Branch Commands
+
+| Command                | Description                                             | Example                                    |
+| :--------------------- | :------------------------------------------------------ | :----------------------------------------- |
+| `git branch`           | Lists all local branches (\* indicates current branch). | See what branches exist                    |
+| `git branch -a`        | Lists all branches (local and remote).                  | See what's on GitHub too                   |
+| `git switch -c <name>` | Creates a new branch and switches to it.                | `git switch -c feature/notion-integration` |
+| `git switch <name>`    | Switches to an existing branch.                         | `git switch main`                          |
+| `git branch -d <name>` | Deletes a local branch (must be merged first).          | `git branch -d feature/old-stuff`          |
+| `git branch -D <name>` | Force deletes a branch (even if not merged).            | Use carefully!                             |
+| `git branch -m <new>`  | Renames the current branch.                             | `git branch -m feature/better-name`        |
+
+**Note:** `git switch` is the modern command. Older tutorials use `git checkout`, which still works but has more complex behavior.
+
+### 3.3 NomadAPI Branching Strategy
+
+We follow a simple, effective strategy:
+
+1. **`main` branch**: Always stable, always deployable
+2. **`develop` branch**: Integration branch for testing features together
+3. **Feature branches**: `feature/your-feature-name` for new work
+4. **Bugfix branches**: `fix/bug-description` for fixing issues
+
+**Naming Conventions:**
+
+- `feature/google-sheets-crud` - New feature
+- `fix/auth-token-expiry` - Bug fix
+- `docs/api-documentation` - Documentation
+- `devops/github-actions-ci` - Infrastructure
+- `refactor/database-layer` - Code refactoring
+
+### 3.4 Practical Branch Workflow
+
+```bash
+# 1. Start from main, make sure it's up-to-date
+git switch main
+git pull origin main
+
+# 2. Create your feature branch
+git switch -c feature/airtable-integration
+
+# 3. Do your work, commit regularly
+git add src/integrations/airtable.go
+git commit -m "feat: add Airtable authentication"
+
+git add src/handlers/airtable_handler.go
+git commit -m "feat: implement Airtable CRUD endpoints"
+
+# 4. When done, push to GitHub
+git push origin feature/airtable-integration
+
+# 5. Open a Pull Request on GitHub (explained in Chapter 5)
+```
+
+---
+
+## 🤝 Chapter 4: Collaboration - Working with Remote Repositories
+
+### 4.1 Understanding Remotes
+
+A **remote** is a version of your repository hosted on the internet (usually GitHub).
+
+```bash
+# View your remotes
+git remote -v
+
+# Typical output:
+# origin  git@github.com:your-username/NomadAPI.git (fetch)
+# origin  git@github.com:your-username/NomadAPI.git (push)
+```
+
+- `origin` is the conventional name for your primary remote
+- `fetch` URL is where you pull updates from
+- `push` URL is where you push your changes to
+
+### 4.2 Syncing with the Remote
+
+| Command                       | Description                                                               | When to Use                                                  |
+| :---------------------------- | :------------------------------------------------------------------------ | :----------------------------------------------------------- |
+| `git fetch`                   | Downloads updates from remote but doesn't change your files.              | Check what's new without affecting your work                 |
+| `git pull`                    | Downloads and immediately merges remote changes into your current branch. | Get latest changes from `main` before starting work          |
+| `git push origin <branch>`    | Uploads your local commits to GitHub.                                     | Share your feature branch or update `main`                   |
+| `git push -u origin <branch>` | Pushes and sets up tracking (only needed first time for new branches).    | First push of a new branch: `git push -u origin feature/xyz` |
+| `git push --force`            | Overwrites remote history with local (DANGEROUS).                         | Only after rebasing your own feature branch                  |
+
+### 4.3 The Fork Workflow (NomadAPI)
+
+Since you don't have direct write access to the main NomadAPI repository, you'll use a **fork**:
+
+```
+Main NomadAPI Repo (upstream)
+        ↓
+   Your Fork (origin)
+        ↓
+  Your Local Copy
+```
+
+**Setup Steps:**
+
+```bash
+# 1. Fork on GitHub (click "Fork" button on NomadAPI repository)
+
+# 2. Clone YOUR fork
+git clone git@github.com:your-username/NomadAPI.git
+cd NomadAPI
+
+# 3. Add the main repo as 'upstream'
+git remote add upstream git@github.com:NomadAPI/NomadAPI.git
+
+# 4. Verify remotes
+git remote -v
+# origin    git@github.com:your-username/NomadAPI.git
+# upstream  git@github.com:NomadAPI/NomadAPI.git
+```
+
+**Staying Synced:**
+
+```bash
+# Get latest changes from main NomadAPI repo
+git fetch upstream
+git switch main
+git merge upstream/main
+
+# Push updates to your fork
+git push origin main
+```
+
+### 4.4 Merging and Conflict Resolution
+
+**What is Merging?**
+
+Merging combines the changes from two branches. Usually automatic, but sometimes Git needs your help.
+
+**Scenario: Automatic Merge**
+
+```bash
+git switch main
+git merge feature/new-endpoint
+# Fast-forward merge (no conflicts)
+```
+
+**Scenario: Merge Conflict**
+
+This happens when two people edit the same lines of the same file:
+
+```bash
+git merge feature/new-api
+# CONFLICT: Merge conflict in src/config.go
+```
+
+Git marks the file like this:
+
+```go
+<<<<<<< HEAD
+const API_VERSION = "v1"
+=======
+const API_VERSION = "v2"
+>>>>>>> feature/new-api
+```
+
+**Resolution Steps:**
+
+1. Open `src/config.go`
+2. Decide which version to keep (or combine them)
+3. Remove the conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
+4. Save the file
+5. Mark as resolved:
+
+```bash
+git add src/config.go
+git commit -m "fix: resolve API version conflict"
+```
+
+---
+
+## 📋 Chapter 5: GitHub Issues - Project Task Management
+
+GitHub Issues is your project's task tracker, bug reporter, and feature request system all in one.
+
+### 5.1 What are GitHub Issues?
+
+Think of Issues as:
+
+- **To-do items** for your project
+- **Bug reports** from users or team members
+- **Feature requests** for future enhancements
+- **Discussion threads** for project decisions
+
+Each issue has:
+
+- A unique number (e.g., #42)
+- A title and description
+- Labels (bug, enhancement, documentation, etc.)
+- Assignees (who's working on it)
+- Milestones (what version it targets)
+- Comments for discussion
+
+### 5.2 Creating an Issue
+
+**When to create an issue:**
+
+- You found a bug
+- You have an idea for a feature
+- You want to improve documentation
+- You need to discuss a technical decision
+
+**Good Issue Example:**
+
+```markdown
+**Title:** Add rate limiting to API endpoints
+
+**Description:**
+Currently, the API has no rate limiting, which could lead to abuse and server overload.
+
+**Proposed Solution:**
+Implement Redis-based rate limiting:
+
+- 100 requests per minute for authenticated users
+- 20 requests per minute for unauthenticated requests
+- Return 429 status code when limit exceeded
+
+**Acceptance Criteria:**
+
+- [ ] Rate limiter middleware implemented
+- [ ] Redis integration for tracking requests
+- [ ] Proper HTTP headers (X-RateLimit-Limit, X-RateLimit-Remaining)
+- [ ] Unit tests for rate limiter
+- [ ] Documentation updated
+
+**Additional Context:**
+Reference: https://redis.io/docs/manual/patterns/rate-limiter/
+Similar implementation: Express Rate Limit library
+
+**Environment:**
+
+- Current API version: v1.2.0
+- Expected completion: Sprint 3
+```
+
+### 5.3 Issue Labels
+
+Labels help organize and filter issues. NomadAPI uses these labels:
+
+| Label              | Color  | Purpose                       | Example                               |
+| :----------------- | :----- | :---------------------------- | :------------------------------------ |
+| `bug`              | Red    | Something isn't working       | "API returns 500 error on null input" |
+| `enhancement`      | Blue   | New feature or request        | "Add Airtable integration"            |
+| `documentation`    | Yellow | Improvements to docs          | "Update API documentation for v2"     |
+| `good first issue` | Green  | Good for newcomers            | "Fix typo in README"                  |
+| `help wanted`      | Purple | Extra attention needed        | "Need help implementing OAuth flow"   |
+| `priority: high`   | Orange | Needs immediate attention     | "Critical security vulnerability"     |
+| `priority: low`    | Gray   | Nice to have, not urgent      | "Add dark mode to dashboard"          |
+| `wontfix`          | White  | Will not be worked on         | "Duplicate issue" or "Out of scope"   |
+| `devops`           | Cyan   | Infrastructure and deployment | "Set up CI/CD pipeline"               |
+| `backend`          | Brown  | Go backend related            | "Optimize database queries"           |
+| `frontend`         | Pink   | Next.js frontend related      | "Improve form validation"             |
+
+**Creating labels:**
+
+```bash
+# On GitHub: Settings → Labels → New label
+```
+
+### 5.4 Issue Templates
+
+Templates ensure issues contain all necessary information.
+
+**Location:** `.github/ISSUE_TEMPLATE/`
+
+**Bug Report Template** (`.github/ISSUE_TEMPLATE/bug_report.md`):
+
+```markdown
+---
+name: Bug Report
+about: Create a report to help us improve
+title: "[BUG] "
+labels: bug
+assignees: ""
+---
+
+## 🐛 Bug Description
+
+A clear and concise description of what the bug is.
+
+## 📋 Steps to Reproduce
+
+1. Go to '...'
+2. Click on '...'
+3. Scroll down to '...'
+4. See error
+
+## ✅ Expected Behavior
+
+What you expected to happen.
+
+## ❌ Actual Behavior
+
+What actually happened.
+
+## 📸 Screenshots
+
+If applicable, add screenshots to help explain your problem.
+
+## 🖥 Environment
+
+- OS: [e.g., macOS 13.0, Windows 11, Ubuntu 22.04]
+- Browser: [e.g., Chrome 120, Firefox 119]
+- NomadAPI Version: [e.g., v1.2.0]
+- Go Version: [e.g., 1.21]
+- Node Version: [e.g., 18.17]
+
+## 📝 Additional Context
+
+Add any other context about the problem here.
+
+## 🔍 Possible Solution
+
+If you have ideas on how to fix this, please share!
+```
+
+**Feature Request Template** (`.github/ISSUE_TEMPLATE/feature_request.md`):
+
+```markdown
+---
+name: Feature Request
+about: Suggest an idea for this project
+title: "[FEATURE] "
+labels: enhancement
+assignees: ""
+---
+
+## 🚀 Feature Description
+
+A clear and concise description of the feature you'd like to see.
+
+## 💡 Problem Statement
+
+What problem does this solve? Why is this needed?
+
+## 📝 Proposed Solution
+
+How would this feature work? Describe the user experience.
+
+## 🎨 Mockups/Examples
+
+If applicable, add mockups, wireframes, or examples from other projects.
+
+## 🔄 Alternatives Considered
+
+What other solutions have you thought about?
+
+## ✅ Acceptance Criteria
+
+- [ ] Criterion 1
+- [ ] Criterion 2
+- [ ] Criterion 3
+
+## 📌 Additional Context
+
+Any other context, links, or references.
+
+## 🏷 Labels
+
+Please add appropriate labels: frontend, backend, devops, etc.
+```
+
+### 5.5 Working with Issues
+
+**Assigning yourself to an issue:**
+
+```markdown
+# On GitHub: Click "Assignees" → Select yourself
+
+# Or comment: "I'd like to work on this!"
+```
+
+**Linking Issues to Pull Requests:**
+
+```markdown
+# In your PR description, use keywords:
+
+Closes #42
+Fixes #123
+Resolves #456
+
+# GitHub will automatically close these issues when PR is merged
+```
+
+**Referencing Issues in Commits:**
+
+```bash
+git commit -m "feat: add rate limiting (#42)"
+# The #42 creates a clickable link to the issue
+```
+
+**Closing Issues:**
+
+Issues close automatically when:
+
+- A linked PR is merged
+- You manually close them with a reason
+
+```markdown
+# Comment before closing:
+
+"Fixed in #456. Will be available in v1.3.0 release."
+```
+
+### 5.6 Issue Workflow Example
+
+**1. User Reports Bug:**
+
+```markdown
+Title: [BUG] API returns 500 on empty Google Sheet
+
+Description: When connecting an empty Google Sheet, the API crashes
+with a 500 error instead of handling gracefully.
+
+Steps to Reproduce:
+
+1. Create empty Google Sheet
+2. Connect via NomadAPI dashboard
+3. Try to fetch rows
+4. Receive 500 error
+
+Expected: Empty array [] returned
+Actual: 500 Internal Server Error
+```
+
+**2. Maintainer Adds Labels and Milestone:**
+
+- Labels: `bug`, `backend`, `priority: high`
+- Milestone: `v1.2.1`
+- Assignee: (Asks "Who wants to fix this?")
+
+**3. You Volunteer:**
+
+```markdown
+Comment: "I'll take this one! Should have a fix ready by tomorrow."
+```
+
+**4. You Create Branch and Fix:**
+
+```bash
+git switch -c fix/empty-sheet-handling
+# Make fixes
+git commit -m "fix: handle empty Google Sheets gracefully (#123)"
+git push origin fix/empty-sheet-handling
+```
+
+**5. You Open PR:**
+
+```markdown
+Title: Fix empty Google Sheet handling
+
+Description:
+Fixes #123
+
+Changes:
+
+- Added null check for empty sheets
+- Return empty array instead of crashing
+- Added unit tests for edge case
+```
+
+**6. PR Gets Merged, Issue Auto-Closes** ✅
+
+---
+
+## 📊 Chapter 6: GitHub Projects - Kanban Board Management
+
+GitHub Projects is a powerful tool for organizing work using Kanban boards, similar to Trello or Jira.
+
+### 6.1 What is GitHub Projects?
+
+A **Project** is a visual board where you organize issues and pull requests into columns representing different stages of work.
+
+**Common Kanban Columns:**
+
+```
+📋 Backlog  →  📝 To Do  →  🚧 In Progress  →  👀 Review  →  ✅ Done
+```
+
+### 6.2 Creating a Project for NomadAPI
+
+**1. Navigate to Projects:**
+
+```
+GitHub → NomadAPI Repository → Projects tab → New Project
+```
+
+**2. Choose Template:**
+
+- **Board**: Traditional Kanban (recommended for beginners)
+- **Table**: Spreadsheet-like view
+- **Roadmap**: Timeline view for planning
+
+**3. Configure Board:**
+
+```markdown
+Project Name: NomadAPI Development Board
+Description: Track all features, bugs, and improvements
+
+Columns:
+
+- 📋 Backlog (Ideas and future work)
+- 📝 To Do (Ready to start)
+- 🚧 In Progress (Currently being worked on)
+- 👀 In Review (PR opened, awaiting review)
+- ✅ Done (Completed and merged)
+- 🚫 Won't Do (Decided not to implement)
+```
+
+### 6.3 Project Board Workflow
+
+**Adding Issues to the Board:**
+
+```markdown
+# Method 1: Drag and drop from Issues
+
+1. Go to Issues tab
+2. Drag issue to project board
+
+# Method 2: Add from project board
+
+1. Click "+ Add item" in column
+2. Search for issue number or create new
+```
+
+**Moving Cards Across Columns:**
+
+```markdown
+1. Developer picks issue from "To Do"
+2. Moves to "In Progress"
+3. Creates branch and works
+4. Opens PR, moves card to "In Review"
+5. PR gets approved and merged, moves to "Done"
+```
+
+**Automation Rules:**
+
+GitHub can automatically move cards:
+
+```markdown
+Automation:
+
+- When PR opened → Move to "In Review"
+- When PR merged → Move to "Done"
+- When issue closed → Move to "Done"
+- When issue reopened → Move back to "To Do"
+```
+
+### 6.4 NomadAPI Project Board Example
+
+Let's set up a real project board for NomadAPI:
+
+**Sprint 1 Board:**
+
+| 📋 Backlog               | 📝 To Do            | 🚧 In Progress                  | 👀 In Review              | ✅ Done                |
+| :----------------------- | :------------------ | :------------------------------ | :------------------------ | :--------------------- |
+| #45 Airtable Integration | #12 Setup Docker    | #23 Google Sheets Auth (Alice)  | #34 JWT Middleware (Bob)  | #5 Project Setup       |
+| #67 Redis Caching        | #18 Database Schema | #29 API Documentation (Charlie) | #41 Rate Limiting (Diana) | #8 README              |
+| #89 Notion Integration   | #25 CI/CD Pipeline  |                                 |                           | #15 Contributing Guide |
+| #91 Admin Dashboard      |                     |                                 |                           |                        |
+
+**Issue Details:**
+
+```markdown
+#23 - Google Sheets Authentication
+Status: In Progress
+Assignee: Alice
+Labels: backend, enhancement
+Sprint: Sprint 1
+Priority: High
+
+Tasks:
+
+- [x] Research Google OAuth 2.0
+- [x] Implement auth flow
+- [ ] Add refresh token logic
+- [ ] Write tests
+- [ ] Update documentation
+```
+
+### 6.5 Project Views
+
+GitHub Projects supports multiple views of the same data:
+
+**Board View (Kanban):**
+
+```
+Visual columns for workflow stages
+Best for: Daily standups, tracking progress
+```
+
+**Table View (Spreadsheet):**
+
+```
+Columns: Issue, Assignee, Status, Priority, Labels, Milestone
+Best for: Filtering, sorting, bulk updates
+```
+
+**Roadmap View (Timeline):**
+
+```
+Timeline showing when issues are planned
+Best for: Sprint planning, release planning
+```
+
+**Custom Fields:**
+
+Add metadata to issues:
+
+```markdown
+Fields:
+
+- Status: To Do / In Progress / Done
+- Priority: Low / Medium / High / Critical
+- Size: Small / Medium / Large / XL
+- Sprint: Sprint 1, Sprint 2, etc.
+- Complexity: 1-10 scale
+```
+
+### 6.6 Using Projects Effectively
+
+**Weekly Planning Meeting:**
+
+```markdown
+1. Review "Done" column - celebrate wins! 🎉
+2. Move completed items to archive
+3. Pull items from "Backlog" to "To Do"
+4. Assign issues to team members
+5. Set sprint goals
+```
+
+**Daily Standup (Async in Comments):**
+
+```markdown
+Each team member comments on their assigned issues:
+
+Alice on #23:
+"Yesterday: Completed OAuth flow implementation
+Today: Working on refresh token logic
+Blockers: Need production Google Cloud credentials"
+
+Bob on #34:
+"Yesterday: Wrote JWT middleware tests
+Today: Addressing PR feedback
+Blockers: None"
+```
+
+**Sprint Retrospective:**
+
+```markdown
+At sprint end, review:
+✅ What went well?
+
+- Completed 8 out of 10 planned issues
+- Good code review turnaround time
+
+❌ What didn't go well?
+
+- Underestimated complexity of Google Sheets integration
+- Too many merge conflicts
+
+🔄 What to improve?
+
+- Better task estimation
+- More frequent syncs with main branch
+```
+
+### 6.7 Advanced Project Features
+
+**Filtering and Searching:**
+
+```markdown
+# Filter by label
+
+is:issue label:bug is:open
+
+# Filter by assignee
+
+is:issue assignee:@me is:open
+
+# Filter by milestone
+
+is:issue milestone:"v1.2.0"
+
+# Complex filter
+
+is:issue is:open label:backend -label:wontfix sort:updated-desc
+```
+
+**Milestones:**
+
+Group issues into releases:
+
+```markdown
+Milestone: v1.2.0 - Google Sheets Integration
+Due Date: March 15, 2026
+Progress: 7/10 issues closed (70%)
+
+Issues:
+#12 Setup Docker ✅
+#23 Google Sheets Auth 🚧
+#34 JWT Middleware 👀
+#41 Rate Limiting ✅
+...
+```
+
+**Project Insights:**
+
+GitHub provides charts and metrics:
+
+```markdown
+Metrics:
+
+- Velocity: Issues closed per week
+- Burndown: Remaining work over time
+- Cycle Time: How long issues stay in progress
+- Throughput: Issues completed per sprint
+```
+
+---
+
+## 📝 Chapter 7: Essential Project Files
+
+Every well-organized project has standard documentation files. Let's create them for NomadAPI.
+
+### 7.1 README.md - Project Overview
+
+The README is the first thing people see. It should answer:
+
+- What is this project?
+- Why does it exist?
+- How do I use it?
+- How do I contribute?
+
+**Complete NomadAPI README.md:**
+
+````markdown
+# NomadAPI Platform 🚀
+
+> A No-Code API Platform for rapid third-party integrations
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://go.dev/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+[Live Demo](https://demo.nomadapi.io) | [Documentation](https://docs.nomadapi.io) | [Contributing](CONTRIBUTING.md) | [Community Discord](https://discord.gg/nomadapi)
+
+## 🎯 What is NomadAPI?
+
+NomadAPI generates REST API endpoints for your favorite No-Code tools in seconds:
+
+- **Google Sheets** 📊 - Turn spreadsheets into databases
+- **Notion** 📝 - API-fy your Notion workspace
+- **Airtable** 🗂 - Instant CRUD endpoints
+- **PostgreSQL** 🐘 - Connect to your database
+- **Redis** ⚡ - Caching and session storage
+
+**No authentication hassles. No API documentation deep-dives. Just instant endpoints.**
+
+## ✨ Features
+
+- 🔐 **Secure Authentication** - OAuth 2.0 for all integrations
+- ⚡ **Instant API Generation** - Get endpoints in under 30 seconds
+- 🔑 **API Key Management** - Generate and revoke keys easily
+- 📊 **Usage Analytics** - Track your API usage in real-time
+- 🚀 **High Performance** - Built with Go for speed
+- 🐳 **Docker Ready** - One-command deployment
+- 📖 **Auto Documentation** - OpenAPI/Swagger docs generated automatically
+
+## 🚀 Quick Start
+
+### For End Users
+
+1. Visit [nomadapi.io](https://nomadapi.io)
+2. Connect your Google Sheet
+3. Get your API endpoints:
+
+```bash
+# Create a row
+curl -X POST https://api.nomadapi.io/v1/sheets/{id}/rows \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "John", "email": "john@example.com"}'
+
+# Get all rows
+curl https://api.nomadapi.io/v1/sheets/{id}/rows \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Update a row
+curl -X PUT https://api.nomadapi.io/v1/sheets/{id}/rows/1 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{"name": "Jane"}'
+
+# Delete a row
+curl -X DELETE https://api.nomadapi.io/v1/sheets/{id}/rows/1 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+````
+
+### For Developers (Local Setup)
+
+**Prerequisites:**
+
+- Docker & Docker Compose
+- Git
+- Node.js 18+
+- Go 1.21+
+
+**Installation:**
+
+```bash
+# 1. Clone the repository
+git clone git@github.com:NomadAPI/NomadAPI.git
+cd NomadAPI
+
+# 2. Copy environment variables
+cp .env.example .env
+
+# 3. Start services
+docker-compose up -d
+
+# 4. Run migrations
+make migrate-up
+
+# 5. Access the app
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8080
+# API Docs: http://localhost:8080/swagger
+```
+
+## 🏗 Architecture
+
+```
+┌─────────────────┐      ┌──────────────────┐      ┌─────────────────┐
+│   Next.js UI    │ ───▶ │   Go API Server  │ ───▶ │   PostgreSQL    │
+│  (Port 3000)    │      │   (Port 8080)    │      │   (Port 5432)   │
+└─────────────────┘      └──────────────────┘      └─────────────────┘
+                                  │
+                                  ├──▶ Redis Cache (Port 6379)
+                                  │
+                                  └──▶ External APIs
+                                       ├── Google Sheets API
+                                       ├── Notion API
+                                       ├── Airtable API
+                                       └── More...
+```
+
+### Tech Stack
+
+**Frontend:**
+
+- [Next.js 14](https://nextjs.org/) - React framework with App Router
+- [TypeScript](https://www.typescriptlang.org/) - Type safety
+- [TailwindCSS](https://tailwindcss.com/) - Utility-first CSS
+- [Shadcn/ui](https://ui.shadcn.com/) - Component library
+
+**Backend:**
+
+- [Go 1.21](https://go.dev/) - Fast, efficient language
+- [Gin](https://gin-gonic.com/) - Web framework
+- [GORM](https://gorm.io/) - ORM for database
+- [JWT](https://jwt.io/) - Authentication
+
+**Database & Cache:**
+
+- [PostgreSQL 15](https://www.postgresql.org/) - Primary database
+- [Redis 7](https://redis.io/) - Caching layer
+
+**DevOps:**
+
+- [Docker](https://www.docker.com/) - Containerization
+- [GitHub Actions](https://github.com/features/actions) - CI/CD
+- [Terraform](https://www.terraform.io/) - Infrastructure as Code
+- [Prometheus](https://prometheus.io/) - Monitoring
+
+## 📚 Documentation
+
+- [API Documentation](docs/API.md)
+- [Architecture Guide](docs/ARCHITECTURE.md)
+- [Deployment Guide](docs/DEPLOYMENT.md)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
+## 🤝 Contributing
+
+We welcome contributions! Whether you're:
+
+- 🐛 Fixing bugs
+- ✨ Adding features
+- 📖 Improving documentation
+- 🎨 Enhancing UI/UX
+
+**Quick Links:**
+
+- [How to Contribute](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Good First Issues](https://github.com/NomadAPI/NomadAPI/labels/good-first-issue)
+- [Development Setup Guide](docs/DEVELOPMENT.md)
+
+**Contributors:**
+
+Thanks to these amazing people! ✨
+
+<a href="https://github.com/NomadAPI/NomadAPI/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=NomadAPI/NomadAPI" />
+</a>
+
+## 📊 Project Status
+
+| Metric   | Status                                                                       |
+| :------- | :--------------------------------------------------------------------------- |
+| Build    | ![Build Status](https://github.com/NomadAPI/NomadAPI/workflows/CI/badge.svg) |
+| Coverage | ![Coverage](https://img.shields.io/codecov/c/github/NomadAPI/NomadAPI)       |
+| Version  | ![Version](https://img.shields.io/github/v/release/NomadAPI/NomadAPI)        |
+| License  | ![License](https://img.shields.io/badge/License-MIT-yellow.svg)              |
+
+## 🗺 Roadmap
+
+### v1.0 (Current)
+
+- [x] Google Sheets Integration
+- [x] Basic CRUD Operations
+- [x] JWT Authentication
+- [x] API Key Management
+
+### v1.1 (In Progress)
+
+- [ ] Notion Integration
+- [ ] Rate Limiting
+- [ ] Webhook Support
+- [ ] Usage Analytics Dashboard
+
+### v2.0 (Planned)
+
+- [ ] Airtable Integration
+- [ ] PostgreSQL Direct Connect
+- [ ] GraphQL API
+- [ ] Team Collaboration Features
+- [ ] Kubernetes Deployment
+
+See full roadmap in [ROADMAP.md](ROADMAP.md)
+
+## 📜 License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+
+## 🌟 Inspiration
+
+Inspired by [NoCodeAPI](https://nocodeapi.com), but open-source and community-driven.
+
+## 💬 Community & Support
+
+- 💬 [Discord Server](https://discord.gg/nomadapi) - Chat with the community
+- 🐦 [Twitter](https://twitter.com/nomadapi) - Latest updates
+- 📧 [Email](mailto:hello@nomadapi.io) - Direct contact
+- 📖 [Blog](https://blog.nomadapi.io) - Tutorials and updates
+
+## 📈 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=NomadAPI/NomadAPI&type=Date)](https://star-history.com/#NomadAPI/NomadAPI&Date)
+
+---
+
+<p align="center">Made with ❤️ by the NomadAPI community</p>
+<p align="center">If this project helps you, give it a ⭐!</p>
+```
+
+### 7.2 CONTRIBUTING.md - Contribution Guidelines
+
+**Complete CONTRIBUTING.md:**
+
+````markdown
+# Contributing to NomadAPI 🤝
+
+First off, thank you for considering contributing to NomadAPI! This project is a community-driven effort to build a powerful No-Code API platform while learning DevOps practices together.
+
+## 📋 Table of Contents
+
+- [Code of Conduct](#code-of-conduct)
+- [How Can I Contribute?](#how-can-i-contribute)
+- [Development Setup](#development-setup)
+- [Git Workflow](#git-workflow)
+- [Coding Standards](#coding-standards)
+- [Commit Guidelines](#commit-guidelines)
+- [Pull Request Process](#pull-request-process)
+- [Project Board](#project-board)
+
+## 📜 Code of Conduct
+
+This project adheres to a Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to hello@nomadapi.io.
+
+**Our Standards:**
+
+- ✅ Be respectful and inclusive
+- ✅ Welcome newcomers warmly
+- ✅ Accept constructive criticism gracefully
+- ✅ Focus on what's best for the community
+- ✅ Show empathy towards others
+- ❌ No harassment, trolling, or personal attacks
+- ❌ No spam or self-promotion
+- ❌ No sharing others' private information
+
+## 🎯 How Can I Contribute?
+
+### Reporting Bugs
+
+Before creating bug reports:
+
+1. Check [existing issues](https://github.com/NomadAPI/NomadAPI/issues)
+2. Use the bug report template
+3. Include detailed reproduction steps
+
+**Bug Report Checklist:**
+
+- [ ] Clear, descriptive title
+- [ ] Steps to reproduce
+- [ ] Expected vs actual behavior
+- [ ] Environment details
+- [ ] Screenshots (if applicable)
+- [ ] Error logs
+
+### Suggesting Features
+
+Before suggesting features:
+
+1. Check if it's already suggested
+2. Ensure it aligns with project goals
+3. Use the feature request template
+
+### Contributing Code
+
+We especially welcome contributions in:
+
+**Frontend:**
+
+- UI/UX improvements
+- New integration dashboards
+- Responsive design fixes
+- Accessibility enhancements
+
+**Backend:**
+
+- New third-party integrations
+- API endpoint optimizations
+- Authentication enhancements
+- Performance improvements
+
+**DevOps:**
+
+- CI/CD pipeline improvements
+- Monitoring and alerting
+- Infrastructure as Code
+- Kubernetes manifests
+- Docker optimizations
+
+**Documentation:**
+
+- Tutorial improvements
+- API documentation
+- Architecture diagrams
+- Code comments
+
+## 🛠 Development Setup
+
+### Prerequisites
+
+- **Docker** - Version 20.10+
+- **Docker Compose** - Version 2.0+
+- **Git** - Version 2.30+
+- **Node.js** - Version 18+
+- **Go** - Version 1.21+
+- **Make** - Usually pre-installed
+
+### Fork and Clone
+
+```bash
+# 1. Fork the repository on GitHub
+
+# 2. Clone YOUR fork
+git clone git@github.com:YOUR_USERNAME/NomadAPI.git
+cd NomadAPI
+
+# 3. Add upstream remote
+git remote add upstream git@github.com:NomadAPI/NomadAPI.git
+
+# 4. Verify remotes
+git remote -v
+```
+````
+
+### Environment Setup
+
+```bash
+# 1. Copy environment file
+cp .env.example .env
+
+# 2. Edit .env with your credentials
+# Get credentials from:
+# - Google Cloud Console (for Google Sheets)
+# - Notion Developers Portal
+# - Airtable Account Settings
+
+# 3. Start development environment
+docker-compose up -d
+
+# 4. Run database migrations
+make migrate-up
+
+# 5. Verify everything works
+curl http://localhost:8080/health
+# Should return: {"status": "ok"}
+```
+
+### Running Tests
+
+```bash
+# Backend tests
+cd backend
+go test ./... -v
+
+# Frontend tests
+cd frontend
+npm test
+
+# Integration tests
+make test-integration
+
+# Test coverage
+go test ./... -cover
+```
+
+## 🔄 Git Workflow
+
+We follow the **Fork and Pull Request** workflow.
+
+### 1. Sync Your Fork
+
+```bash
+git switch main
+git fetch upstream
+git merge upstream/main
+git push origin main
+```
+
+### 2. Create Feature Branch
+
+```bash
+git switch -c feature/your-feature-name
+
+# Branch naming:
+# feature/  - New features
+# fix/      - Bug fixes
+# docs/     - Documentation
+# devops/   - Infrastructure
+# refactor/ - Code refactoring
+```
+
+### 3. Make Changes
+
+- Write clean, readable code
+- Follow coding standards
+- Add tests for new features
+- Update documentation
+
+### 4. Commit Your Work
+
+```bash
+git add .
+git commit -m "feat: add pagination to Google Sheets endpoint"
+# See Commit Guidelines below
+```
+
+### 5. Push and Create PR
+
+```bash
+git push -u origin feature/your-feature-name
+# Then open Pull Request on GitHub
+```
+
+## 📝 Coding Standards
+
+### Go (Backend)
+
+```bash
+# Format code
+go fmt ./...
+
+# Lint code
+golangci-lint run
+
+# Run tests
+go test ./... -v
+```
+
+**Code Style:**
+
+```go
+// ✅ Good
+func GetSheetRows(ctx *gin.Context, sheetID string, limit int) ([]Row, error) {
+    if sheetID == "" {
+        return nil, errors.New("sheetID is required")
+    }
+
+    rows, err := db.Query("SELECT * FROM rows WHERE sheet_id = ? LIMIT ?", sheetID, limit)
+    if err != nil {
+        return nil, fmt.Errorf("failed to query rows: %w", err)
+    }
+
+    return rows, nil
+}
+
+// ❌ Bad
+func get(c *gin.Context, id string, l int) ([]Row, error) {
+    rows, _ := db.Query("SELECT * FROM rows WHERE sheet_id = ? LIMIT ?", id, l)
+    return rows, nil
+}
+```
+
+### JavaScript/TypeScript (Frontend)
+
+```bash
+# Lint and format
+npm run lint
+npm run format
+
+# Type check
+npm run type-check
+```
+
+**Component Style:**
+
+```typescript
+// ✅ Good
+interface SheetCardProps {
+  sheetId: string;
+  title: string;
+  onConnect: (id: string) => Promise<void>;
+}
+
+export function SheetCard({ sheetId, title, onConnect }: SheetCardProps) {
+  const [loading, setLoading] = useState(false);
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      await onConnect(sheetId);
+    } catch (error) {
+      console.error('Connection failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Button onClick={handleConnect} disabled={loading}>
+          {loading ? 'Connecting...' : 'Connect'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+## 📋 Commit Guidelines
+
+We use **Conventional Commits**:
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types:**
+
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation
+- `style:` - Formatting
+- `refactor:` - Code restructuring
+- `test:` - Tests
+- `devops:` - Infrastructure
+- `chore:` - Maintenance
+
+**Examples:**
+
+```bash
+# Simple
+git commit -m "feat: add Notion integration"
+
+# With scope
+git commit -m "fix(auth): resolve JWT expiration issue"
+
+# With body
+git commit -m "feat: implement rate limiting
+
+Add Redis-based rate limiting to prevent API abuse.
+Limits: 100 req/min per API key.
+
+Closes #156"
+
+# Breaking change
+git commit -m "feat!: change API response format
+
+BREAKING CHANGE: All responses now in 'data' field."
+```
+
+## 🔍 Pull Request Process
+
+### Before Submitting
+
+- [ ] Tests pass locally
+- [ ] Code follows style guidelines
+- [ ] Documentation updated
+- [ ] Commits follow Conventional Commits
+- [ ] Branch up-to-date with main
+
+### PR Checklist
+
+```markdown
+## Description
+
+Brief description of changes.
+
+## Related Issue
+
+Closes #123
+
+## Type of Change
+
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation
+
+## Testing
+
+- [ ] Unit tests pass
+- [ ] Integration tests pass
+- [ ] Manual testing completed
+
+## Screenshots
+
+[If applicable]
+
+## Checklist
+
+- [ ] Code follows style guidelines
+- [ ] Self-reviewed code
+- [ ] Commented complex logic
+- [ ] Updated documentation
+- [ ] No new warnings
+- [ ] Added tests
+- [ ] All tests pass
+```
+
+### Review Process
+
+1. Automated checks run
+2. Maintainer reviews code
+3. Address feedback
+4. Get approval
+5. Maintainer merges
+
+## 📊 Project Board
+
+We use GitHub Projects for task management:
+
+1. **Find an issue** in "To Do" column
+2. **Assign yourself** and move to "In Progress"
+3. **Create branch** and work
+4. **Open PR** and move to "In Review"
+5. **After merge**, card moves to "Done"
+
+[View our Project Board](https://github.com/orgs/NomadAPI/projects/1)
+
+## 🏅 Recognition
+
+Contributors recognized in:
+
+- CONTRIBUTORS.md file
+- Release notes
+- Monthly highlights
+- Hall of Fame
+
+## 🆘 Getting Help
+
+- **Discord**: [Join server](https://discord.gg/nomadapi)
+- **GitHub Discussions**: Ask questions
+- **Documentation**: Check docs
+- **Email**: hello@nomadapi.io
+
+## 📚 Resources
+
+- [Go Style Guide](https://go.dev/doc/effective_go)
+- [Next.js Docs](https://nextjs.org/docs)
+- [Conventional Commits](https://www.conventionalcommits.org/)
+
+---
+
+Thank you for contributing! 🚀
+
+````
+
+---
+
+## 🎓 Chapter 8: Step-by-Step Contribution Walkthrough
+
+Let's walk through a complete contribution from start to finish, integrating Issues and Project Board.
+
+### Complete Workflow: Adding Airtable Integration
+
+**Step 1: Check the Project Board**
+
+1. Go to NomadAPI GitHub → Projects
+2. Look at "To Do" column
+3. Find: `#45 - Add Airtable Integration`
+
+**Step 2: Read the Issue**
+
+```markdown
+Issue #45: Add Airtable Integration
+
+Labels: enhancement, backend, good-first-issue
+Assignee: None
+Milestone: v1.1.0
+
+Description:
+Add Airtable as a supported data source.
+
+Acceptance Criteria:
+- [ ] OAuth authentication with Airtable
+- [ ] List user's bases and tables
+- [ ] Generate CRUD endpoints
+- [ ] Handle Airtable field types
+- [ ] Add integration tests
+- [ ] Update documentation
+
+Technical Notes:
+- Use Airtable API v0
+- Follow Google Sheets pattern
+- Store credentials encrypted
+
+Estimated Effort: Large (3-5 days)
+````
+
+**Step 3: Claim the Issue**
+
+```markdown
+Comment on #45:
+"Hi! I'd like to work on this. I'll start by researching the Airtable API
+and will have an initial PR ready in a few days."
+```
+
+Then assign yourself and move card to "In Progress" on project board.
+
+**Step 4: Set Up Development Environment**
+
+```bash
+# Fork and clone (if not done already)
+git clone git@github.com:YOUR_USERNAME/NomadAPI.git
+cd NomadAPI
+
+# Add upstream
+git remote add upstream git@github.com:NomadAPI/NomadAPI.git
+
+# Sync with latest
+git switch main
+git pull upstream main
+
+# Create feature branch
+git switch -c feature/airtable-integration
+
+# Update issue
+# Comment: "Created branch feature/airtable-integration. Starting implementation."
+```
+
+**Step 5: Implement the Feature**
+
+```bash
+# Create necessary files
+touch backend/internal/integrations/airtable.go
+touch backend/internal/handlers/airtable_handler.go
+touch backend/internal/models/airtable_connection.go
+
+# Implement OAuth flow
+# (Write actual code here)
+
+# Commit incrementally
+git add backend/internal/integrations/airtable.go
+git commit -m "feat: add Airtable OAuth authentication (#45)"
+
+git add backend/internal/handlers/airtable_handler.go
+git commit -m "feat: implement Airtable CRUD endpoints (#45)"
+
+git add backend/internal/models/airtable_connection.go
+git commit -m "feat: add Airtable connection model (#45)"
+```
+
+**Step 6: Add Tests**
+
+```bash
+# Write tests
+touch backend/internal/integrations/airtable_test.go
+
+# Run tests
+go test ./internal/integrations -v
+
+# Commit tests
+git add backend/internal/integrations/airtable_test.go
+git commit -m "test: add Airtable integration tests (#45)"
+```
+
+**Step 7: Update Documentation**
+
+```bash
+# Update README
+git add README.md
+git commit -m "docs: add Airtable to supported integrations (#45)"
+
+# Update API docs
+git add docs/API.md
+git commit -m "docs: document Airtable API endpoints (#45)"
+```
+
+**Step 8: Push and Create PR**
+
+```bash
+# Push branch
+git push -u origin feature/airtable-integration
+
+# On GitHub, open PR with this description:
+```
+
+```markdown
+## 📝 Description
+
+Adds Airtable integration to NomadAPI, allowing users to generate CRUD endpoints for their Airtable bases.
+
+## 🎯 Related Issue
+
+Closes #45
+
+## 🔄 Type of Change
+
+- [x] New feature (non-breaking change adding functionality)
+
+## ✨ What's New
+
+### Features
+
+- Airtable OAuth 2.0 authentication
+- List all user bases and tables
+- Auto-generated CRUD endpoints:
+  - `POST /v1/airtable/{baseId}/{tableId}/records`
+  - `GET /v1/airtable/{baseId}/{tableId}/records`
+  - `PUT /v1/airtable/{baseId}/{tableId}/records/{recordId}`
+  - `DELETE /v1/airtable/{baseId}/{tableId}/records/{recordId}`
+
+### Technical Details
+
+- Follows Google Sheets integration pattern
+- Credentials stored encrypted in database
+- Rate limiting with exponential backoff
+- Comprehensive error handling
+
+## 🧪 Testing
+
+- [x] Unit tests for Airtable client (87% coverage)
+- [x] Integration tests for API endpoints
+- [x] Manual testing with real Airtable base
+
+**Test Configuration:**
+
+- Go version: 1.21
+- Airtable API v0
+- Test base: https://airtable.com/appXXX/tblYYY
+
+## 📸 Screenshots
+
+![Airtable Connection UI](screenshots/airtable-connect.png)
+![Generated Endpoints](screenshots/airtable-endpoints.png)
+
+## ✅ Checklist
+
+- [x] Code follows Go style guidelines
+- [x] Self-reviewed code
+- [x] Added comments to complex logic
+- [x] Updated documentation
+- [x] No new warnings
+- [x] Added comprehensive tests
+- [x] All tests pass locally
+- [x] Updated project board
+
+## 📌 Additional Notes
+
+Implementation followed the same pattern as Google Sheets for consistency.
+Airtable rate limits (5 req/sec) handled with token bucket algorithm.
+
+cc @maintainer-username for review
+```
+
+**Step 9: Move PR Card on Project Board**
+
+The automation should move #45 from "In Progress" to "In Review" automatically when PR is opened.
+
+**Step 10: Address Review Feedback**
+
+Maintainer comments:
+
+```markdown
+Reviewer: "Great work! A few comments:
+
+1. Can you add retry logic for network failures?
+2. Please add JSDoc comments to the frontend components
+3. Minor: Line 47 - use const instead of let"
+```
+
+Your response:
+
+```bash
+# Make changes
+# Edit files...
+
+# Commit fixes
+git add backend/internal/integrations/airtable.go
+git commit -m "feat: add retry logic for Airtable API calls (#45)"
+
+git add frontend/components/AirtableConnect.tsx
+git commit -m "docs: add JSDoc comments to Airtable components (#45)"
+
+git add backend/internal/handlers/airtable_handler.go
+git commit -m "style: use const instead of let (#45)"
+
+# Push updates
+git push
+
+# Comment on PR
+"All feedback addressed! Added retry logic and updated documentation as requested."
+```
+
+**Step 11: PR Gets Approved and Merged**
+
+```markdown
+Maintainer: "LGTM! Great contribution 🎉"
+[Merges PR]
+```
+
+Automation moves card to "Done" column.
+
+**Step 12: Cleanup**
+
+```bash
+# Switch to main
+git switch main
+
+# Pull latest (includes your merged changes)
+git pull upstream main
+
+# Push to your fork
+git push origin main
+
+# Delete feature branch
+git branch -d feature/airtable-integration
+git push origin --delete feature/airtable-integration
+```
+
+**Step 13: Celebrate and Update**
+
+```markdown
+Comment on #45:
+"Merged! 🎉 Airtable integration is now live in main branch.
+Will be included in v1.1.0 release.
+
+Thanks @maintainer for the thorough review!"
+```
+
+---
+
+## 🧠 Chapter 9: Advanced Git Concepts
+
+### 9.1 Git Stash
+
+Temporarily save changes without committing:
+
+```bash
+# Save current changes
+git stash
+
+# Save with message
+git stash save "WIP: working on authentication"
+
+# List stashes
+git stash list
+# stash@{0}: WIP: working on authentication
+# stash@{1}: On main: experimenting
+
+# Apply most recent stash
+git stash pop
+
+# Apply specific stash
+git stash apply stash@{1}
+
+# Delete a stash
+git stash drop stash@{0}
+
+# Clear all stashes
+git stash clear
+```
+
+**Use Case:**
+
+```bash
+# You're working on a feature
+git switch feature/new-auth
+
+# Emergency! Need to fix a bug in main
+git stash save "WIP: OAuth integration"
+
+git switch main
+# Fix the bug
+git commit -m "fix: critical security patch"
+
+git switch feature/new-auth
+git stash pop  # Resume your work
+```
+
+### 9.2 Git Rebase (Interactive)
+
+Clean up your commit history before submitting a PR:
+
+```bash
+# View last 5 commits
+git log --oneline -5
+
+# Start interactive rebase
+git rebase -i HEAD~5
+```
+
+Editor opens with:
+
+```
+pick a1b2c3d feat: add Airtable auth
+pick d4e5f6g WIP: testing stuff
+pick g7h8i9j fix typo
+pick j0k1l2m feat: add CRUD endpoints
+pick m3n4o5p fix: handle errors properly
+
+# Commands:
+# p, pick = use commit
+# r, reword = use commit, but edit message
+# e, edit = use commit, but stop for amending
+# s, squash = use commit, but meld into previous
+# f, fixup = like squash, but discard message
+# d, drop = remove commit
+```
+
+**Cleaning up:**
+
+```
+pick a1b2c3d feat: add Airtable auth
+squash d4e5f6g WIP: testing stuff
+squash g7h8i9j fix typo
+pick j0k1l2m feat: add CRUD endpoints
+squash m3n4o5p fix: handle errors properly
+```
+
+Result: 5 commits become 2 clean commits.
+
+### 9.3 Cherry-Pick
+
+Apply a specific commit from another branch:
+
+```bash
+# You're on feature-A
+# You want commit abc123 from feature-B
+
+git cherry-pick abc123
+
+# If conflicts, resolve them
+git add .
+git cherry-pick --continue
+
+# Abort if needed
+git cherry-pick --abort
+```
+
+### 9.4 Git Reflog
+
+Your safety net - see everything you've done:
+
+```bash
+# View all actions
+git reflog
+
+# Output:
+# a1b2c3d HEAD@{0}: commit: feat: add feature
+# d4e5f6g HEAD@{1}: rebase: feat: update code
+# g7h8i9j HEAD@{2}: checkout: moving from main to feature
+
+# Recover deleted branch
+git checkout -b recovered-branch HEAD@{2}
+
+# Undo last 3 commits
+git reset --hard HEAD@{3}
+```
+
+### 9.5 Git Blame
+
+Find out who wrote specific lines:
+
+```bash
+# See who modified each line
+git blame src/auth.go
+
+# Output:
+# a1b2c3d (Alice 2026-01-15) func Login(user string) {
+# d4e5f6g (Bob   2026-01-20)     token := generateToken(user)
+# g7h8i9j (Alice 2026-01-22)     return token
+# }
+
+# Blame specific lines
+git blame -L 10,20 src/auth.go
+```
+
+### 9.6 Git Tags
+
+Mark important points in history (releases):
+
+```bash
+# Create annotated tag
+git tag -a v1.0.0 -m "Release version 1.0.0"
+
+# Create lightweight tag
+git tag v1.0.0
+
+# List tags
+git tag
+
+# Push tags to remote
+git push origin v1.0.0
+
+# Push all tags
+git push origin --tags
+
+# Delete tag
+git tag -d v1.0.0
+git push origin :refs/tags/v1.0.0
+
+# Checkout a tag
+git checkout v1.0.0
+```
+
+### 9.7 Git Bisect
+
+Find which commit introduced a bug:
+
+```bash
+# Start bisect
+git bisect start
+
+# Mark current as bad
+git bisect bad
+
+# Mark a known good commit
+git bisect good v1.0.0
+
+# Git checks out middle commit
+# Test if bug exists
+# If yes:
+git bisect bad
+# If no:
+git bisect good
+
+# Repeat until Git finds the culprit
+
+# End bisect
+git bisect reset
+```
+
+---
+
+## 🚨 Chapter 10: Common Git Mistakes & Fixes
+
+### 10.1 "I committed to the wrong branch!"
+
+**Scenario:** You meant to create a feature branch but committed to `main`.
+
+```bash
+# Don't panic! Note your commit hash
+git log --oneline -1
+# a1b2c3d feat: add new feature
+
+# Create branch from current position
+git branch feature/correct-branch
+
+# Reset main to before your commit
+git reset --hard HEAD~1
+
+# Switch to correct branch
+git switch feature/correct-branch
+# Your commit is safe here!
+```
+
+### 10.2 "I need to undo my last commit!"
+
+**Keep changes, undo commit:**
+
+```bash
+git reset --soft HEAD~1
+# Changes stay in staging area
+```
+
+**Keep changes, unstage them:**
+
+```bash
+git reset HEAD~1
+# Changes stay in working directory
+```
+
+**Discard everything:**
+
+```bash
+git reset --hard HEAD~1
+# ⚠️ WARNING: Changes are lost!
+```
+
+### 10.3 "I need to change my last commit message!"
+
+```bash
+# If not pushed yet
+git commit --amend -m "feat: correct commit message"
+
+# If already pushed (your feature branch only!)
+git commit --amend -m "feat: correct commit message"
+git push --force origin your-branch
+```
+
+### 10.4 "I accidentally deleted a file!"
+
+```bash
+# Restore from last commit
+git checkout HEAD -- filename.txt
+
+# Modern syntax
+git restore filename.txt
+
+# Restore all deleted files
+git restore .
+```
+
+### 10.5 "I want to unstage a file!"
+
+```bash
+# Unstage specific file
+git reset HEAD filename.txt
+
+# Modern syntax
+git restore --staged filename.txt
+
+# Unstage all
+git reset HEAD
+```
+
+### 10.6 "Help! I broke everything!"
+
+```bash
+# Find the good commit
+git reflog
+
+# Output:
+# a1b2c3d HEAD@{0}: bad changes
+# d4e5f6g HEAD@{1}: good commit
+# g7h8i9j HEAD@{2}: even earlier
+
+# Reset to good state
+git reset --hard HEAD@{1}
+
+# Or use commit hash
+git reset --hard d4e5f6g
+```
+
+### 10.7 "I need to remove a commit from history!"
+
+**⚠️ Only do this on your own feature branch, never on shared branches!**
+
+```bash
+# Remove last commit
+git reset --hard HEAD~1
+
+# Remove specific commit (interactive rebase)
+git rebase -i HEAD~5
+# Mark the commit as 'drop'
+
+# Force push
+git push --force origin your-branch
+```
+
+### 10.8 "I committed a secret/password!"
+
+**🚨 CRITICAL - Act immediately:**
+
+```bash
+# 1. Remove from latest commit
+git reset --soft HEAD~1
+# Remove the secret from file
+git add .
+git commit -m "feat: add feature (without secrets)"
+
+# 2. If already pushed, you need to:
+# - Change the secret immediately
+# - Rewrite history (dangerous!)
+git filter-branch --force --index-filter \
+  "git rm --cached --ignore-unmatch path/to/file" \
+  --prune-empty --tag-name-filter cat -- --all
+
+# 3. Force push (notify team first!)
+git push --force --all
+
+# 4. Change the exposed secret in the service
+```
+
+### 10.9 "I have merge conflicts!"
+
+```bash
+# Start merge
+git merge feature-branch
+# CONFLICT in src/config.go
+
+# Open the file
+# <<<<<<< HEAD
+# const VERSION = "1.0"
+# =======
+# const VERSION = "2.0"
+# >>>>>>> feature-branch
+
+# Edit to keep what you want
+const VERSION = "2.0"
+
+# Mark as resolved
+git add src/config.go
+
+# Complete merge
+git commit
+
+# Abort merge if needed
+git merge --abort
+```
+
+### 10.10 "I need to sync my fork with upstream!"
+
+```bash
+# Add upstream (if not added)
+git remote add upstream git@github.com:NomadAPI/NomadAPI.git
+
+# Fetch upstream changes
+git fetch upstream
+
+# Switch to main
+git switch main
+
+# Merge upstream changes
+git merge upstream/main
+
+# Push to your fork
+git push origin main
+
+# Update feature branch
+git switch feature/your-branch
+git rebase main
+```
+
+---
+
+## 🎯 Chapter 11: Best Practices & Tips
+
+### 11.1 Daily Workflow Checklist
+
+**Morning Routine:**
+
+```bash
+# 1. Sync main branch
+git switch main
+git pull upstream main
+git push origin main
+
+# 2. Update feature branch
+git switch your-feature
+git rebase main
+
+# 3. Check status
+git status
+```
+
+**Before Committing:**
+
+- [ ] Run tests (`go test ./...` and `npm test`)
+- [ ] Run linters (`go fmt`, `npm run lint`)
+- [ ] Review changes (`git diff`)
+- [ ] Write clear commit message
+- [ ] Commit logically related changes together
+
+**Before Creating PR:**
+
+- [ ] Rebase on latest main
+- [ ] Clean up commits (interactive rebase)
+- [ ] Run full test suite
+- [ ] Update documentation
+- [ ] Fill out PR template completely
+- [ ] Self-review your code
+
+**After PR is Merged:**
+
+- [ ] Sync main branch
+- [ ] Delete feature branch (local and remote)
+- [ ] Move to next task on project board
+
+### 11.2 Git Aliases
+
+Save time with aliases:
+
+```bash
+# Add to ~/.gitconfig
+
+[alias]
+    # Shortcuts
+    co = checkout
+    br = branch
+    ci = commit
+    st = status
+
+    # Useful commands
+    unstage = reset HEAD --
+    last = log -1 HEAD
+    visual = log --oneline --graph --decorate --all
+    contributors = shortlog --summary --numbered
+
+    # Complex aliases
+    cleanup = "!git branch --merged | grep -v '\\*' | xargs -n 1 git branch -d"
+    undo = reset --soft HEAD^
+    amend = commit --amend --no-edit
+```
+
+**Usage:**
+
+```bash
+git co main          # instead of git checkout main
+git visual           # see pretty graph
+git cleanup          # delete merged branches
+git undo             # undo last commit
+```
+
+### 11.3 .gitignore Best Practices
+
+**Global .gitignore for your system:**
+
+```bash
+# Create global gitignore
+touch ~/.gitignore_global
+
+# Configure Git to use it
+git config --global core.excludesfile ~/.gitignore_global
+```
+
+**~/.gitignore_global:**
+
+```
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+```
+
+**Project .gitignore:**
+
+```
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build
+/backend/bin/
+/frontend/.next/
+/frontend/out/
+dist/
+
+# Testing
+coverage/
+*.coverprofile
+
+# Temporary
+tmp/
+temp/
+*.tmp
+```
+
+### 11.4 Commit Message Best Practices
+
+**The Seven Rules:**
+
+1. **Separate subject from body** with a blank line
+2. **Limit subject line** to 50 characters
+3. **Capitalize** the subject line
+4. **No period** at end of subject
+5. **Use imperative mood** ("add" not "added")
+6. **Wrap body** at 72 characters
+7. **Explain what and why**, not how
+
+**Good Examples:**
+
+```bash
+# Simple
+git commit -m "feat: add user authentication"
+
+# With body
+git commit -m "fix: prevent race condition in user login
+
+The login handler was not thread-safe, causing occasional
+failures under load. This adds mutex protection around the
+session creation logic.
+
+Fixes #234"
+
+# Breaking change
+git commit -m "feat!: redesign API response structure
+
+BREAKING CHANGE: All endpoints now return data in a 'data'
+wrapper object instead of at the root level.
+
+Before: { id: 1, name: 'test' }
+After: { data: { id: 1, name: 'test' } }
+
+Migration guide: https://docs.nomadapi.io/migration/v2"
+```
+
+### 11.5 Branch Management
+
+**Keep branches short-lived:**
+
+- Create branch → Work → PR → Merge → Delete
+- Aim for < 1 week from creation to merge
+- Don't let branches get too far behind main
+
+**Branch naming conventions:**
+
+```
+feature/add-airtable-integration    ✅
+feature/oauth-refresh-tokens        ✅
+fix/database-connection-leak        ✅
+docs/update-api-documentation       ✅
+devops/add-kubernetes-manifests     ✅
+
+new-feature                         ❌ (not descriptive)
+fix-bug                             ❌ (not specific)
+johns-branch                        ❌ (not purpose-based)
+```
+
+**Delete merged branches:**
+
+```bash
+# Delete local branch
+git branch -d feature/merged-feature
+
+# Delete remote branch
+git push origin --delete feature/merged-feature
+
+# Clean up all merged branches
+git branch --merged | grep -v '\*\|main\|develop' | xargs -n 1 git branch -d
+```
+
+### 11.6 Security Best Practices
+
+**Never commit:**
+
+- API keys
+- Passwords
+- SSH private keys
+- JWT secrets
+- Database credentials
+- OAuth client secrets
+
+**Use environment variables:**
+
+```bash
+# .env (gitignored)
+DATABASE_PASSWORD=super_secret_password
+JWT_SECRET=another_secret
+
+# .env.example (committed)
+DATABASE_PASSWORD=your_password_here
+JWT_SECRET=your_secret_here
+```
+
+**Check before committing:**
+
+```bash
+# Review what you're about to commit
+git diff --staged
+
+# Search for potential secrets
+git diff --staged | grep -i "password\|secret\|key"
+```
+
+**If you committed a secret:**
+
+1. Change the secret immediately in the service
+2. Remove from Git history (see Chapter 10.8)
+3. Add the file pattern to .gitignore
+4. Use a secrets scanner like `git-secrets` or `truffleHog`
+
+### 11.7 Code Review Tips
+
+**For Authors:**
+
+- Keep PRs small (< 400 lines changed)
+- Write clear PR descriptions
+- Respond to feedback promptly
+- Don't take feedback personally
+- Mark conversations as resolved
+- Thank reviewers for their time
+
+**For Reviewers:**
+
+- Be kind and constructive
+- Ask questions, don't command
+- Praise good code
+- Explain the "why" behind suggestions
+- Approve when ready, not perfect
+
+**Good Review Comments:**
+
+```markdown
+✅ "Great solution! Have you considered using a switch statement
+instead? It might be more readable for future maintainers."
+
+✅ "This looks good. Could you add a comment explaining why we're
+using exponential backoff here? It's not immediately obvious."
+
+✅ "Nice work on the tests! They cover all the edge cases I can think of."
+
+❌ "This is wrong. Fix it."
+❌ "Why didn't you do it this way?"
+❌ "I would never write it like this."
+```
+
+---
+
+## 📚 Chapter 12: Resources & Next Steps
+
+### 12.1 Essential Git Resources
+
+**Official Documentation:**
+
+- [Git Official Docs](https://git-scm.com/doc) - Comprehensive reference
+- [GitHub Docs](https://docs.github.com) - GitHub-specific features
+- [Pro Git Book](https://git-scm.com/book/en/v2) - Free, detailed guide
+
+**Interactive Learning:**
+
+- [Learn Git Branching](https://learngitbranching.js.org/) - Visual and interactive
+- [GitHub Skills](https://skills.github.com/) - Hands-on tutorials
+- [Git Immersion](https://gitimmersion.com/) - Step-by-step guide
+- [Oh My Git!](https://ohmygit.org/) - Game to learn Git
+
+**Cheat Sheets:**
+
+- [GitHub Git Cheat Sheet](https://education.github.com/git-cheat-sheet-education.pdf)
+- [Atlassian Git Cheat Sheet](https://www.atlassian.com/git/tutorials/atlassian-git-cheatsheet)
+- [Git Quick Reference](https://ndpsoftware.com/git-cheatsheet.html) - Visual
+
+**Video Tutorials:**
+
+- [Git & GitHub Crash Course](https://www.youtube.com/watch?v=RGOj5yH7evk) - Traversy Media
+- [Git Tutorial for Beginners](https://www.youtube.com/watch?v=8JJ101D3knE) - Programming with Mosh
+- [Advanced Git Techniques](https://www.youtube.com/watch?v=Uszj_k0DGsg) - FreeCodeCamp
+
+### 12.2 Tools & Extensions
+
+**GUI Clients:**
+
+- [GitKraken](https://www.gitkraken.com/) - Cross-platform, visual
+- [Sourcetree](https://www.sourcetreeapp.com/) - Free, powerful
+- [GitHub Desktop](https://desktop.github.com/) - Simple, beginner-friendly
+- [Tower](https://www.git-tower.com/) - Premium, advanced features
+
+**VS Code Extensions:**
+
+- GitLens - Supercharge Git in VS Code
+- Git Graph - Visualize branches
+- Git History - View file history
+- GitHub Pull Requests - Manage PRs in editor
+
+**Command Line Tools:**
+
+- [tig](https://jonas.github.io/tig/) - Text-mode interface for Git
+- [lazygit](https://github.com/jesseduffield/lazygit) - Terminal UI
+- [gh](https://cli.github.com/) - GitHub CLI tool
+- [git-extras](https://github.com/tj/git-extras) - Extra Git utilities
+
+### 12.3 NomadAPI Learning Path
+
+You've completed the Git fundamentals! Here's your path forward:
+
+**Immediate Next Steps:**
+
+1. **Make your first contribution:**
+
+   - Find a `good-first-issue` on [NomadAPI Issues](https://github.com/NomadAPI/NomadAPI/issues)
+   - Comment that you want to work on it
+   - Follow the workflow you learned
+   - Submit your first PR!
+
+2. **Join the community:**
+
+   - [Discord Server](https://discord.gg/nomadapi) - Daily discussions
+   - [GitHub Discussions](https://github.com/NomadAPI/NomadAPI/discussions) - Long-form
+   - [Twitter](https://twitter.com/nomadapi) - Updates
+   - [Weekly Office Hours](https://calendar.nomadapi.io) - Live help
+
+3. **Explore the codebase:**
+   - Read existing code
+   - Run the project locally
+   - Experiment in a safe branch
+   - Ask questions in Discord
+
+**Next Courses in DevOps Series:**
+
+1. **Docker & Containerization** (2 weeks)
+
+   - Understanding containers
+   - Writing Dockerfiles
+   - Docker Compose
+   - Container orchestration basics
+
+2. **CI/CD with GitHub Actions** (2 weeks)
+
+   - Automated testing
+   - Build pipelines
+   - Deployment automation
+   - Release management
+
+3. **Kubernetes Fundamentals** (3 weeks)
+
+   - Container orchestration
+   - Deployments and services
+   - ConfigMaps and Secrets
+   - Scaling applications
+
+4. **Infrastructure as Code** (2 weeks)
+
+   - Terraform basics
+   - Managing cloud resources
+   - State management
+   - Best practices
+
+5. **Monitoring & Observability** (2 weeks)
+   - Prometheus metrics
+   - Grafana dashboards
+   - Log aggregation
+   - Alerting
+
+### 12.4 Getting Help
+
+**Stuck on something?**
+
+1. **Search first:**
+
+   - GitHub Issues
+   - Stack Overflow
+   - Project documentation
+
+2. **Ask the community:**
+
+   - Discord #help channel
+   - GitHub Discussions
+   - Issue comments
+
+3. **When asking for help:**
+   - Describe what you tried
+   - Share error messages
+   - Show relevant code
+   - Explain expected vs actual behavior
+
+**Example good question:**
+
+```markdown
+**Problem:** Getting merge conflict in src/config.go
+
+**What I tried:**
+
+1. git merge main
+2. Conflict appears in config.go lines 15-20
+3. Not sure which version to keep
+
+**Error:**
+<<<<<<< HEAD
+const API_VERSION = "v1"
+=======
+const API_VERSION = "v2"
+
+> > > > > > > main
+
+**Question:** Which version should I keep? Or should I combine them somehow?
+
+**Context:**
+
+- Working on feature/airtable-integration
+- Main branch was updated yesterday
+- Both changes look important
+```
+
+---
+
+## 🎓 Conclusion: Your Git Journey
+
+### You've Learned:
+
+✅ **Git Fundamentals**
+
+- What Git is and why it exists
+- How version control works
+- The three states of Git
+- Essential commands
+
+✅ **Branching & Merging**
+
+- Creating and switching branches
+- Merging strategies
+- Resolving conflicts
+- Rebasing for clean history
+
+✅ **Collaboration**
+
+- Fork workflow
+- Remote repositories
+- Pull requests
+- Code reviews
+
+✅ **GitHub Features**
+
+- Issues for task tracking
+- Project boards for management
+- Labels and milestones
+- Templates and automation
+
+✅ **Best Practices**
+
+- Commit message conventions
+- Branch naming
+- Security practices
+- Code review etiquette
+
+✅ **Advanced Techniques**
+
+- Interactive rebase
+- Git stash
+- Cherry-pick
+- Reflog for recovery
+
+### Remember:
+
+> **"The best way to learn Git is to use Git."**
+
+Don't just read about it - clone NomadAPI, make changes, commit them, and push. Break things in a safe branch, then fix them. Every mistake is a learning opportunity.
+
+### Your Action Plan:
+
+**This Week:**
+
+1. [ ] Set up Git and GitHub
+2. [ ] Fork NomadAPI
+3. [ ] Clone to your machine
+4. [ ] Make a small documentation fix
+5. [ ] Submit your first PR
+
+**This Month:**
+
+1. [ ] Complete 3 contributions
+2. [ ] Help another beginner
+3. [ ] Start using Git for personal projects
+4. [ ] Join a community discussion
+
+**This Year:**
+
+1. [ ] Become a regular contributor
+2. [ ] Help maintain the project
+3. [ ] Master advanced Git techniques
+4. [ ] Mentor new contributors
+
+### Final Words
+
+You're now part of the NomadAPI community and the wider open-source world. Every contribution, no matter how small, makes a difference:
+
+- Fix a typo → Helps thousands of readers
+- Add a feature → Powers someone's app
+- Answer a question → Unblocks a fellow developer
+- Review code → Improves project quality
+
+**We can't wait to see what you build!**
+
+---
+
+## 📖 Quick Reference
+
+### Most Used Commands
+
+```bash
+# Setup
+git config --global user.name "Your Name"
+git config --global user.email "your@email.com"
+
+# Clone and sync
+git clone <url>
+git pull origin main
+git fetch upstream
+
+# Branch
+git switch -c feature/name
+git switch main
+git branch -d feature/name
+
+# Stage and commit
+git add .
+git commit -m "type: message"
+git push origin branch-name
+
+# Merge and rebase
+git merge branch-name
+git rebase main
+
+# Undo
+git reset --soft HEAD~1
+git restore filename
+git stash
+
+# View
+git status
+git log --oneline
+git diff
+```
+
+### Conventional Commit Types
+
+```
+feat:     New feature
+fix:      Bug fix
+docs:     Documentation
+style:    Formatting
+refactor: Code restructuring
+test:     Tests
+devops:   Infrastructure
+chore:    Maintenance
+```
+
+### Branch Naming
+
+```
+feature/description
+fix/bug-description
+docs/topic
+devops/infrastructure
+refactor/component
+```
+
+---
+
+## 🌟 Thank You!
+
+Thank you for completing this Git tutorial. You're now ready to contribute to NomadAPI and any open-source project.
+
+**Stay Connected:**
+
+- 💬 Discord: [discord.gg/nomadapi](https://discord.gg/nomadapi)
+- 🐦 Twitter: [@nomadapi](https://twitter.com/nomadapi)
+- 📧 Email: hello@nomadapi.io
+- 🌐 Website: [nomadapi.io](https://nomadapi.io)
+
+**Ready to contribute?**
+
+👉 [View Open Issues](https://github.com/NomadAPI/NomadAPI/issues)
+👉 [Check Project Board](https://github.com/orgs/NomadAPI/projects/1)
+👉 [Read CONTRIBUTING.md](https://github.com/NomadAPI/NomadAPI/blob/main/CONTRIBUTING.md)
+
+---
