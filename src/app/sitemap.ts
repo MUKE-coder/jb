@@ -37,6 +37,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/golang",
     "/golang/features",
     "/golang/playground",
+    "/devops/git",
   ].map((route) => ({
     url: `${SITE_INFO.url}${route}`,
     lastModified: dayjs().toISOString(),

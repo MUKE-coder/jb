@@ -46,14 +46,14 @@ export const roadmapPhases: Phase[] = [
         type: "documentation",
       },
       {
-        title: "Pro Git Book",
-        url: "https://git-scm.com/book/en/v2",
+        title: "Learn Git Docs by JB",
+        url: "https://jb.desishub.com/blog/learn-git",
         type: "article",
       },
       {
-        title: "GitHub Learning Lab",
-        url: "https://github.com/skills",
-        type: "course",
+        title: "Learn Git Visualizer",
+        url: "https://jb.desishub.com/devops/git",
+        type: "article",
       },
     ],
     projects: [
@@ -64,7 +64,7 @@ export const roadmapPhases: Phase[] = [
         difficulty: "beginner",
       },
       {
-        title: "Collaborative Project",
+        title: "Collaborative Project : NomadAPI",
         description: "Contribute to an open-source project using Git workflows",
         difficulty: "intermediate",
       },
