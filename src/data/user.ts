@@ -42,16 +42,17 @@ export const USER = {
     },
   ],
   about: `
-Hello, World! I am JB (Muke Johnbaptist) — a Fullstack Developer and entrepreneur passionate about building enterprise-level applications and empowering others through programming education.
+Hello, World! I'm JB (Muke Johnbaptist) — a Fullstack Developer, entrepreneur, and educator passionate about building enterprise-level applications and empowering the next generation of developers.
 
-As the founder of Desishub Technologies, I lead a tech company that builds robust systems and applications. I specialize in Next.js, Node.js, and Hono.js as my core technologies for daily development work.
+As the founder and CEO of Desishub Technologies, a registered tech company in Uganda, I lead a team that builds robust, production-ready systems and applications for businesses across various industries. I specialize in modern tech stacks including Next.js, TypeScript, React Native, Node.js, Hono.js, Golang, and Prisma — technologies I use daily to craft scalable solutions.
 
-I'm also the creator behind the JB WEB DEVELOPER YouTube channel, where I share programming tutorials with over 13.3K subscribers. Through my course platform Nextjs Academy, I create clean, job-oriented courses that help developers level up their skills.
+Beyond building software, I'm deeply committed to tech education. I'm the creator behind the JB WEB DEVELOPER YouTube channel, where I share programming tutorials with over 14.6K subscribers. Through my course platform Nextjs Academy, I've created 9+ clean, job-oriented courses that have helped over 300 online students level up their skills. In total, I've trained more than 100 students through offline bootcamps and coding schools, transforming beginners into confident, self-reliant developers.
 
-As a digital entrepreneur, I've generated over $15K in revenue through online courses and digital products including source codes. I spend most of my time building enterprise-level applications, teaching programming and business concepts, creating educational content, organizing meetups, and running bootcamps.
+As a digital entrepreneur, I've generated over $15K in revenue through online courses, digital products, and source codes. My flagship course, the Modern Fullstack Next.js with TypeScript Course, has become a go-to resource for aspiring developers.
 
-When I'm not coding or creating content, you'll find me working out, watching netflix or watching football as a passionate Manchester United FC supporter.
+I'm also a passionate public and motivational speaker, having been featured at industry events discussing topics like the future of web development and building successful tech careers.
 
+When I'm not coding, creating content, or organizing meetups, you'll find me working out, watching Netflix, or cheering on Manchester United FC.
 Let's connect and build something amazing together!
   `,
   avatar:
