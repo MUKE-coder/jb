@@ -42,9 +42,9 @@ export const USER = {
     },
   ],
   about: `
-Hello, World! I'm JB (Muke Johnbaptist) — a Fullstack Developer, entrepreneur, and educator passionate about building enterprise-level applications and empowering the next generation of developers.
+Hello, World! I'm JB (Muke Johnbaptist) — a Fullstack Developer, AI Engineer, entrepreneur, and educator passionate about building enterprise-level applications, intelligent AI solutions, and empowering the next generation of developers.
 
-As the founder and CEO of Desishub Technologies, a registered tech company in Uganda, I lead a team that builds robust, production-ready systems and applications for businesses across various industries. I specialize in modern tech stacks including Next.js, TypeScript, React Native, Node.js, Hono.js, Golang, and Prisma — technologies I use daily to craft scalable solutions.
+As the founder and CEO of Desishub Technologies, a registered tech company in Uganda, I lead a team that builds robust, production-ready systems and applications for businesses across various industries. I specialize in modern tech stacks including Next.js, TypeScript, React Native, Node.js, Hono.js, Golang, and Prisma. As an AI Engineer and Consultant, I build advanced AI solutions including RAG (Retrieval-Augmented Generation) chatbots and custom AI tools like the Desishub Insider suite — technologies I use daily to craft scalable, intelligent solutions.
 
 Beyond building software, I'm deeply committed to tech education. I'm the creator behind the JB WEB DEVELOPER YouTube channel, where I share programming tutorials with over 14.6K subscribers. Through my course platform Nextjs Academy, I've created 9+ clean, job-oriented courses that have helped over 300 online students level up their skills. In total, I've trained more than 100 students through offline bootcamps and coding schools, transforming beginners into confident, self-reliant developers.
 
