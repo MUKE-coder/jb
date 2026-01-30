@@ -9,7 +9,7 @@ export const USER = {
   flipSentences: [
     "Fullstack Developer | Building enterprise-level applications",
     "Founder of Desishub Technologies",
-    "YouTube Creator with 13.3K subscribers",
+    "YouTube Creator with 14.7K subscribers",
     "Course Creator & Digital Product Entrepreneur",
   ],
   address: "Kampala, Central Region, Uganda", // Based on system location

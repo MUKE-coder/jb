@@ -181,7 +181,7 @@ export const PROJECTS: Project[] = [
       "Node.js Content",
       "React Education",
     ],
-    description: `Educational YouTube channel focused on modern web development with 13.3K+ subscribers.
+    description: `Educational YouTube channel focused on modern web development with 14.7K+ subscribers.
 - High-quality programming tutorials and courses
 - Covering Next.js, React, Node.js, and modern web technologies
 - Step-by-step project builds and coding walkthroughs

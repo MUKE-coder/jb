@@ -70,7 +70,7 @@ export function SiteFooter() {
               rel="noopener"
             >
               <Youtube className="size-4" />
-              <span>YouTube (13.3K)</span>
+              <span>YouTube (14.7K)</span>
             </a>
             <a
               className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"

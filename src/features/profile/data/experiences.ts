@@ -78,7 +78,7 @@ export const EXPERIENCES: Experience[] = [
         },
         employmentType: "Part-time",
         icon: "design",
-        description: `- Created and manage JB WEB DEVELOPER YouTube channel with 13.3K+ subscribers.
+        description: `- Created and manage JB WEB DEVELOPER YouTube channel with 14.7K+ subscribers.
 - Produce high-quality programming tutorials and educational content.
 - Cover topics including Next.js, Node.js, React, and modern web development.
 - Built engaged community of developers and programming enthusiasts.
