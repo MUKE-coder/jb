@@ -1,0 +1,1127 @@
+---
+title: "Deployment Guide: Go API with PostgreSQL on VPS using Docker and Dokploy"
+description: "This guide provides a comprehensive, step-by-step walkthrough for deploying your Go API application. We will start with the basics of Docker and incrementally build up to a production-ready deployment on a VPS using Dokploy."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfr34PajROx6ybt2CcUd1VSITq573GszPLuZkK
+category: development
+createdAt: 2026-02-02
+updatedAt: 2026-02-02
+---
+
+# Deployment Guide: Go API with PostgreSQL on VPS using Docker and Dokploy
+
+This guide provides a comprehensive, step-by-step walkthrough for deploying your Go API application. We will start with the basics of Docker and incrementally build up to a production-ready deployment on a VPS using Dokploy.
+
+---
+
+## Table of Contents
+
+1. [Why Docker?](#1-why-docker)
+2. [Incremental Docker Setup](#2-incremental-docker-setup)
+3. [Database Strategy: Docker vs Standalone](#3-database-strategy-docker-vs-standalone)
+4. [Monitoring: Do You Need Prometheus and Grafana?](#4-monitoring-do-you-need-prometheus-and-grafana)
+5. [Deployment with Dokploy](#5-deployment-with-dokploy)
+6. [Complete Production Setup](#6-complete-production-setup)
+
+---
+
+## 1. Why Docker?
+
+Before diving into the setup, it is essential to understand why Docker is the industry standard for modern deployments.
+
+| Feature                   | Benefit for Your Go App                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Consistency**           | Ensures the application runs exactly the same on your local machine, staging, and the production VPS.                      |
+| **Isolation**             | Keeps your application and its dependencies (like C libraries or Go runtimes) separate from the host OS.                   |
+| **Resource Control**      | Allows you to set hard limits on how much Memory and CPU your app can consume, preventing it from crashing the VPS.        |
+| **Simplified Networking** | Connects your Go API to PostgreSQL over a private internal network, keeping the database invisible to the public internet. |
+
+### What We'll Build
+
+By the end of this guide, you'll have:
+
+- A containerized Go API with PostgreSQL
+- Monitoring dashboards showing memory and disk usage
+- Automated deployment via Dokploy
+- Production-ready setup with health checks and backups
+
+---
+
+## 2. Incremental Docker Setup
+
+We will build your Docker configuration in three phases, starting from a simple setup and moving toward an optimized production version.
+
+### Phase 1: The Basic Dockerfile
+
+A simple Dockerfile for a Go application uses a base image, copies the code, and builds the binary.
+
+```dockerfile
+# Start with the official Go image
+FROM golang:1.23-alpine
+
+# Set the working directory
+WORKDIR /app
+
+# Copy dependency files and download them
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the source code
+COPY . .
+
+# Build the application
+RUN go build -o main .
+
+# Run the application
+CMD ["./main"]
+```
+
+**What this does:**
+
+- Uses the official Go 1.23 Alpine image (lightweight Linux)
+- Downloads dependencies first (caching optimization)
+- Builds your Go application
+- Runs it when the container starts
+
+**Downside:** This image will be 300MB+ because it includes the entire Go toolchain.
+
+### Phase 2: Optimized Multi-Stage Build
+
+The basic image is often large (300MB+). For production, we use **Multi-Stage Builds** to create a tiny image` (usually <20MB)` containing only the compiled binary.
+
+```dockerfile
+# Stage 1: Build the binary
+FROM golang:1.23-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+
+# Stage 2: Final lightweight image
+FROM alpine:latest
+WORKDIR /root/
+# Copy only the binary from the builder stage
+COPY --from=builder /app/main .
+# Run the binary
+CMD ["./main"]
+```
+
+**Detailed Line-by-Line Explanation:**
+
+#### Stage 1: Build the Binary (Lines 1-6)
+
+```dockerfile
+FROM golang:1.23-alpine AS builder
+```
+
+- **FROM**: Specifies the base image to use
+- **golang:1.23-alpine**: Official Go 1.23 image based on Alpine Linux (lightweight ~350MB with Go toolchain)
+- **AS builder**: Names this stage "builder" so we can reference it later
+- **Purpose**: This stage has all the tools needed to compile Go code
+
+```dockerfile
+WORKDIR /app
+```
+
+- **WORKDIR**: Sets the working directory inside the container
+- **/app**: All subsequent commands run in this directory
+- **Why**: Keeps files organized and provides a consistent path
+
+```dockerfile
+COPY go.mod go.sum ./
+```
+
+- **COPY**: Copies files from your host machine into the container
+- **go.mod go.sum**: Your Go dependency files
+- **./**: Copies to current directory (/app)
+- **Why first**: Docker caches layers; if dependencies don't change, this layer is reused, speeding up builds
+
+```dockerfile
+RUN go mod download
+```
+
+- **RUN**: Executes a command during the build process
+- **go mod download**: Downloads all dependencies listed in go.mod
+- **Why separate**: This layer is cached until go.mod/go.sum changes, avoiding re-downloading dependencies on every build
+
+```dockerfile
+COPY . .
+```
+
+- **COPY . .**: Copies everything from your project directory into /app
+- **First dot**: Source (your local project folder)
+- **Second dot**: Destination (current WORKDIR = /app)
+- **Why last**: Your source code changes frequently; placing this after dependency download preserves cache
+
+```dockerfile
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+```
+
+This is the most important line. Let's break down each part:
+
+- **RUN**: Executes the build command
+- **CGO_ENABLED=0**:
+  - Disables CGO (C bindings)
+  - Creates a **pure static binary** with no external C library dependencies
+  - **Critical for Stage 2**: Allows the binary to run in Alpine (which has different C libraries than the build image)
+- **GOOS=linux**:
+  - Sets target operating system to Linux
+  - Ensures compatibility even if building on macOS/Windows
+- **go build**: Compiles your Go application
+- **-o main**: Names the output binary "main"
+- **.**: Builds from current directory
+
+**Result after Stage 1**: You have a compiled binary at `/app/main`, but it's in a 350MB image full of build tools you don't need in production.
+
+---
+
+#### Stage 2: Final Lightweight Image (Lines 8-13)
+
+```dockerfile
+FROM alpine:latest
+```
+
+- **FROM alpine:latest**: Starts a **completely new image** from scratch
+- **alpine:latest**: Minimal Linux distribution (~5MB)
+- **Key concept**: This stage ignores everything from Stage 1 except what we explicitly copy
+- **Why**: We only need the binary to run, not the Go compiler, source code, or build tools
+
+```dockerfile
+WORKDIR /root/
+```
+
+- **WORKDIR /root/**: Sets working directory in the final image
+- **/root/**: Standard location for applications in containers
+- **Note**: Could be any directory; /root/ is a convention
+
+```dockerfile
+COPY --from=builder /app/main .
+```
+
+This is the magic line that makes multi-stage builds work:
+
+- **COPY --from=builder**: Copy from the **builder** stage (not from your host machine)
+- **/app/main**: The compiled binary we created in Stage 1
+- **.**: Current directory (/root/)
+- **Result**: Only the 10-20MB binary is copied; the 350MB Go toolchain is left behind
+
+```dockerfile
+CMD ["./main"]
+```
+
+- **CMD**: Default command to run when container starts
+- **["./main"]**: Runs your binary
+- **JSON array format**: Preferred syntax (vs shell form `CMD ./main`)
+- **Why ./**: Runs the binary from current directory
+
+---
+
+**Complete Build Flow Visualization:**
+
+```
+Stage 1 (Builder) - 350MB:
+├── Alpine Linux (5MB)
+├── Go 1.23 toolchain (300MB)
+├── Your source code (2MB)
+├── Downloaded dependencies (40MB)
+└── Compiled binary: main (15MB) ← This is what we keep
+
+        ↓ (Multi-stage build transfers only the binary)
+
+Stage 2 (Final) - 20MB:
+├── Alpine Linux (5MB)
+└── Compiled binary: main (15MB) ← Copied from Stage 1
+```
+
+**Final Result:**
+
+- Build image: 350MB (discarded after build)
+- Production image: 20MB (what gets deployed)
+- **Space savings**: 94% smaller!
+
+---
+
+**Why Multi-Stage Builds Matter:**
+
+1. **Faster Deployments**: 20MB uploads faster than 350MB
+2. **Lower Disk Usage**: Store more images on your VPS
+3. **Better Security**: Smaller attack surface `(no build tools in production)`
+4. **Lower Costs**: Less bandwidth, less storage
+5. **Faster Container Starts**: Less data to load into memory
+
+**Common Questions:**
+
+**Q: Why not just delete the build files in a single stage?**
+A: Docker layers are immutable. If you add 300MB in one layer and delete it in the next, you still push 300MB. Multi-stage builds truly discard unwanted data.
+
+**Q: Can I use scratch instead of alpine:latest?**
+A: Yes, but alpine:latest provides useful tools like `sh` for debugging. If binary size is critical and you need absolutely minimal image, `FROM scratch` creates a `<10MB` image with only your binary.
+
+**Q: What if I need CA certificates for HTTPS?**
+A: Add to Stage 2:
+
+```dockerfile
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/main .
+CMD ["./main"]
+```
+
+### Phase 3: Adding PostgreSQL with Docker Compose
+
+To run both the API and the Database together, we use **docker-compose.yml**. This defines how the two containers interact.
+
+```yaml
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - DB_USER=user
+      - DB_PASSWORD=pass
+      - DB_NAME=mydb
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=mydb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+```
+
+**Test it locally:**
+
+```bash
+docker-compose up -d
+docker-compose logs -f api
+```
+
+### Phase 4: Adding Resource Limits & Health Checks
+
+For production, add resource management and health monitoring:
+
+```yaml
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-myapp}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-myapp}
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+```
+
+**Important:** Add a health check endpoint in your Go API:
+
+```go
+// main.go
+http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte("OK"))
+})
+```
+
+---
+
+## 3. Database Strategy: Docker vs Standalone
+
+A common question is whether to run PostgreSQL inside Docker or as a separate service on the VPS. For a VPS setup using Dokploy, the recommendation is clear.
+
+### 3.1 Comparison Table
+
+| Feature           | Docker (via Dokploy)                       | Standalone (Native VPS)                  |
+| ----------------- | ------------------------------------------ | ---------------------------------------- |
+| **Ease of Setup** | One-click in the Dokploy dashboard.        | Requires manual installation and config. |
+| **Backups**       | Automated S3/Local backups built-in.       | Requires manual scripts and cron jobs.   |
+| **Security**      | Isolated in a private network.             | Requires manual firewall (UFW) config.   |
+| **Performance**   | Minimal overhead (1-2%).                   | Slightly better I/O performance.         |
+| **Upgrades**      | Simple: change image version and redeploy. | Manual package manager updates.          |
+| **Portability**   | Easy to move between servers.              | Requires full database migration.        |
+| **Monitoring**    | Built into Dokploy dashboard.              | Requires separate monitoring setup.      |
+
+### 3.2 Recommendation
+
+**Use Docker via Dokploy.** The convenience of automated backups, easy version upgrades, and integrated monitoring far outweighs the negligible performance gain of a standalone installation for most applications.
+
+**Use Docker PostgreSQL if:**
+
+- You only have one application to deploy
+- You want the simplest setup and monitoring
+- You want everything managed through Dokploy's interface
+- Your database is small to medium sized (less than 50GB)
+- You need easy backup/restore functionality
+
+**Use Separate PostgreSQL if:**
+
+- You plan to deploy multiple applications sharing the database
+- You need absolute maximum database performance
+- You have a very large database (greater than 100GB)
+- You need advanced features like streaming replication or pgBouncer connection pooling
+- You have a dedicated DBA managing the database
+
+**Important Note on Networking:** When using Dokploy, never expose your database port (5432) to the public internet. Dokploy automatically sets up a private internal network between your API and database containers. Your connection string should use the container name (e.g., `db`) as the host, not `localhost` or your VPS IP.
+
+---
+
+## 4. Monitoring: Do You Need Prometheus and Grafana?
+
+Monitoring is critical for your goal of tracking Memory and Disk usage.
+
+### 4.1 The Short Answer
+
+**For a single-server VPS setup, you do not need Prometheus and Grafana initially.** Dokploy's built-in monitoring is sufficient.
+
+### 4.2 Comparison Table
+
+| Feature              | Dokploy Built-in                     | Prometheus + Grafana                                      |
+| -------------------- | ------------------------------------ | --------------------------------------------------------- |
+| **Setup Effort**     | Zero (enabled by default).           | High (requires 2+ extra containers).                      |
+| **Resource Usage**   | Extremely low.                       | High (can consume 512MB+ RAM).                            |
+| **Metrics Provided** | CPU, RAM, Disk (Server & Container). | Custom app metrics (latency, DB stats, goroutine counts). |
+| **Alerts**           | Supports Discord, Telegram, Email.   | Advanced alerting rules.                                  |
+| **Visualization**    | Simple charts in Dokploy UI.         | Professional dashboards with historical graphs.           |
+| **Cost**             | Free (included).                     | Free but uses server resources.                           |
+
+### 4.3 Action Plan
+
+**Start with Dokploy's monitoring.** If your app scales to multiple servers or you need to track specific Go metrics (like goroutine counts, specific SQL query times, or custom business metrics), only then should you add the complexity of Prometheus and Grafana.
+
+### 4.4 Three Monitoring Options
+
+#### Option 1: Dokploy Built-in Monitoring (Recommended to Start)
+
+Dokploy includes monitoring out of the box:
+
+1. Navigate to the **Monitoring** tab in your Dokploy dashboard
+2. View real-time CPU, memory, and disk usage
+3. Set thresholds (e.g., alert when memory > 80%)
+4. Configure notifications:
+   - Email
+   - Telegram
+   - Discord
+   - Slack
+
+**Pros:** Zero setup, integrated UI, low resource usage  
+**Cons:** Basic metrics only, no custom application metrics
+
+#### Option 2: Docker Stats (Quick Check)
+
+Built into Docker, no additional setup:
+
+```bash
+# Real-time stats
+docker stats
+
+# Specific containers
+docker stats myapp-api myapp-db
+
+# Export to JSON
+docker stats --no-stream --format "{{json .}}"
+```
+
+**Pros:** No setup, instant results  
+**Cons:** No historical data, no alerts, manual checking
+
+#### Option 3: Prometheus + Grafana (Advanced)
+
+Only add this if you need advanced metrics. Full monitoring stack with dashboards.
+
+Add to your **docker-compose.yml**:
+
+```yaml
+services:
+  # ... your existing services ...
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports:
+      - "8081:8080"
+
+volumes:
+  prometheus_data:
+  grafana_data:
+```
+
+Create **prometheus.yml**:
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]
+```
+
+**Pros:** Full dashboards, historical data, custom metrics, advanced alerts  
+**Cons:** Uses 500MB+ RAM, more complexity, overkill for single-server setups
+
+### 4.5 When to Upgrade to Prometheus/Grafana
+
+Consider adding Prometheus and Grafana when:
+
+- You need to track custom Go application metrics (HTTP request latency, database query times)
+- You're running multiple servers and need centralized monitoring
+- You need detailed historical analysis (90+ days of metrics)
+- You want to create custom dashboards for stakeholders
+- Your application has complex performance requirements
+
+---
+
+## 5. Deployment with Dokploy
+
+Dokploy simplifies the deployment process by acting as a private "Heroku" on your own VPS.
+
+### 5.1 Installing Dokploy on Your VPS
+
+**Prerequisites:**
+
+- A clean Ubuntu 20.04+ or Debian 11+ VPS
+- At least 2GB RAM (4GB recommended)
+- Root or sudo access
+
+**Step 1: Connect to Your VPS**
+
+```bash
+ssh root@your-vps-ip
+```
+
+**Step 2: Install Dokploy**
+
+Run the official installation command:
+
+```bash
+curl -sSL https://dokploy.com/install.sh | sh
+```
+
+This installs:
+
+- Docker Engine
+- Docker Compose
+- Dokploy application
+- Traefik (reverse proxy for automatic SSL)
+
+The installation takes 2-5 minutes.
+
+**Step 3: Access Dokploy**
+
+Open your browser and navigate to:
+
+```
+http://your-vps-ip:3000
+```
+
+You'll be prompted to create an admin account. **Save these credentials securely.**
+
+### 5.2 Creating Your Database in Dokploy
+
+Instead of managing PostgreSQL manually, use Dokploy's one-click database creation:
+
+**Step 1: Navigate to Databases**
+
+1. In the Dokploy dashboard, click on **Databases** in the left sidebar
+2. Click **Create Database**
+
+**Step 2: Configure PostgreSQL**
+
+```
+Database Type: PostgreSQL
+Name: myapp-db
+Version: 16 (latest stable)
+Database Name: myapp
+Username: postgres
+Password: [Click "Generate" for a secure password]
+```
+
+**Step 3: Resource Limits**
+
+```
+Memory Limit: 512M
+CPU Limit: 0.5 (half a CPU core)
+```
+
+**Step 4: Backup Settings (Important!)**
+
+Dokploy can automatically backup your database:
+
+```
+Backup Enabled: Yes
+Backup Schedule: Daily at 2 AM
+Retention: Keep last 7 backups
+Storage: Local (or configure S3 for remote backups)
+```
+
+**Step 5: Create**
+
+Click **Create Database**. Dokploy will:
+
+- Pull the PostgreSQL Docker image
+- Create a secure container
+- Set up internal networking
+- Generate connection strings
+
+**Important:** Dokploy provides you with an **internal connection string** that looks like:
+
+```
+postgres://postgres:generated_password@myapp-db:5432/myapp
+```
+
+This uses the container name (`myapp-db`) as the hostname, which only works within the Docker network. **Never expose port 5432 to the internet.**
+
+### 5.3 Deploying Your Go API
+
+Dokploy supports multiple deployment methods:
+
+#### Method 1: Deploy from Git Repository (Recommended)
+
+**Step 1: Create Application**
+
+1. Click **Applications** → **Create Application**
+2. Select **Git Repository**
+
+**Step 2: Connect Your Repository**
+
+```
+Repository URL: https://github.com/yourusername/your-go-api
+Branch: main (or your production branch)
+Build Type: Dockerfile
+```
+
+If your repository is private, add your GitHub/GitLab token.
+
+**Step 3: Configure Build Settings**
+
+```
+Dockerfile Path: ./Dockerfile
+Context Path: . (root of repository)
+```
+
+**Step 4: Environment Variables**
+
+Click **Environment Variables** and add:
+
+```
+DB_HOST=myapp-db
+DB_USER=postgres
+DB_PASSWORD=[paste the password from database creation]
+DB_NAME=myapp
+PORT=8080
+GIN_MODE=release
+```
+
+**Important:** Use the **internal container name** (`myapp-db`) for `DB_HOST`, not `localhost` or your VPS IP.
+
+**Step 5: Resource Limits**
+
+```
+Memory Limit: 256M
+CPU Limit: 0.5
+```
+
+**Step 6: Port Configuration**
+
+```
+Internal Port: 8080 (what your Go app listens on)
+External Port: 80 (what users access)
+```
+
+**Step 7: Domain Configuration (Optional)**
+
+If you have a domain:
+
+```
+Domain: api.yourdomain.com
+SSL: Enable (Dokploy auto-configures Let's Encrypt)
+```
+
+If you don't have a domain yet, you can access via:
+
+```
+http://your-vps-ip:80
+```
+
+**Step 8: Health Check**
+
+```
+Health Check Path: /health
+Health Check Interval: 30s
+```
+
+**Step 9: Deploy**
+
+Click **Deploy**. Dokploy will:
+
+1. Clone your repository
+2. Build the Docker image
+3. Start the container
+4. Configure networking
+5. Set up SSL (if domain configured)
+
+Monitor the build logs in real-time in the Dokploy UI.
+
+#### Method 2: Deploy with Docker Compose
+
+If you have an existing docker-compose.yml:
+
+1. Click **Create Application**
+2. Select **Docker Compose**
+3. Paste your docker-compose.yml content
+4. Dokploy will automatically detect services and deploy them
+
+**Note:** When using Docker Compose deployment in Dokploy, you don't need to create the database separately—you can include it in your compose file.
+
+### 5.4 Monitoring Your Application in Dokploy
+
+Once deployed, Dokploy provides comprehensive monitoring:
+
+**Real-time Metrics:**
+
+- CPU usage (%)
+- Memory usage (MB and %)
+- Network I/O
+- Disk usage
+
+**Log Viewing:**
+
+- Live log streaming
+- Search and filter logs
+- Download logs
+
+**Setting Up Alerts:**
+
+1. Go to **Settings** → **Notifications**
+2. Configure your notification channel:
+
+   - **Email**: Add your email address
+   - **Telegram**: Connect your Telegram bot
+   - **Discord**: Add your Discord webhook
+   - **Slack**: Add your Slack webhook
+
+3. Set alert thresholds:
+
+   ```
+   CPU > 80% for 5 minutes
+   Memory > 85% for 5 minutes
+   Disk > 90%
+   Container restart
+   Health check failure
+   ```
+
+4. Save settings
+
+Now you'll receive alerts whenever your app exceeds these thresholds.
+
+### 5.5 Deploying Updates
+
+When you push new code to your Git repository:
+
+**Option 1: Automatic Deployment (Recommended)**
+
+Configure a webhook in Dokploy:
+
+1. Go to your application settings
+2. Enable **Auto Deploy on Git Push**
+3. Copy the webhook URL
+4. Add it to your GitHub/GitLab repository webhooks
+
+Now every push to your main branch automatically triggers a deployment.
+
+**Option 2: Manual Deployment**
+
+In the Dokploy dashboard:
+
+1. Go to your application
+2. Click **Redeploy**
+3. Dokploy rebuilds and restarts your application
+
+**Zero-downtime deployments:** Dokploy uses rolling updates, so your API stays available during deployments.
+
+---
+
+## 6. Complete Production Setup
+
+Here's your final, production-ready docker-compose.yml with everything included:
+
+```yaml
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-myapp}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Go API Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-myapp}?sslmode=disable
+      PORT: 8080
+      GIN_MODE: release
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Prometheus (Metrics Collection)
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+    ports:
+      - "9090:9090"
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped
+
+  # Grafana (Visualization)
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+
+  # cAdvisor (Container Metrics)
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8081:8080"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+```
+
+### 6.1 Environment Variables (.env)
+
+Create a **.env** file:
+
+```env
+# Database
+DB_NAME=myapp
+DB_USER=postgres
+DB_PASSWORD=your_secure_password_here
+
+# API
+API_PORT=8080
+
+# Grafana
+GRAFANA_USER=admin
+GRAFANA_PASSWORD=your_grafana_password
+```
+
+### 6.2 Grafana Dashboard Setup
+
+Create **grafana/datasources/prometheus.yml**:
+
+```yaml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+```
+
+After deployment, access Grafana at http://your-vps-ip:3000 and import dashboard ID **14282** for Docker monitoring.
+
+### 6.3 Backup Strategy
+
+Create a backup script **backup.sh**:
+
+```bash
+#!/bin/bash
+
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="./backups"
+
+mkdir -p $BACKUP_DIR
+
+# Backup database
+docker-compose exec -T db pg_dump -U postgres myapp > $BACKUP_DIR/db_$DATE.sql
+
+# Keep only last 7 days
+find $BACKUP_DIR -name "db_*.sql" -mtime +7 -delete
+
+echo "Backup completed: db_$DATE.sql"
+```
+
+Add to crontab for daily backups:
+
+```bash
+0 2 * * * /path/to/backup.sh
+```
+
+### 6.4 Quick Reference Commands
+
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f api
+
+# Check container stats
+docker stats
+
+# Rebuild and restart API
+docker-compose up -d --build api
+
+# Stop all services
+docker-compose down
+
+# Remove volumes (careful!)
+docker-compose down -v
+```
+
+### 6.5 Access URLs
+
+```
+API: http://your-vps-ip:8080
+Grafana: http://your-vps-ip:3000
+Prometheus: http://your-vps-ip:9090
+cAdvisor: http://your-vps-ip:8081
+Dokploy: http://your-vps-ip:3000
+```
+
+---
+
+## Summary of Recommendations
+
+Based on your requirements for monitoring memory and disk usage on a VPS with Dokploy:
+
+1. **Use Multi-stage Docker builds** to keep your production images small (~15-20MB) and secure. This minimizes disk usage and improves deployment speed.
+
+2. **Run PostgreSQL in Docker via Dokploy** to take advantage of its built-in backup and management tools. The 1-2% performance overhead is negligible compared to the operational benefits.
+
+3. **Stick to Dokploy Monitoring initially** to save VPS resources while still getting the disk and memory alerts you need. Only add Prometheus/Grafana if you need custom application metrics or multi-server monitoring.
+
+4. **Connect via Internal Networking**: Never expose your database port (5432) to the public internet. Let Dokploy handle the private connection between your API and database using container names.
+
+5. **Enable Automated Backups** in Dokploy's database settings. Set up daily backups with 7-day retention as a minimum.
+
+6. **Configure Alerts** in Dokploy for CPU > 80%, Memory > 85%, and Disk > 90% to receive notifications before problems occur.
+
+7. **Use Environment Variables** stored in Dokploy (not hardcoded in your code) for database credentials and configuration.
+
+8. **Set Resource Limits** on all containers to prevent any single service from consuming all VPS resources.
+
+---
+
+## Conclusion
+
+You now have a complete production-ready deployment setup with:
+
+- Containerized Go API with PostgreSQL
+- Resource limits and health checks
+- Comprehensive monitoring (Dokploy built-in or optional Prometheus/Grafana)
+- Automated deployment via Dokploy
+- Backup strategy
+- Alert notifications
+
+**Next Steps:**
+
+1. Test your Docker setup locally with `docker-compose up`
+2. Provision a VPS (DigitalOcean, Hetzner, Vultr, or Linode)
+3. Install Dokploy on your VPS
+4. Create your PostgreSQL database in Dokploy
+5. Deploy your Go API from your Git repository
+6. Configure monitoring alerts (CPU, memory, disk)
+7. Set up automated backups
+8. (Optional) Configure a custom domain with automatic SSL
+
+**Troubleshooting Resources:**
+
+- Dokploy Documentation: https://dokploy.com/docs
+- Docker Documentation: https://docs.docker.com
+- PostgreSQL Docker Hub: https://hub.docker.com/_/postgres
+- Dokploy Discord Community: https://dokploy.com/discord
+
+**Common Issues:**
+
+- **App can't connect to database**: Ensure you're using the container name (e.g., `myapp-db`) as the hostname, not `localhost`
+- **Out of memory**: Check Dokploy monitoring and adjust container memory limits
+- **Slow deployments**: Consider using Docker layer caching and multi-stage builds
+- **Database data loss**: Verify that volumes are properly configured and backups are running
+
+By following this guide, you have a scalable, monitored, and maintainable deployment that can grow with your application.
