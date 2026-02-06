@@ -1,0 +1,546 @@
+---
+title: "Dexie.js + React Cheatsheet"
+description: This tutorial will guide you through setting up a full-stack application working with Nextjs and dexiejs.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfBMuy1LENShrfTzZUm7VRw2b4ys6pjq1v03en
+category: tutorial
+createdAt: 2026-02-06
+updatedAt: 2026-02-06
+---
+
+# Dexie.js + React Cheatsheet
+
+## Installation
+
+```bash
+npm install dexie dexie-react-hooks
+# or
+yarn add dexie dexie-react-hooks
+```
+
+## Basic Setup
+
+### 1. Database Schema Definition (`db.ts`)
+
+```typescript
+import Dexie, { type EntityTable } from "dexie";
+
+// Define TypeScript interfaces
+export interface Product {
+  id?: number; // Optional for new items (auto-incremented)
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  createdAt: Date;
+}
+
+// Create database instance
+export const db = new Dexie("ProductDatabase") as Dexie & {
+  products: EntityTable<Product, "id">;
+};
+
+// Define schema
+db.version(1).stores({
+  products: "++id, name, category, price, stock, createdAt",
+});
+```
+
+### 2. React Hook Setup (`App.tsx`)
+
+```typescript
+import React from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "./db";
+
+function App() {
+  // Your component logic here
+}
+```
+
+## CRUD Operations
+
+### **C - CREATE**
+
+```typescript
+// Add single product
+const addProduct = async () => {
+  const id = await db.products.add({
+    name: "iPhone 15",
+    category: "Electronics",
+    price: 999,
+    stock: 50,
+    createdAt: new Date(),
+  });
+  console.log("Added with ID:", id);
+};
+
+// Add multiple products
+const addMultipleProducts = async () => {
+  const ids = await db.products.bulkAdd([
+    {
+      name: "MacBook Pro",
+      category: "Electronics",
+      price: 1999,
+      stock: 25,
+      createdAt: new Date(),
+    },
+    {
+      name: "Coffee Mug",
+      category: "Kitchen",
+      price: 15,
+      stock: 100,
+      createdAt: new Date(),
+    },
+  ]);
+};
+
+// Add with auto-timestamp
+const addProductWithAutoTimestamp = async (
+  productData: Omit<Product, "id" | "createdAt">
+) => {
+  return db.products.add({
+    ...productData,
+    createdAt: new Date(),
+  });
+};
+```
+
+### **R - READ**
+
+```typescript
+// Get all products
+const allProducts = useLiveQuery(() => db.products.toArray());
+
+// Get single product by ID
+const getProduct = async (id: number) => {
+  return await db.products.get(id);
+};
+
+// Get product with reactive hook
+const ProductComponent = ({ id }: { id: number }) => {
+  const product = useLiveQuery(() => db.products.get(id));
+
+  return product ? (
+    <div>{product.name} - ${product.price}</div>
+  ) : null;
+};
+
+// Filter products
+const cheapProducts = useLiveQuery(() =>
+  db.products
+    .where('price')
+    .below(100)
+    .toArray()
+);
+
+// Multiple conditions
+const electronicsInStock = useLiveQuery(() =>
+  db.products
+    .where('category')
+    .equals('Electronics')
+    .and(product => product.stock > 0)
+    .toArray()
+);
+
+// Sort and limit
+const topExpensiveProducts = useLiveQuery(() =>
+  db.products
+    .orderBy('price')
+    .reverse()
+    .limit(5)
+    .toArray()
+);
+
+// Count items
+const productCount = useLiveQuery(() => db.products.count());
+
+// Search by name (case-insensitive)
+const searchProducts = useLiveQuery(async () => {
+  const all = await db.products.toArray();
+  return all.filter(p =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+});
+```
+
+### **U - UPDATE**
+
+```typescript
+// Update single product by ID
+const updateProduct = async (id: number, updates: Partial<Product>) => {
+  const updated = await db.products.update(id, updates);
+  console.log(`${updated} records updated`);
+};
+
+// Update with reactive example
+const ProductEditor = ({ id }: { id: number }) => {
+  const [price, setPrice] = useState("");
+
+  const handleUpdate = async () => {
+    await db.products.update(id, {
+      price: parseFloat(price),
+      updatedAt: new Date(), // Add update timestamp
+    });
+  };
+};
+
+// Update multiple records
+const discountProducts = async (category: string, discountPercent: number) => {
+  const products = await db.products
+    .where("category")
+    .equals(category)
+    .toArray();
+
+  const updates = products.map((product) => ({
+    ...product,
+    price: product.price * (1 - discountPercent / 100),
+  }));
+
+  await db.products.bulkPut(updates);
+};
+
+// Update or insert (upsert)
+const upsertProduct = async (product: Product) => {
+  if (product.id) {
+    await db.products.update(product.id, product);
+  } else {
+    await db.products.add(product);
+  }
+};
+
+// Bulk update with where clause
+const restockProducts = async (category: string, additionalStock: number) => {
+  await db.products
+    .where("category")
+    .equals(category)
+    .modify((product) => {
+      product.stock += additionalStock;
+    });
+};
+```
+
+### **D - DELETE**
+
+```typescript
+// Delete single product by ID
+const deleteProduct = async (id: number) => {
+  await db.products.delete(id);
+};
+
+// Delete multiple products
+const deleteOutOfStock = async () => {
+  await db.products.where("stock").equals(0).delete();
+};
+
+// Delete all products
+const clearDatabase = async () => {
+  await db.products.clear();
+};
+
+// Bulk delete
+const deleteProducts = async (ids: number[]) => {
+  await db.products.bulkDelete(ids);
+};
+```
+
+## Complete Product Management Component
+
+```typescript
+import React, { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, Product } from './db';
+
+function ProductManager() {
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [category, setCategory] = useState('Electronics');
+  const [stock, setStock] = useState('');
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  // Reactive query for products
+  const products = useLiveQuery(() =>
+    db.products.orderBy('createdAt').reverse().toArray()
+  );
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const productData = {
+      name,
+      category,
+      price: parseFloat(price),
+      stock: parseInt(stock),
+      createdAt: new Date()
+    };
+
+    if (editingId) {
+      await db.products.update(editingId, productData);
+      setEditingId(null);
+    } else {
+      await db.products.add(productData);
+    }
+
+    // Reset form
+    setName('');
+    setPrice('');
+    setStock('');
+    setCategory('Electronics');
+  };
+
+  const handleEdit = (product: Product) => {
+    setName(product.name);
+    setPrice(product.price.toString());
+    setStock(product.stock.toString());
+    setCategory(product.category);
+    setEditingId(product.id);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (window.confirm('Are you sure?')) {
+      await db.products.delete(id);
+    }
+  };
+
+  const totalValue = useLiveQuery(async () => {
+    const allProducts = await db.products.toArray();
+    return allProducts.reduce((sum, p) => sum + (p.price * p.stock), 0);
+  });
+
+  return (
+    <div className="product-manager">
+      <h2>Product Inventory</h2>
+
+      {/* Add/Edit Form */}
+      <form onSubmit={handleSubmit}>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Product Name"
+          required
+        />
+        <input
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="Price"
+          type="number"
+          step="0.01"
+          required
+        />
+        <input
+          value={stock}
+          onChange={(e) => setStock(e.target.value)}
+          placeholder="Stock"
+          type="number"
+          required
+        />
+        <select value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="Electronics">Electronics</option>
+          <option value="Clothing">Clothing</option>
+          <option value="Books">Books</option>
+          <option value="Home">Home</option>
+        </select>
+        <button type="submit">
+          {editingId ? 'Update Product' : 'Add Product'}
+        </button>
+      </form>
+
+      {/* Statistics */}
+      <div className="stats">
+        <p>Total Products: {products?.length || 0}</p>
+        <p>Total Inventory Value: ${totalValue?.toFixed(2) || '0.00'}</p>
+      </div>
+
+      {/* Product List */}
+      <div className="product-list">
+        {products?.map(product => (
+          <div key={product.id} className="product-card">
+            <h3>{product.name}</h3>
+            <p>Category: {product.category}</p>
+            <p>Price: ${product.price.toFixed(2)}</p>
+            <p>Stock: {product.stock}</p>
+            <p>Added: {product.createdAt.toLocaleDateString()}</p>
+            <div className="product-actions">
+              <button onClick={() => handleEdit(product)}>Edit</button>
+              <button onClick={() => handleDelete(product.id!)}>Delete</button>
+              <button onClick={() => {
+                db.products.update(product.id!, { stock: product.stock - 1 });
+              }} disabled={product.stock <= 0}>
+                Sell One
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+## Advanced Patterns
+
+### 1. **Database with Relationships**
+
+```typescript
+// Related entities
+export interface Category {
+  id?: number;
+  name: string;
+}
+
+export interface Product {
+  id?: number;
+  name: string;
+  price: number;
+  categoryId: number; // Foreign key
+}
+
+const db = new Dexie("ShopDatabase") as Dexie & {
+  categories: EntityTable<Category, "id">;
+  products: EntityTable<Product, "id">;
+};
+
+db.version(1).stores({
+  categories: "++id, name",
+  products: "++id, name, price, categoryId",
+});
+
+// Query with join
+const productsWithCategories = useLiveQuery(async () => {
+  const products = await db.products.toArray();
+  const categories = await db.categories.toArray();
+
+  return products.map((product) => ({
+    ...product,
+    category:
+      categories.find((c) => c.id === product.categoryId)?.name || "Unknown",
+  }));
+});
+```
+
+### 2. **Transactions**
+
+```typescript
+const processOrder = async (productId: number, quantity: number) => {
+  await db.transaction("rw", db.products, async () => {
+    const product = await db.products.get(productId);
+
+    if (!product || product.stock < quantity) {
+      throw new Error("Insufficient stock");
+    }
+
+    await db.products.update(productId, {
+      stock: product.stock - quantity,
+    });
+
+    // Record order in another table
+    await db.orders.add({
+      productId,
+      quantity,
+      total: product.price * quantity,
+      date: new Date(),
+    });
+  });
+};
+```
+
+### 3. **Pagination**
+
+```typescript
+const PAGE_SIZE = 10;
+
+function ProductList() {
+  const [page, setPage] = useState(1);
+
+  const products = useLiveQuery(async () => {
+    const offset = (page - 1) * PAGE_SIZE;
+    return await db.products
+      .orderBy('name')
+      .offset(offset)
+      .limit(PAGE_SIZE)
+      .toArray();
+  }, [page]);  // Re-run when page changes
+
+  const totalProducts = useLiveQuery(() => db.products.count());
+  const totalPages = Math.ceil((totalProducts || 0) / PAGE_SIZE);
+
+  return (
+    <div>
+      {/* Product list */}
+      <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+        Previous
+      </button>
+      <span>Page {page} of {totalPages}</span>
+      <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+        Next
+      </button>
+    </div>
+  );
+}
+```
+
+### 4. **Real-time Filtering**
+
+```typescript
+function FilterableProductList() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [minPrice, setMinPrice] = useState(0);
+  const [maxPrice, setMaxPrice] = useState(1000);
+  const [category, setCategory] = useState("All");
+
+  const filteredProducts = useLiveQuery(async () => {
+    let query: any = db.products;
+
+    // Apply price filter
+    if (minPrice > 0) {
+      query = query.where("price").above(minPrice);
+    }
+    if (maxPrice < 1000) {
+      query = query.where("price").below(maxPrice);
+    }
+
+    // Apply category filter
+    if (category !== "All") {
+      query = query.where("category").equals(category);
+    }
+
+    const results = await query.toArray();
+
+    // Apply search filter (client-side since name might not be indexed)
+    if (searchTerm) {
+      return results.filter((p) =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    return results;
+  }, [searchTerm, minPrice, maxPrice, category]); // React to filter changes
+}
+```
+
+## Tips & Best Practices
+
+1. **Index Design**: Only index fields you need to query (`where()`, `orderBy()`)
+2. **Error Handling**: Wrap database operations in try-catch blocks
+3. **Cleanup**: Dexie handles cleanup automatically with React hooks
+4. **Performance**: Use `.limit()` for large datasets
+5. **Debugging**: Enable Dexie debug mode: `db.on('ready', () => Dexie.debug = true);`
+6. **Persistence**: Data persists across page refreshes (IndexedDB feature)
+
+## Common Methods Quick Reference
+
+| Method                 | Purpose            | Returns                   |
+| ---------------------- | ------------------ | ------------------------- |
+| `.add(object)`         | Insert new record  | Promise`<id>`             |
+| `.get(id)`             | Get single record  | `Promise<T \| undefined>` |
+| `.update(id, changes)` | Update record      | Promise`<number>`         |
+| `.delete(id)`          | Delete record      | Promise`<void>`           |
+| `.toArray()`           | Get all records    | Promise`<T[]>`            |
+| `.count()`             | Count records      | Promise`<number>`         |
+| `.where(field)`        | Start filter query | WhereClause               |
+| `.bulkAdd(array)`      | Add multiple       | Promise`<id[]>`           |
+| `.bulkPut(array)`      | Update multiple    | Promise`<id[]>`           |
+| `.bulkDelete(ids)`     | Delete multiple    | Promise`<void>`           |
+| `.clear()`             | Delete all records | Promise`<void>`           |
+| `.orderBy(field)`      | Sort results       | Collection                |
+
+This cheatsheet covers 95% of use cases for building offline-first React applications with Dexie.js!
