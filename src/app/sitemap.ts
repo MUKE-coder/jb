@@ -28,6 +28,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const routes = [
     "",
     "/courses",
+    "/sandbox",
     "/devops",
     "/ebooks",
     "/tools",
