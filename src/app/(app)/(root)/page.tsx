@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import type { ProfilePage as PageSchema, WithContext } from "schema-dts";
 
+import Github from "@/components/Github";
 import { USER } from "@/data/user";
 import { About } from "@/features/profile/components/about";
 import { Awards } from "@/features/profile/components/awards";
@@ -42,7 +43,8 @@ export default function Page() {
 
         <TeckStack />
         <Separator />
-
+        <Github />
+        <Separator />
         <Blog />
         <Separator />
 
