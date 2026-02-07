@@ -51,12 +51,20 @@ export function SiteFooter() {
             <span className="text-muted-foreground">•</span>
             <a
               className="link"
+              href="https://omnistack.desishub.com"
+              target="_blank"
+              rel="noopener"
+            >
+              Omnistack
+            </a>
+            {/* <a
+              className="link"
               href="https://wesendall.com"
               target="_blank"
               rel="noopener"
             >
               WeSendAll
-            </a>
+            </a> */}
           </div>
         </div>
 
