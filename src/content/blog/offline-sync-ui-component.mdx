@@ -1,0 +1,446 @@
+---
+title: "offline-sync: Add Offline-First Data Sync to Any Next.js App with One Command"
+description: A drop-in shadcn component that gives your Next.js app a full offline-first architecture — IndexedDB for instant local writes, Prisma for server sync, and PWA for installability.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfKtNxkOMqtMYEbJOpeUSCcaQNrA3Lh9kd7s64
+category: components
+createdAt: 2026-02-10
+updatedAt: 2026-02-10
+---
+
+# offline-sync: Add Offline-First Data Sync to Any Next.js App with One Command
+
+> A drop-in shadcn component that gives your Next.js app a full offline-first architecture — IndexedDB for instant local writes, Prisma for server sync, and PWA for installability.
+
+```bash
+pnpm dlx shadcn@latest add https://offline-sync.desishub.com/r/offline-sync.json
+```
+
+---
+
+## The Problem
+
+Building offline-first apps is hard. You need to:
+
+- Set up a local database that works without internet
+- Track which records have been synced and which haven't
+- Handle conflicts when the same record is edited on multiple devices
+- Implement retry logic when the network is unreliable
+- Manage soft deletes so synced records don't just vanish
+- Add a service worker for offline caching
+- Build UI to show sync status to users
+
+That's a lot of infrastructure before you even write your first feature.
+
+## The Solution
+
+**offline-sync** packages all of this into a single shadcn registry component. One install command adds 12 files to your project — a complete offline-first data layer with sync, conflict detection, PWA support, and ready-to-use UI components.
+
+It's not a library. It's source code that gets copied into your project. You own it, you can customize every line.
+
+---
+
+## Benefits
+
+### Works Without Internet
+
+All data operations write to IndexedDB (via Dexie) first. Your app responds instantly — no loading spinners, no failed requests. Users can create, edit, and delete records completely offline.
+
+### Automatic Background Sync
+
+When the user comes back online, pending changes automatically sync to the server. Only changed records are transferred (delta sync), not the entire dataset.
+
+### Conflict Detection
+
+Every record has a `version` number. When pushing an update, the server compares versions. If someone else modified the same record, the conflict is detected and resolved using a server-wins strategy. The user is notified via toast.
+
+### Smart Retry with Exponential Backoff
+
+If sync fails, it retries with increasing delays: 1s, 2s, 4s, 8s, 16s. After 3 failures, the user sees a "check your internet" warning. After 5 failures, the app automatically switches back to offline mode — no infinite retry loops.
+
+### Zod-Validated Server Actions
+
+All data flowing to the server is validated with Zod schemas. No unvalidated input reaches your database.
+
+### PWA Ready
+
+Includes a service worker (network-first for pages, stale-while-revalidate for assets) and a web manifest. Your app is installable on mobile and desktop.
+
+### UUID Primary Keys
+
+Records use `crypto.randomUUID()` instead of auto-increment IDs. This prevents ID collisions when multiple devices create records offline and sync later.
+
+### Soft Deletes
+
+Synced records are soft-deleted (marked `isDeleted: true`) so the delete operation can be synced to the server. After successful sync, the local record is permanently removed. Records that were never synced are hard-deleted immediately.
+
+---
+
+## What Gets Installed
+
+Running the install command adds these 12 files:
+
+### Library Files (installed to `lib/`)
+
+| File                         | Purpose                                                                                                                                                                                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `offline-sync-types.ts`      | TypeScript interfaces for Category, Product, LocalCategory, LocalProduct, SyncResult, ConflictRecord, PushResult, PullResult                                                                                                              |
+| `offline-sync-db.ts`         | Dexie database instance with `categories`, `products`, and `syncMeta` tables. Uses UUID primary keys with indexes on `isSynced`, `pendingOperation`, `isDeleted`                                                                          |
+| `offline-sync-validation.ts` | Zod schemas: `categorySchema`, `productSchema` for direct validation; `syncCategorySchema`, `syncProductSchema`, `pushChangesSchema` for sync payload validation                                                                          |
+| `offline-sync-repository.ts` | Full CRUD operations: `createCategory`, `updateCategory`, `deleteCategory`, `createProduct`, `updateProduct`, `deleteProduct`. Plus sync helpers: `getPendingChanges`, `markCategoriesSynced`, `mergeServerCategories`, `getLastSyncedAt` |
+| `offline-sync-engine.ts`     | Sync orchestration: `performSync` (push pending → pull delta → merge), `checkConnectivity` (server health check), `shouldRetry`, `getRetryDelay`, `incrementRetry`, `resetRetries`                                                        |
+| `offline-sync-actions.ts`    | Next.js server actions with `"use server"`: `pushChanges` (batch upsert/update/soft-delete in a Prisma `$transaction`), `pullChanges` (delta query by `updatedAt`), `healthCheck`                                                         |
+
+### Component Files (installed to `components/`)
+
+| File                  | Purpose                                                                                                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `online-provider.tsx` | React context provider — manages network detection (navigator.onLine + periodic server ping), auto-sync on offline→online transition, retry logic with exponential backoff, pending count polling |
+| `online-toggle.tsx`   | UI component — pending changes badge, "last synced X ago" timestamp, manual Sync button, Force Offline toggle switch                                                                              |
+| `pwa-register.tsx`    | Registers the service worker on mount                                                                                                                                                             |
+
+### Static Files (installed with explicit targets)
+
+| File                         | Target                              | Purpose                                                                                                                                                                                        |
+| ---------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sw.js`                      | `public/sw.js`                      | Service worker: network-first for navigation, stale-while-revalidate for static assets (JS, CSS, images, fonts)                                                                                |
+| `manifest.json`              | `public/manifest.json`              | PWA web manifest with app name, theme color, and icon references                                                                                                                               |
+| `schema.offline-sync.prisma` | `prisma/schema.offline-sync.prisma` | Reference Prisma schema — merge into your `schema.prisma`. Shows required fields: `id` (UUID), `version` (Int), `isDeleted` (Boolean), `updatedAt` (@updatedAt), `createdAt` (@default(now())) |
+
+### Auto-Installed Dependencies
+
+**shadcn components:** button, switch, label, badge, sonner
+
+**npm packages:** dexie, zod, date-fns, lucide-react
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────┐
+│   UI: OnlineToggle + useLiveQuery   │
+├─────────────────────────────────────┤
+│   Provider: OnlineProvider          │
+├─────────────────────────────────────┤
+│   Sync Engine: push/pull + retry    │
+├─────────────────────────────────────┤
+│   Repository: CRUD + merge logic    │
+├──────────┬──────────────────────────┤
+│ Dexie/IDB│ Prisma/PostgreSQL        │
+└──────────┴──────────────────────────┘
+```
+
+**Write path:** User action → Repository writes to Dexie with `isSynced: false` → `useLiveQuery` fires → UI updates instantly. No network needed.
+
+**Sync path:** OnlineProvider detects connectivity → Sync Engine pushes pending records to server action → Server validates with Zod, processes in `$transaction`, checks versions for conflicts → Engine pulls delta changes since `lastSyncedAt` → Repository merges server data into Dexie → Updates `lastSyncedAt`.
+
+---
+
+## Installation Guide
+
+### Step 1: Prerequisites
+
+You need a Next.js project with shadcn/ui and Prisma with PostgreSQL.
+
+```bash
+# Create a new Next.js project
+pnpm create next-app@latest my-app --typescript --tailwind --app
+cd my-app
+
+# Initialize shadcn
+pnpm dlx shadcn@latest init
+
+# Install Prisma
+pnpm add @prisma/client @prisma/adapter-pg pg
+pnpm add -D prisma
+npx prisma init
+```
+
+### Step 2: Install the component
+
+```bash
+pnpm dlx shadcn@latest add https://offline-sync.desishub.com/r/offline-sync.json
+```
+
+This installs all 12 files, 5 shadcn dependencies, and 4 npm packages.
+
+### Step 3: Set up the Prisma schema
+
+Merge the installed `prisma/schema.offline-sync.prisma` into your `prisma/schema.prisma`. Every sync-enabled model needs these fields:
+
+```prisma
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  version   Int       @default(1)       // Conflict detection
+  isDeleted Boolean   @default(false)   // Soft deletes
+  updatedAt DateTime  @updatedAt        // Delta sync
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+model Product {
+  id         String   @id @default(uuid())
+  name       String
+  price      Float
+  categoryId String
+  version    Int      @default(1)
+  isDeleted  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  category   Category @relation(fields: [categoryId], references: [id])
+}
+```
+
+Then push to your database:
+
+```bash
+npx prisma db push
+npx prisma generate
+```
+
+### Step 4: Set up the Prisma client
+
+The server actions import from `@/lib/prisma`. Create this file:
+
+```typescript
+// lib/prisma.ts
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const adapter = new PrismaPg(pool);
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+const db = globalForPrisma.prisma ?? new PrismaClient({ adapter });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = db;
+}
+
+export default db;
+```
+
+### Step 5: Wire up the providers
+
+Wrap your app with `OnlineProvider` and add `PWARegister` in your root layout:
+
+```tsx
+// app/layout.tsx
+import { OnlineProvider } from "@/components/online-provider";
+import { PWARegister } from "@/components/pwa-register";
+import { Toaster } from "@/components/ui/sonner";
+
+export const metadata = {
+  title: "My App",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, statusBarStyle: "default" },
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <head>
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+      </head>
+      <body>
+        <PWARegister />
+        <OnlineProvider>{children}</OnlineProvider>
+        <Toaster />
+      </body>
+    </html>
+  );
+}
+```
+
+### Step 6: Use it in your pages
+
+Install `dexie-react-hooks` for reactive queries, then build your UI:
+
+```bash
+pnpm add dexie-react-hooks
+```
+
+```tsx
+// app/page.tsx
+"use client";
+
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/lib/offline-sync-db";
+import * as repo from "@/lib/offline-sync-repository";
+import { OnlineToggle } from "@/components/online-toggle";
+
+export default function Home() {
+  // Reactive query — UI updates instantly when Dexie data changes
+  const categories = useLiveQuery(
+    () => db.categories.filter((c) => !c.isDeleted).toArray(),
+    []
+  );
+
+  const handleCreate = async () => {
+    await repo.createCategory("New Category");
+    // No setState needed — useLiveQuery auto-updates
+  };
+
+  const handleDelete = async (id: string) => {
+    await repo.deleteCategory(id);
+  };
+
+  return (
+    <main className="p-8">
+      <OnlineToggle />
+
+      <button onClick={handleCreate}>Add Category</button>
+
+      {categories?.map((cat) => (
+        <div key={cat.id} className="flex items-center gap-2">
+          <span>{cat.name}</span>
+          <span className="text-xs">{cat.isSynced ? "synced" : "pending"}</span>
+          <button onClick={() => handleDelete(cat.id)}>Delete</button>
+        </div>
+      ))}
+    </main>
+  );
+}
+```
+
+### Step 7: Add PWA icons
+
+Create 192x192 and 512x512 PNG icons in `public/icons/`. These are referenced by the manifest for the installed app icon.
+
+---
+
+## How Sync Works
+
+### Write Path (Offline-First)
+
+1. User creates/updates/deletes a record
+2. Repository writes to Dexie with `isSynced: false, pendingOperation: "create"`
+3. `useLiveQuery` fires — UI updates instantly
+4. No network request needed
+
+### Sync Path (When Online)
+
+1. **PUSH**: Collect all records where `pendingOperation != null`
+2. Send batch to server action inside a Prisma `$transaction`
+3. Server checks version numbers — detects conflicts
+4. Mark local records as synced (version updated)
+5. **PULL**: Fetch server records where `updatedAt > lastSyncedAt`
+6. Merge into Dexie (new records added, conflicts resolved server-wins)
+7. Update `lastSyncedAt` timestamp
+
+### Retry Behavior
+
+| Attempt | Delay | Action                                            |
+| ------- | ----- | ------------------------------------------------- |
+| 1       | 1s    | Retry silently                                    |
+| 2       | 2s    | Retry silently                                    |
+| 3       | 4s    | Toast: "Check your internet connection"           |
+| 4       | 8s    | Retry silently                                    |
+| 5       | 16s   | Toast: "Switching to offline mode", force offline |
+
+---
+
+## API Reference
+
+### useOnline() Hook
+
+Access sync state from any component inside `OnlineProvider`:
+
+```typescript
+const {
+  isOnline, // boolean — effective online status (network AND not force-offline)
+  isSyncing, // boolean — sync currently in progress
+  pendingCount, // number  — count of unsynced records
+  lastSyncedAt, // string | null — ISO timestamp of last successful sync
+  forceOffline, // boolean — manual offline override
+  setForceOffline, // (value: boolean) => void — toggle force offline
+  syncNow, // () => Promise<void> — trigger manual sync
+} = useOnline();
+```
+
+### Repository Functions
+
+```typescript
+import * as repo from "@/lib/offline-sync-repository";
+
+// Categories
+await repo.createCategory("Electronics");
+await repo.updateCategory(id, "Updated Name");
+await repo.deleteCategory(id);
+await repo.getCategories(); // excludes soft-deleted
+
+// Products
+await repo.createProduct({ name: "Phone", price: 999, categoryId });
+await repo.updateProduct(id, { price: 899 });
+await repo.deleteProduct(id);
+await repo.getProducts();
+
+// Sync helpers
+await repo.getPendingCount(); // number of unsynced records
+await repo.getLastSyncedAt(); // last sync timestamp
+```
+
+### Dexie Database (Direct Access)
+
+```typescript
+import { db } from "@/lib/offline-sync-db";
+import { useLiveQuery } from "dexie-react-hooks";
+
+// Reactive query in a component
+const products = useLiveQuery(() =>
+  db.products.filter((p) => !p.isDeleted).toArray()
+);
+
+// Direct access for advanced queries
+const unsyncedCount = await db.categories.filter((c) => !c.isSynced).count();
+```
+
+---
+
+## Namespace Configuration
+
+For shorter install commands, configure a namespace in your `components.json`:
+
+```json
+{
+  "registries": {
+    "@offline": "https://offline-sync.desishub.com/r/{name}.json"
+  }
+}
+```
+
+Then install with:
+
+```bash
+pnpm dlx shadcn@latest add @offline/offline-sync
+```
+
+---
+
+## Tech Stack
+
+| Layer           | Technology                | Role                                  |
+| --------------- | ------------------------- | ------------------------------------- |
+| Local Database  | Dexie 4 (IndexedDB)       | Offline storage, reactive queries     |
+| Server Database | Prisma 7 (PostgreSQL)     | Server-side persistence, transactions |
+| Framework       | Next.js 16 (App Router)   | Server actions, RSC                   |
+| Validation      | Zod                       | Input/payload validation              |
+| UI Components   | shadcn/ui                 | Button, Switch, Label, Badge, Sonner  |
+| PWA             | Service Worker + Manifest | Offline caching, installability       |
+| Language        | TypeScript                | Full type safety end-to-end           |
+
+---
+
+## Links
+
+- **Install:** `pnpm dlx shadcn@latest add https://offline-sync.desishub.com/r/offline-sync.json`
+- **Docs:** [https://offline-sync.desishub.com/docs](https://offline-sync.desishub.com/docs)
+- **Registry JSON:** [https://offline-sync.desishub.com/r/offline-sync.json](https://offline-sync.desishub.com/r/offline-sync.json)
