@@ -1,0 +1,1510 @@
+---
+title: "Building an Offline-First App with Next.js, Dexie, Prisma & PWA"
+description: "A complete, production-ready guide to building web applications that work without internet. Users can create, read, update, and delete data offline — everything syncs automatically when connectivity returns."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfBMuy1LENShrfTzZUm7VRw2b4ys6pjq1v03en
+category: tutorial
+createdAt: 2026-02-09
+updatedAt: 2026-02-09
+---
+
+# Building an Offline-First App with Next.js, Dexie, Prisma & PWA
+
+> A complete, production-ready guide to building web applications that work without internet. Users can create, read, update, and delete data offline — everything syncs automatically when connectivity returns.
+
+---
+
+## Table of Contents
+
+1. [Architecture Overview](#1-architecture-overview)
+2. [Tech Stack](#2-tech-stack)
+3. [Project Setup](#3-project-setup)
+4. [Database Schema (Prisma + PostgreSQL)](#4-database-schema-prisma--postgresql)
+5. [Local Database (Dexie + IndexedDB)](#5-local-database-dexie--indexeddb)
+6. [Type Definitions](#6-type-definitions)
+7. [Validation Layer (Zod)](#7-validation-layer-zod)
+8. [Repository Pattern — The Write-Through Layer](#8-repository-pattern--the-write-through-layer)
+9. [Server Actions — Batch Sync with Conflict Detection](#9-server-actions--batch-sync-with-conflict-detection)
+10. [Sync Engine — Delta Sync with Exponential Backoff](#10-sync-engine--delta-sync-with-exponential-backoff)
+11. [Network Detection & Online Provider](#11-network-detection--online-provider)
+12. [PWA — Making It Installable](#12-pwa--making-it-installable)
+13. [UI — Always Reading from Local](#13-ui--always-reading-from-local)
+14. [Key Design Decisions](#14-key-design-decisions)
+15. [Common Pitfalls](#15-common-pitfalls)
+
+---
+
+## 1. Architecture Overview
+
+The fundamental principle: **the local database (IndexedDB via Dexie) is the single source of truth on the device**. The UI never reads from the server directly. Network sync happens transparently in the background.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                         UI LAYER                        │
+│     Always reads from Dexie via useLiveQuery()          │
+│     Always writes via Repository → Dexie                │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────┐
+│                    REPOSITORY LAYER                      │
+│     • createCategory() → Dexie + sync metadata          │
+│     • deleteProduct()  → soft delete in Dexie           │
+│     • All writes go to Dexie FIRST                      │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────┐
+│                      SYNC ENGINE                         │
+│     • Push: pending Dexie changes → Server              │
+│     • Pull: server changes since last sync → Dexie      │
+│     • Conflict resolution (version-based)               │
+│     • Exponential backoff on failure                     │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────┐
+│              SERVER ACTIONS (Next.js RSC)                 │
+│     • pushChanges() — batch upsert in $transaction      │
+│     • pullChanges() — delta sync since timestamp        │
+│     • Zod validation on every input                     │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────┐
+│                 PostgreSQL (via Prisma)                   │
+│     • UUID primary keys                                 │
+│     • version column for conflict detection             │
+│     • isDeleted for soft deletes                        │
+│     • updatedAt for delta sync                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+**Creating a record (offline or online):**
+
+1. User clicks "Add Category"
+2. Repository generates a UUID, writes to Dexie with `isSynced: false, pendingOperation: "create"`
+3. `useLiveQuery` fires — UI updates instantly
+4. If online, sync engine pushes the change to the server in the background
+5. Server validates, creates the record, returns the version number
+6. Sync engine marks the Dexie record as `isSynced: true`
+
+**Coming back online after being offline:**
+
+1. Network detection fires (`navigator.onLine` event or periodic ping)
+2. Sync engine collects all Dexie records with `isSynced: false`
+3. Pushes them in a single batched transaction
+4. Pulls any server changes since `lastSyncedAt`
+5. Merges server data into Dexie, handling conflicts
+
+---
+
+## 2. Tech Stack
+
+| Layer          | Technology                    | Why                                                             |
+| -------------- | ----------------------------- | --------------------------------------------------------------- |
+| **Framework**  | Next.js 16 (App Router)       | Server actions, React 19, file-based routing                    |
+| **Local DB**   | Dexie.js 4 (IndexedDB)        | Reactive queries (`useLiveQuery`), typed schemas, works offline |
+| **Server DB**  | PostgreSQL (Neon)             | Reliable, relational, supports upsert and transactions          |
+| **ORM**        | Prisma 7                      | Type-safe queries, `$transaction`, schema migrations            |
+| **Validation** | Zod                           | Runtime validation on server actions — never trust the client   |
+| **UI**         | Tailwind CSS + shadcn/ui      | Rapid UI development with accessible components                 |
+| **PWA**        | Service Worker + Web Manifest | Installable, offline app shell caching                          |
+
+### Install the core dependencies:
+
+```bash
+pnpm add dexie dexie-react-hooks zod sonner date-fns lucide-react
+pnpm add -D prisma
+```
+
+---
+
+## 3. Project Setup
+
+### File Structure
+
+```
+├── actions/
+│   ├── sync.ts              # Server: batch push/pull + health check
+│   ├── categories.ts        # Server: direct CRUD (with Zod validation)
+│   └── products.ts          # Server: direct CRUD (with Zod validation)
+├── app/
+│   ├── layout.tsx           # Root layout: providers, PWA meta, SW registration
+│   ├── page.tsx             # Main UI: reads from Dexie, writes via repository
+│   └── generated/prisma/    # Auto-generated Prisma client
+├── components/
+│   ├── online-toggle.tsx    # Sync button, pending badge, force-offline toggle
+│   ├── pwa-register.tsx     # Service worker registration
+│   └── providers/
+│       └── online-provider.tsx  # Network detection, auto-sync, retry logic
+├── lib/
+│   ├── db.ts                # Dexie instance + IndexedDB schema
+│   ├── prisma.ts            # Prisma client singleton
+│   ├── repository.ts        # All local CRUD with sync tracking
+│   ├── sync-engine.ts       # Push/pull orchestration, backoff, retry
+│   └── validation.ts        # Zod schemas
+├── prisma/
+│   └── schema.prisma        # PostgreSQL schema
+├── public/
+│   ├── manifest.json        # PWA web manifest
+│   ├── sw.js                # Service worker
+│   └── icons/               # PWA icons (192x192, 512x512)
+└── types/
+    └── shop.ts              # All TypeScript interfaces
+```
+
+---
+
+## 4. Database Schema (Prisma + PostgreSQL)
+
+Every model needs these columns for offline-first sync:
+
+- **`id String @id @default(uuid())`** — Client-generated UUIDs prevent ID collisions between devices
+- **`version Int @default(1)`** — Incremented on every server update; used for conflict detection
+- **`isDeleted Boolean @default(false)`** — Soft deletes so deletions can be synced
+- **`updatedAt DateTime @updatedAt`** — Prisma auto-updates this; used for delta sync queries
+- **`createdAt DateTime @default(now())`** — Audit trail
+
+```prisma
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  version   Int       @default(1)
+  isDeleted Boolean   @default(false)
+  updatedAt DateTime  @updatedAt
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+model Product {
+  id         String   @id @default(uuid())
+  name       String
+  price      Float
+  categoryId String
+  version    Int      @default(1)
+  isDeleted  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  category   Category @relation(fields: [categoryId], references: [id])
+}
+```
+
+### Why UUIDs instead of auto-increment?
+
+With auto-increment IDs, two devices creating records offline will both generate `id: 1`, `id: 2`, etc. When they sync, these collide. UUIDs are globally unique — no coordination needed.
+
+```bash
+npx prisma db push    # Apply schema to database
+npx prisma generate   # Generate typed client
+```
+
+### Prisma Client Singleton
+
+```typescript
+// lib/prisma.ts
+
+import { PrismaClient } from "../app/generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+
+const globalForPrisma = global as unknown as {
+  prisma: PrismaClient;
+};
+
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const db = globalForPrisma.prisma || new PrismaClient({ adapter });
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+
+export default db;
+```
+
+---
+
+## 5. Local Database (Dexie + IndexedDB)
+
+Dexie wraps IndexedDB with a clean API and reactive queries. The schema defines primary keys and indexed fields.
+
+**Key decisions:**
+
+- `id` (not `++id`) — we supply our own UUID, no auto-increment
+- Index `isSynced`, `pendingOperation`, `isDeleted` — fast queries for sync and filtering
+- Separate `syncMeta` table for key-value metadata (e.g., `lastSyncedAt`)
+
+```typescript
+// lib/db.ts
+
+import { LocalCategory, LocalProduct } from "@/types/shop";
+import Dexie, { EntityTable } from "dexie";
+
+interface SyncMeta {
+  key: string;
+  value: string;
+}
+
+export const db = new Dexie("ShopDatabaseV2") as Dexie & {
+  categories: EntityTable<LocalCategory, "id">;
+  products: EntityTable<LocalProduct, "id">;
+  syncMeta: EntityTable<SyncMeta, "key">;
+};
+
+db.version(1).stores({
+  categories: "id, name, isSynced, pendingOperation, isDeleted",
+  products:
+    "id, name, price, categoryId, isSynced, pendingOperation, isDeleted",
+  syncMeta: "key",
+});
+```
+
+### Schema Versioning
+
+Dexie supports migrations. When you change the schema, bump the version and provide an `upgrade` function:
+
+```typescript
+db.version(2)
+  .stores({
+    categories: "id, name, isSynced, pendingOperation, isDeleted, newField",
+    // ...
+  })
+  .upgrade(async (tx) => {
+    // Migrate existing data
+    await tx
+      .table("categories")
+      .toCollection()
+      .modify((cat) => {
+        cat.newField = "default";
+      });
+  });
+```
+
+> **Warning:** IndexedDB cannot change the primary key of an existing store. If you switch from `++id` (auto-increment int) to `id` (UUID string), use a new database name.
+
+---
+
+## 6. Type Definitions
+
+Separate types for each layer prevents tight coupling. The UI uses clean types; the data layer adds sync metadata internally.
+
+```typescript
+// types/shop.ts
+
+// ============ Base UI Types (clean, no sync metadata) ============
+
+export interface Category {
+  id: string;
+  name: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  price: number;
+  categoryId: string;
+}
+
+// ============ Local Storage Types (Dexie records with sync tracking) ============
+
+export interface LocalCategory {
+  id: string;
+  name: string;
+  isSynced: boolean;
+  syncVersion: number;
+  pendingOperation: "create" | "update" | "delete" | null;
+  isDeleted: boolean;
+  updatedAt: string;
+}
+
+export interface LocalProduct {
+  id: string;
+  name: string;
+  price: number;
+  categoryId: string;
+  isSynced: boolean;
+  syncVersion: number;
+  pendingOperation: "create" | "update" | "delete" | null;
+  isDeleted: boolean;
+  updatedAt: string;
+}
+
+// ============ Sync Types ============
+
+export interface SyncResult {
+  success: boolean;
+  conflicts: ConflictRecord[];
+  syncedAt: string;
+  error?: string;
+}
+
+export interface ConflictRecord {
+  entityType: "category" | "product";
+  entityId: string;
+  resolution: "server-wins";
+  clientVersion: number;
+  serverVersion: number;
+}
+
+export interface PushResult {
+  success: boolean;
+  syncedCategories: { id: string; version: number }[];
+  syncedProducts: { id: string; version: number }[];
+  conflicts: ConflictRecord[];
+  error?: string;
+}
+
+export interface PullResult {
+  categories: ServerCategory[];
+  products: ServerProduct[];
+  syncedAt: string;
+}
+```
+
+### Sync Metadata Fields Explained
+
+| Field              | Purpose                                                             |
+| ------------------ | ------------------------------------------------------------------- |
+| `isSynced`         | `false` = needs to be pushed to server                              |
+| `syncVersion`      | Matches the server's `version` column — used for conflict detection |
+| `pendingOperation` | `"create"`, `"update"`, `"delete"`, or `null` (synced)              |
+| `isDeleted`        | Soft delete flag — record is hidden from UI but kept until synced   |
+| `updatedAt`        | ISO timestamp of last local modification                            |
+
+---
+
+## 7. Validation Layer (Zod)
+
+**Never trust data from the client.** Every server action validates its input with Zod.
+
+```typescript
+// lib/validation.ts
+
+import { z } from "zod";
+
+export const categorySchema = z.object({
+  name: z.string().min(1, "Name is required").max(100, "Name too long").trim(),
+});
+
+export const productSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200, "Name too long").trim(),
+  price: z.number().positive("Price must be positive").finite(),
+  categoryId: z.string().uuid("Invalid category ID"),
+});
+
+// Schemas for sync payloads — validate every field coming from the client
+export const syncCategorySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(100).trim(),
+  syncVersion: z.number().int().min(0),
+  pendingOperation: z.enum(["create", "update", "delete"]).nullable(),
+  isDeleted: z.boolean(),
+});
+
+export const syncProductSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(200).trim(),
+  price: z.number().positive().finite(),
+  categoryId: z.string().uuid(),
+  syncVersion: z.number().int().min(0),
+  pendingOperation: z.enum(["create", "update", "delete"]).nullable(),
+  isDeleted: z.boolean(),
+});
+
+export const pushChangesSchema = z.object({
+  categories: z.array(syncCategorySchema),
+  products: z.array(syncProductSchema),
+});
+```
+
+---
+
+## 8. Repository Pattern — The Write-Through Layer
+
+The repository is the **only way** the UI writes data. Every write:
+
+1. Generates a UUID
+2. Writes to Dexie with sync metadata
+3. Returns immediately (no network wait)
+
+The sync engine handles pushing to the server later.
+
+```typescript
+// lib/repository.ts
+
+import { db } from "./db";
+import { LocalCategory, LocalProduct } from "@/types/shop";
+
+function generateId(): string {
+  return crypto.randomUUID();
+}
+
+function now(): string {
+  return new Date().toISOString();
+}
+```
+
+### Create
+
+```typescript
+export async function createCategory(name: string): Promise<LocalCategory> {
+  const category: LocalCategory = {
+    id: generateId(),
+    name: name.trim(),
+    isSynced: false,
+    syncVersion: 0,
+    pendingOperation: "create",
+    isDeleted: false,
+    updatedAt: now(),
+  };
+  await db.categories.add(category);
+  return category;
+}
+
+export async function createProduct(data: {
+  name: string;
+  price: number;
+  categoryId: string;
+}): Promise<LocalProduct> {
+  const product: LocalProduct = {
+    id: generateId(),
+    name: data.name.trim(),
+    price: data.price,
+    categoryId: data.categoryId,
+    isSynced: false,
+    syncVersion: 0,
+    pendingOperation: "create",
+    isDeleted: false,
+    updatedAt: now(),
+  };
+  await db.products.add(product);
+  return product;
+}
+```
+
+### Update
+
+When updating, preserve the `pendingOperation` if it's already `"create"` (record hasn't been synced yet):
+
+```typescript
+export async function updateCategory(id: string, name: string): Promise<void> {
+  const existing = await db.categories.get(id);
+  if (!existing) throw new Error("Category not found");
+
+  await db.categories.update(id, {
+    name: name.trim(),
+    isSynced: false,
+    pendingOperation:
+      existing.pendingOperation === "create" ? "create" : "update",
+    updatedAt: now(),
+  });
+}
+```
+
+### Delete (Soft Delete)
+
+If the record was never synced (`pendingOperation === "create"`), hard delete it — the server doesn't know about it. Otherwise, soft delete and mark for sync.
+
+```typescript
+export async function deleteCategory(id: string): Promise<void> {
+  const existing = await db.categories.get(id);
+  if (!existing) throw new Error("Category not found");
+
+  if (existing.pendingOperation === "create") {
+    // Never synced to server — safe to hard delete
+    await db.categories.delete(id);
+  } else {
+    // Soft delete — mark for sync
+    await db.categories.update(id, {
+      isDeleted: true,
+      isSynced: false,
+      pendingOperation: "delete",
+      updatedAt: now(),
+    });
+  }
+}
+```
+
+### Read (Filter Deleted)
+
+```typescript
+export async function getCategories(): Promise<LocalCategory[]> {
+  return db.categories.filter((c) => !c.isDeleted).toArray();
+}
+```
+
+### Sync Helpers
+
+```typescript
+// Get all records that need to be pushed to the server
+export async function getPendingChanges() {
+  const categories = await db.categories
+    .filter((c) => !c.isSynced && c.pendingOperation !== null)
+    .toArray();
+  const products = await db.products
+    .filter((p) => !p.isSynced && p.pendingOperation !== null)
+    .toArray();
+  return { categories, products };
+}
+
+// After successful push, mark records as synced
+export async function markCategoriesSynced(
+  results: { id: string; version: number }[]
+): Promise<void> {
+  await db.transaction("rw", db.categories, async () => {
+    for (const { id, version } of results) {
+      if (version === -1) {
+        // Sentinel for deleted — remove from local DB
+        await db.categories.delete(id);
+      } else {
+        await db.categories.update(id, {
+          isSynced: true,
+          syncVersion: version,
+          pendingOperation: null,
+          updatedAt: now(),
+        });
+      }
+    }
+  });
+}
+```
+
+### Merging Server Data (Pull)
+
+When pulling server data, three cases:
+
+1. **Record doesn't exist locally** → Add it
+2. **Record exists with pending changes** → Conflict! (server-wins by default)
+3. **Record exists, no pending changes** → Safe to overwrite
+
+```typescript
+export async function mergeServerCategories(
+  serverCategories: {
+    id: string;
+    name: string;
+    version: number;
+    isDeleted: boolean;
+  }[]
+): Promise<number> {
+  let conflicts = 0;
+
+  await db.transaction("rw", db.categories, async () => {
+    for (const serverCat of serverCategories) {
+      const local = await db.categories.get(serverCat.id);
+
+      if (!local) {
+        // New from server — add to Dexie
+        if (!serverCat.isDeleted) {
+          await db.categories.add({
+            id: serverCat.id,
+            name: serverCat.name,
+            isSynced: true,
+            syncVersion: serverCat.version,
+            pendingOperation: null,
+            isDeleted: false,
+            updatedAt: now(),
+          });
+        }
+      } else if (local.pendingOperation) {
+        // Conflict — server wins
+        conflicts++;
+        await db.categories.update(serverCat.id, {
+          name: serverCat.name,
+          isSynced: true,
+          syncVersion: serverCat.version,
+          pendingOperation: null,
+          isDeleted: serverCat.isDeleted,
+          updatedAt: now(),
+        });
+      } else {
+        // No conflict — safe to update
+        await db.categories.update(serverCat.id, {
+          name: serverCat.name,
+          isSynced: true,
+          syncVersion: serverCat.version,
+          isDeleted: serverCat.isDeleted,
+          updatedAt: now(),
+        });
+      }
+    }
+  });
+
+  // Clean up soft-deleted records that are fully synced
+  const deletedSynced = await db.categories
+    .filter((c) => c.isDeleted && c.isSynced)
+    .toArray();
+  for (const cat of deletedSynced) {
+    await db.categories.delete(cat.id);
+  }
+
+  return conflicts;
+}
+```
+
+### Sync Metadata
+
+Store the last sync timestamp in Dexie so delta sync only fetches what changed:
+
+```typescript
+export async function getLastSyncedAt(): Promise<string | null> {
+  const meta = await db.syncMeta.get("lastSyncedAt");
+  return meta?.value || null;
+}
+
+export async function setLastSyncedAt(timestamp: string): Promise<void> {
+  await db.syncMeta.put({ key: "lastSyncedAt", value: timestamp });
+}
+```
+
+---
+
+## 9. Server Actions — Batch Sync with Conflict Detection
+
+All sync operations happen in a **single Prisma `$transaction`** for atomicity. The server validates every input with Zod.
+
+```typescript
+// actions/sync.ts
+
+"use server";
+
+import db from "@/lib/prisma";
+import { pushChangesSchema } from "@/lib/validation";
+import type { PushResult, PullResult, ConflictRecord } from "@/types/shop";
+```
+
+### Push Changes (Client → Server)
+
+```typescript
+export async function pushChanges(data: {
+  categories: unknown[];
+  products: unknown[];
+}): Promise<PushResult> {
+  // Validate all incoming data
+  const parsed = pushChangesSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      success: false,
+      syncedCategories: [],
+      syncedProducts: [],
+      conflicts: [],
+      error: parsed.error.message,
+    };
+  }
+
+  const { categories, products } = parsed.data;
+  const syncedCategories: { id: string; version: number }[] = [];
+  const syncedProducts: { id: string; version: number }[] = [];
+  const conflicts: ConflictRecord[] = [];
+
+  try {
+    await db.$transaction(async (tx) => {
+      for (const cat of categories) {
+        if (cat.pendingOperation === "create") {
+          // Upsert: create if new, update if ID already exists
+          const result = await tx.category.upsert({
+            where: { id: cat.id },
+            create: { id: cat.id, name: cat.name },
+            update: { name: cat.name, version: { increment: 1 } },
+          });
+          syncedCategories.push({ id: result.id, version: result.version });
+        } else if (cat.pendingOperation === "update") {
+          // Check version for conflict detection
+          const existing = await tx.category.findUnique({
+            where: { id: cat.id },
+          });
+          if (existing && existing.version !== cat.syncVersion) {
+            // VERSION MISMATCH = CONFLICT
+            conflicts.push({
+              entityType: "category",
+              entityId: cat.id,
+              resolution: "server-wins",
+              clientVersion: cat.syncVersion,
+              serverVersion: existing.version,
+            });
+            syncedCategories.push({
+              id: existing.id,
+              version: existing.version,
+            });
+          } else {
+            const updated = await tx.category.update({
+              where: { id: cat.id },
+              data: { name: cat.name, version: { increment: 1 } },
+            });
+            syncedCategories.push({ id: updated.id, version: updated.version });
+          }
+        } else if (cat.pendingOperation === "delete") {
+          // Soft delete on server
+          await tx.category.update({
+            where: { id: cat.id },
+            data: { isDeleted: true, version: { increment: 1 } },
+          });
+          syncedCategories.push({ id: cat.id, version: -1 }); // -1 = deleted sentinel
+        }
+      }
+
+      // ... same pattern for products ...
+    });
+
+    return { success: true, syncedCategories, syncedProducts, conflicts };
+  } catch (error) {
+    return {
+      success: false,
+      syncedCategories: [],
+      syncedProducts: [],
+      conflicts: [],
+      error: String(error),
+    };
+  }
+}
+```
+
+### Pull Changes (Server → Client) — Delta Sync
+
+Only return records updated since the client's last sync:
+
+```typescript
+export async function pullChanges(
+  lastSyncedAt?: string | null
+): Promise<PullResult> {
+  const where = lastSyncedAt
+    ? { updatedAt: { gt: new Date(lastSyncedAt) } }
+    : {};
+
+  const categories = await db.category.findMany({ where });
+  const products = await db.product.findMany({ where });
+
+  return {
+    categories,
+    products,
+    syncedAt: new Date().toISOString(),
+  };
+}
+```
+
+### Health Check (for connectivity detection)
+
+```typescript
+export async function healthCheck(): Promise<{ ok: boolean }> {
+  try {
+    await db.category.findFirst({ select: { id: true } });
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+```
+
+---
+
+## 10. Sync Engine — Delta Sync with Exponential Backoff
+
+The sync engine orchestrates the push → pull → merge flow. It runs on the client and calls server actions.
+
+```typescript
+// lib/sync-engine.ts
+
+import { pushChanges, pullChanges, healthCheck } from "@/actions/sync";
+import * as repo from "@/lib/repository";
+import type { SyncResult, ConflictRecord } from "@/types/shop";
+
+let retryCount = 0;
+const MAX_RETRIES = 5;
+
+function calculateBackoff(): number {
+  // 1s → 2s → 4s → 8s → 16s, capped at 60s
+  return Math.min(1000 * Math.pow(2, retryCount), 60000);
+}
+
+export async function performSync(): Promise<SyncResult> {
+  const allConflicts: ConflictRecord[] = [];
+
+  try {
+    // Step 1: PUSH — send pending local changes to server
+    const pending = await repo.getPendingChanges();
+
+    if (pending.categories.length > 0 || pending.products.length > 0) {
+      const pushResult = await pushChanges({
+        categories: pending.categories,
+        products: pending.products,
+      });
+
+      if (!pushResult.success) {
+        throw new Error(pushResult.error || "Push failed");
+      }
+
+      // Mark pushed records as synced in Dexie
+      if (pushResult.syncedCategories.length > 0) {
+        await repo.markCategoriesSynced(pushResult.syncedCategories);
+      }
+      if (pushResult.syncedProducts.length > 0) {
+        await repo.markProductsSynced(pushResult.syncedProducts);
+      }
+
+      allConflicts.push(...pushResult.conflicts);
+    }
+
+    // Step 2: PULL — fetch server changes since last sync
+    const lastSynced = await repo.getLastSyncedAt();
+    const serverData = await pullChanges(lastSynced);
+
+    // Step 3: MERGE — write server data into Dexie
+    await repo.mergeServerCategories(serverData.categories);
+    await repo.mergeServerProducts(serverData.products);
+
+    // Step 4: Update last sync timestamp
+    await repo.setLastSyncedAt(serverData.syncedAt);
+
+    retryCount = 0; // Reset on success
+    return {
+      success: true,
+      conflicts: allConflicts,
+      syncedAt: serverData.syncedAt,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      conflicts: allConflicts,
+      syncedAt: new Date().toISOString(),
+      error: String(error),
+    };
+  }
+}
+
+export async function checkConnectivity(): Promise<boolean> {
+  try {
+    const result = await healthCheck();
+    return result.ok;
+  } catch {
+    return false;
+  }
+}
+
+export function shouldRetry(): boolean {
+  return retryCount < MAX_RETRIES;
+}
+export function getRetryDelay(): number {
+  return calculateBackoff();
+}
+export function incrementRetry(): void {
+  retryCount++;
+}
+export function resetRetries(): void {
+  retryCount = 0;
+}
+export function getRetryCount(): number {
+  return retryCount;
+}
+```
+
+---
+
+## 11. Network Detection & Online Provider
+
+The `OnlineProvider` wraps the entire app and provides:
+
+- **Auto network detection** — `navigator.onLine` + browser events + periodic server ping
+- **Force-offline toggle** — for testing or user preference
+- **Auto-sync on reconnect** — triggers sync when transitioning from offline to online
+- **Exponential backoff** — retries failed syncs with increasing delays
+- **Graceful degradation** — after 3 failures warns the user; after 5 switches to offline mode
+
+```typescript
+// components/providers/online-provider.tsx
+
+"use client";
+
+import React, {
+  createContext, useContext, useState, useEffect, useCallback, useRef,
+} from "react";
+import {
+  performSync, checkConnectivity, shouldRetry,
+  getRetryDelay, incrementRetry, resetRetries, getRetryCount,
+} from "@/lib/sync-engine";
+import { getPendingCount, getLastSyncedAt } from "@/lib/repository";
+import { toast } from "sonner";
+import type { SyncResult } from "@/types/shop";
+
+interface OnlineContextType {
+  isOnline: boolean;
+  isSyncing: boolean;
+  pendingCount: number;
+  lastSyncedAt: string | null;
+  forceOffline: boolean;
+  setForceOffline: (value: boolean) => void;
+  syncNow: () => Promise<void>;
+}
+
+const OnlineContext = createContext<OnlineContextType | undefined>(undefined);
+
+const PING_INTERVAL = 30_000;      // 30 seconds
+const PENDING_POLL_INTERVAL = 5_000; // 5 seconds
+
+export function OnlineProvider({ children }: { children: React.ReactNode }) {
+  const [isOnline, setIsOnline] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [forceOffline, setForceOffline] = useState(true); // Default: offline
+  const [pendingCount, setPendingCount] = useState(0);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasOfflineRef = useRef(true);
+  const isSyncingRef = useRef(false);
+
+  // ---- Network auto-detection ----
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsOnline(navigator.onLine);
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // Periodic ping to confirm real connectivity
+    // (navigator.onLine can be true behind a captive portal)
+    const pingInterval = setInterval(async () => {
+      if (!forceOffline) {
+        const reachable = await checkConnectivity();
+        setIsOnline(reachable);
+      }
+    }, PING_INTERVAL);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      clearInterval(pingInterval);
+    };
+  }, [forceOffline]);
+
+  // ---- Poll pending count ----
+  useEffect(() => {
+    const update = async () => {
+      try {
+        setPendingCount(await getPendingCount());
+        setLastSyncedAt(await getLastSyncedAt());
+      } catch { /* Dexie not ready yet */ }
+    };
+    update();
+    const interval = setInterval(update, PENDING_POLL_INTERVAL);
+    return () => clearInterval(interval);
+  }, []);
+
+  const effectiveOnline = isOnline && !forceOffline;
+
+  // ---- Sync with retry logic ----
+  const syncNow = useCallback(async () => {
+    if (isSyncingRef.current || !effectiveOnline) return;
+    isSyncingRef.current = true;
+    setIsSyncing(true);
+
+    try {
+      const result: SyncResult = await performSync();
+      if (result.success) {
+        resetRetries();
+        setPendingCount(await getPendingCount());
+        setLastSyncedAt(result.syncedAt);
+        if (result.conflicts.length > 0) {
+          toast.warning(`Synced with ${result.conflicts.length} conflict(s)`);
+        } else {
+          toast.success("Synced successfully");
+        }
+      } else {
+        throw new Error(result.error || "Sync failed");
+      }
+    } catch (error) {
+      toast.error("Sync failed");
+
+      if (shouldRetry()) {
+        incrementRetry();
+        const currentRetry = getRetryCount();
+
+        // Warn at retry 3
+        if (currentRetry === 3) {
+          toast.warning("Please check your internet connection.");
+        }
+
+        // Give up at retry 5 — switch to offline
+        if (currentRetry >= 5) {
+          toast.error("Switching back to offline mode.");
+          resetRetries();
+          setForceOffline(true);
+          return;
+        }
+
+        const delay = getRetryDelay();
+        toast.info(`Retrying in ${Math.round(delay / 1000)}s... (${currentRetry}/5)`);
+        retryTimeoutRef.current = setTimeout(() => {
+          isSyncingRef.current = false;
+          syncNow();
+        }, delay);
+        return;
+      } else {
+        resetRetries();
+        setForceOffline(true);
+      }
+    } finally {
+      isSyncingRef.current = false;
+      setIsSyncing(false);
+    }
+  }, [effectiveOnline]);
+
+  // ---- Auto-sync when coming back online ----
+  useEffect(() => {
+    if (effectiveOnline && wasOfflineRef.current) syncNow();
+    wasOfflineRef.current = !effectiveOnline;
+  }, [effectiveOnline, syncNow]);
+
+  useEffect(() => {
+    return () => { if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current); };
+  }, []);
+
+  return (
+    <OnlineContext.Provider value={{
+      isOnline: effectiveOnline, isSyncing, pendingCount,
+      lastSyncedAt, forceOffline, setForceOffline, syncNow,
+    }}>
+      {children}
+    </OnlineContext.Provider>
+  );
+}
+
+export function useOnline() {
+  const context = useContext(OnlineContext);
+  if (!context) throw new Error("useOnline must be used within OnlineProvider");
+  return context;
+}
+```
+
+### Sync Status UI
+
+```typescript
+// components/online-toggle.tsx
+
+"use client";
+
+import { useOnline } from "@/components/providers/online-provider";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, RefreshCw, Clock } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+
+export function OnlineToggle() {
+  const {
+    isOnline, isSyncing, pendingCount,
+    lastSyncedAt, forceOffline, setForceOffline, syncNow,
+  } = useOnline();
+
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      {pendingCount > 0 && (
+        <Badge variant="secondary" className="gap-1 text-xs">
+          {pendingCount} pending
+        </Badge>
+      )}
+
+      {lastSyncedAt && (
+        <span className="text-xs text-muted-foreground flex items-center gap-1">
+          <Clock className="h-3 w-3" />
+          {formatDistanceToNow(new Date(lastSyncedAt), { addSuffix: true })}
+        </span>
+      )}
+
+      <Button variant="outline" size="sm" onClick={syncNow}
+        disabled={isSyncing || !isOnline}>
+        {isSyncing
+          ? <Loader2 className="h-4 w-4 animate-spin" />
+          : <RefreshCw className="h-4 w-4" />}
+        <span className="ml-1">Sync</span>
+      </Button>
+
+      <div className="flex items-center space-x-2 bg-secondary p-2 rounded-lg">
+        <Switch id="force-offline" checked={forceOffline}
+          onCheckedChange={setForceOffline} disabled={isSyncing} />
+        <Label htmlFor="force-offline" className="cursor-pointer text-sm">
+          Force Offline
+        </Label>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 12. PWA — Making It Installable
+
+Three pieces make a web app installable: a **manifest**, a **service worker**, and **HTTPS**.
+
+### Web App Manifest
+
+```json
+// public/manifest.json
+
+{
+  "name": "Shop Management",
+  "short_name": "Shop",
+  "description": "Offline-first product and category management",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#18181b",
+  "theme_color": "#18181b",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
+```
+
+### Service Worker
+
+Uses different caching strategies per request type:
+
+- **Navigation** (HTML pages): Network-first, fallback to cached app shell
+- **Static assets** (JS, CSS, images): Stale-while-revalidate
+- **POST requests** (server actions): Never cached — pass through
+
+```javascript
+// public/sw.js
+
+const CACHE_NAME = "shop-cache-v1";
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(["/"])));
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+        )
+      )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+
+  // Never cache POST (server actions)
+  if (request.method !== "GET") return;
+  if (!request.url.startsWith("http")) return;
+
+  // Navigation: network-first → cached app shell fallback
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          return response;
+        })
+        .catch(() => caches.match("/"))
+    );
+    return;
+  }
+
+  // Static assets: stale-while-revalidate
+  if (["script", "style", "image", "font"].includes(request.destination)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const fetchPromise = fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const clone = response.clone();
+              caches
+                .open(CACHE_NAME)
+                .then((cache) => cache.put(request, clone));
+            }
+            return response;
+          })
+          .catch(() => cached);
+        return cached || fetchPromise;
+      })
+    );
+    return;
+  }
+});
+```
+
+### Service Worker Registration
+
+```typescript
+// components/pwa-register.tsx
+
+"use client";
+
+import { useEffect } from "react";
+
+export function PWARegister() {
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then((reg) => console.log("SW registered:", reg.scope))
+        .catch((err) => console.error("SW registration failed:", err));
+    }
+  }, []);
+
+  return null;
+}
+```
+
+### Layout Integration
+
+```typescript
+// app/layout.tsx
+
+import type { Metadata, Viewport } from "next";
+import { OnlineProvider } from "@/components/providers/online-provider";
+import { Toaster } from "@/components/ui/sonner";
+import { PWARegister } from "@/components/pwa-register";
+
+export const metadata: Metadata = {
+  title: "Shop Management",
+  description: "Offline-first product and category management",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Shop Management",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#18181b",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+      </head>
+      <body>
+        <PWARegister />
+        <OnlineProvider>{children}</OnlineProvider>
+        <Toaster />
+      </body>
+    </html>
+  );
+}
+```
+
+---
+
+## 13. UI — Always Reading from Local
+
+The page component **never** reads from server actions. It uses `useLiveQuery` to reactively subscribe to Dexie. When sync adds/updates records in Dexie, the UI updates automatically.
+
+```typescript
+// app/page.tsx
+
+"use client";
+
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/lib/db";
+import * as repo from "@/lib/repository";
+
+const PAGE_SIZE = 20;
+
+export default function ShopPage() {
+  const { isOnline } = useOnline();
+
+  // ALWAYS read from Dexie — single source of truth
+  const categories =
+    useLiveQuery(() => db.categories.filter((c) => !c.isDeleted).toArray()) || [];
+  const products =
+    useLiveQuery(() => db.products.filter((p) => !p.isDeleted).toArray()) || [];
+
+  // Pagination
+  const [categoryPage, setCategoryPage] = useState(1);
+  const paginatedCategories = categories.slice(0, categoryPage * PAGE_SIZE);
+
+  // Create — always through repository → Dexie
+  const handleCreateCategory = async () => {
+    await repo.createCategory(name);
+    // No need to refresh — useLiveQuery reacts automatically
+  };
+
+  // Delete — soft delete through repository
+  const handleDeleteCategory = async (id: string) => {
+    await repo.deleteCategory(id);
+  };
+
+  // Each row shows sync status
+  return (
+    <TableRow key={category.id}>
+      <TableCell>{category.name}</TableCell>
+      <TableCell>
+        {category.isSynced
+          ? <Cloud className="text-green-500" />   // Synced
+          : <CloudOff className="text-yellow-500" /> // Pending
+        }
+      </TableCell>
+      <TableCell>
+        <Button onClick={() => handleDeleteCategory(category.id)}>
+          <Trash2 />
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+```
+
+### Why `useLiveQuery`?
+
+It's a Dexie React hook that **re-renders your component whenever the queried data changes** in IndexedDB. This means:
+
+- Creating a record → UI updates instantly
+- Sync engine pulls new data → UI updates automatically
+- Deleting a record → disappears from the list immediately
+
+No `useState` + `useEffect` + manual refetching needed.
+
+---
+
+## 14. Key Design Decisions
+
+### 1. Local-First, Not Offline-Compatible
+
+The app doesn't "fall back" to offline mode. Offline **is** the default. The local database is always the source of truth. The server is just a place to sync.
+
+### 2. UUIDs Over Auto-Increment
+
+Auto-increment IDs from two disconnected clients **will collide**. `crypto.randomUUID()` generates globally unique IDs without coordination.
+
+### 3. Version-Based Conflict Detection
+
+Every server record has a `version` integer. When the client sends an update, it includes the version it was based on (`syncVersion`). If the server's current version doesn't match, someone else modified it — that's a conflict.
+
+### 4. Server-Wins Conflict Resolution
+
+The simplest strategy. When a conflict is detected, the server version takes precedence. The conflict is logged so you can implement manual resolution later.
+
+### 5. Soft Deletes Everywhere
+
+Hard deletes can't be synced — if you delete a record locally, how does the server know to delete it too? Soft deletes (`isDeleted: true`) let the deletion propagate through the sync system.
+
+### 6. Delta Sync
+
+Instead of syncing the entire database every time, only transfer records changed since `lastSyncedAt`. This reduces bandwidth and server load dramatically.
+
+### 7. Batch Operations in Transactions
+
+All sync writes happen in a single Prisma `$transaction`. Either everything succeeds or everything rolls back. No partial sync states.
+
+### 8. Exponential Backoff
+
+Failed syncs retry with increasing delays: 1s, 2s, 4s, 8s, 16s. This prevents hammering a down server and respects the user's network conditions.
+
+---
+
+## 15. Common Pitfalls
+
+### 1. Don't read from the server in the UI
+
+```typescript
+// BAD — blocks UI on network
+const categories = await getCategories(); // server action
+
+// GOOD — instant from IndexedDB
+const categories = useLiveQuery(() => db.categories.toArray());
+```
+
+### 2. Don't use auto-increment IDs for offline
+
+```
+// BAD — both devices generate id: 1, id: 2...
+++id
+
+// GOOD — globally unique, no coordination
+id (with crypto.randomUUID())
+```
+
+### 3. Don't trust `navigator.onLine`
+
+It only checks if there's a network interface, not if the internet works. Always supplement with an actual server ping.
+
+### 4. Don't hard-delete offline
+
+Hard deletes can't be synced. Use soft deletes (`isDeleted: true`) and clean up after successful sync.
+
+### 5. Don't cache POST requests in the service worker
+
+Next.js server actions use POST. Caching them would return stale mutation results. Only cache GET requests.
+
+### 6. Don't forget schema versioning
+
+Both Prisma (migrations) and Dexie (version numbers) need versioned schemas. Without them, app updates will crash or lose data.
+
+### 7. Don't sync one record at a time
+
+```typescript
+// BAD — N network requests
+for (const cat of categories) {
+  await createCategoryOnServer(cat);
+}
+
+// GOOD — 1 network request, 1 transaction
+await db.$transaction(async (tx) => {
+  for (const cat of categories) {
+    await tx.category.upsert({ ... });
+  }
+});
+```
+
+---
+
+## Running the Project
+
+```bash
+# Install dependencies
+pnpm install
+
+# Set up your database URL in .env
+DATABASE_URL="postgresql://..."
+
+# Push schema to database
+npx prisma db push
+
+# Generate Prisma client
+npx prisma generate
+
+# Start development server
+pnpm dev
+```
+
+Open `http://localhost:3000`. Create categories and products — they work offline. Toggle "Force Offline" off and click "Sync" to push to the server.
+
+---
+
+## License
+
+MIT
