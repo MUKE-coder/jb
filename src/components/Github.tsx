@@ -48,6 +48,7 @@ function filterLastYear(contributions: ContributionItem[]): ContributionItem[] {
 export default function Github() {
   const [contributions, setContributions] = useState<ContributionItem[]>([]);
   const [totalContributions, setTotalContributions] = useState<number>(0);
+  const [repoCount, setRepoCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const { theme } = useTheme();
@@ -118,6 +119,21 @@ export default function Github() {
     }
 
     fetchData();
+
+    // Fetch total repo count (public + private)
+    async function fetchRepoCount() {
+      try {
+        const res = await fetch("/api/github");
+        const data = await res.json();
+        if (data?.repos) {
+          setRepoCount(data.repos);
+        }
+      } catch {
+        // Silently fail — repo count is non-critical
+      }
+    }
+
+    fetchRepoCount();
   }, []);
 
   return (
@@ -133,13 +149,24 @@ export default function Github() {
               <b>{githubConfig.username}</b>&apos;s {githubConfig.subtitle}
             </p>
             {!isLoading && !hasError && totalContributions > 0 && (
-              <p className="mt-1 text-sm font-medium text-primary">
-                Total:{" "}
-                <span className="font-black">
-                  {totalContributions.toLocaleString()}
-                </span>{" "}
-                contributions
-              </p>
+              <div className="mt-1 flex items-center gap-3 text-sm font-medium text-primary">
+                <p>
+                  Total:{" "}
+                  <span className="font-black">
+                    {totalContributions.toLocaleString()}
+                  </span>{" "}
+                  contributions
+                </p>
+                {repoCount > 0 && (
+                  <>
+                    <span className="text-muted-foreground">·</span>
+                    <p>
+                      <span className="font-black">{repoCount}</span>{" "}
+                      repositories
+                    </p>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>

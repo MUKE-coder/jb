@@ -1,0 +1,944 @@
+---
+title: "The Ultimate Guide to File Uploads with Go, Next.js & Cloudflare R2 (S3-Compatible)"
+description: "This guide shows you a production-ready approach: **presigned URL uploads**. Files go directly from the browser to Cloudflare R2 (or AWS S3), completely bypassing your server. Your Go backend only generates upload permissions and stores the resulting URLs."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfdpjuYFDtTX7HgROGKhuZmVNCYcbaJiAq6woe
+category: components
+createdAt: 2026-02-17
+updatedAt: 2026-02-17
+---
+
+# The Ultimate Guide to File Uploads with Go, Next.js & Cloudflare R2 (S3-Compatible)
+
+Most file upload tutorials show you the basics — accept a file, save it to disk. But that approach falls apart in production. Local disk storage doesn't scale, server memory gets hammered by large files, and your API becomes a bottleneck.
+
+This guide shows you a production-ready approach: **presigned URL uploads**. Files go directly from the browser to Cloudflare R2 (or AWS S3), completely bypassing your server. Your Go backend only generates upload permissions and stores the resulting URLs.
+
+## Architecture Overview
+
+```
+┌──────────┐    1. Request presigned URL    ┌──────────┐
+│          │ ──────────────────────────────► │          │
+│  Next.js │    { filename, content_type }   │  Go API  │
+│ Frontend │ ◄────────────────────────────── │ Backend  │
+│          │    { presigned_url, public_url } │          │
+│          │                                 └──────────┘
+│          │    2. PUT file directly
+│          │ ──────────────────────────────► ┌──────────┐
+│          │    (binary file body)            │  R2 / S3 │
+│          │                                 │  Bucket  │
+│          │    3. Save public_url            └──────────┘
+│          │ ──────────────────────────────► ┌──────────┐
+│          │    { photo_url: "https://..." }  │  Go API  │
+└──────────┘                                 └──────────┘
+```
+
+**Why this approach?**
+
+- Zero server memory usage for file uploads
+- No file size limits on your API server
+- Upload progress tracking in the browser
+- Files served directly from CDN (fast)
+- Works with any S3-compatible storage (R2, AWS S3, MinIO, DigitalOcean Spaces)
+
+---
+
+## Prerequisites
+
+- Go 1.21+
+- Node.js 18+
+- A Cloudflare R2 bucket (or AWS S3 bucket)
+- Basic familiarity with Go/Gin and Next.js/React
+
+---
+
+## Part 1: Backend (Go + Gin)
+
+### 1.1 Install Dependencies
+
+```bash
+go get github.com/aws/aws-sdk-go-v2
+go get github.com/aws/aws-sdk-go-v2/credentials
+go get github.com/aws/aws-sdk-go-v2/service/s3
+go get github.com/google/uuid
+go get github.com/gin-gonic/gin
+```
+
+### 1.2 Environment Variables
+
+Create a `.env` file with your R2/S3 credentials:
+
+```env
+# Cloudflare R2
+CLOUDFLARE_R2_ACCESS_KEY_ID="your_access_key"
+CLOUDFLARE_R2_SECRET_ACCESS_KEY="your_secret_key"
+CLOUDFLARE_R2_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
+CLOUDFLARE_R2_BUCKET_NAME="your-bucket-name"
+CLOUDFLARE_R2_PUBLIC_DEV_URL="https://pub-xxxx.r2.dev"
+
+# For AWS S3 instead, use:
+# AWS_ACCESS_KEY_ID="..."
+# AWS_SECRET_ACCESS_KEY="..."
+# AWS_REGION="us-east-1"
+# AWS_S3_BUCKET_NAME="..."
+# AWS_S3_PUBLIC_URL="https://your-bucket.s3.amazonaws.com"
+```
+
+> **R2 Setup:** In Cloudflare Dashboard → R2 → your bucket → Settings → enable "Public Access" to get the `pub-xxxx.r2.dev` URL. Create an API token under R2 → Manage R2 API Tokens.
+
+### 1.3 Storage Client Package
+
+Create `storage/s3.go` — this is the core utility that wraps all R2/S3 operations:
+
+```go
+package storage
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
+)
+
+var (
+	Client     *s3.Client
+	Presigner  *s3.PresignClient
+	BucketName string
+	PublicURL  string
+)
+
+// Init creates the S3-compatible client. Call this once at server startup.
+func Init() {
+	endpoint := os.Getenv("CLOUDFLARE_R2_ENDPOINT")
+	accessKey := os.Getenv("CLOUDFLARE_R2_ACCESS_KEY_ID")
+	secretKey := os.Getenv("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
+	BucketName = os.Getenv("CLOUDFLARE_R2_BUCKET_NAME")
+	PublicURL = strings.TrimRight(os.Getenv("CLOUDFLARE_R2_PUBLIC_DEV_URL"), "/")
+
+	if endpoint == "" || accessKey == "" || secretKey == "" || BucketName == "" {
+		log.Println("WARNING: R2 storage not configured — file uploads will fail")
+		return
+	}
+
+	Client = s3.New(s3.Options{
+		Region:       "auto", // R2 uses "auto"; for AWS use your actual region
+		BaseEndpoint: aws.String(endpoint),
+		Credentials:  credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
+	})
+
+	Presigner = s3.NewPresignClient(Client)
+	log.Println("R2 storage initialized — bucket:", BucketName)
+}
+
+// GeneratePresignedURL creates a presigned PUT URL for direct browser upload.
+// Returns the presigned URL (for uploading), the storage key, and the public URL.
+func GeneratePresignedURL(folder, filename, contentType string) (presignedURL, key, publicURL string, err error) {
+	if Client == nil {
+		return "", "", "", fmt.Errorf("storage not initialized")
+	}
+
+	// Generate unique key to prevent filename collisions
+	// Format: folder/8char-uuid_original-filename
+	id := uuid.New().String()[:8]
+	key = fmt.Sprintf("%s/%s_%s", folder, id, filename)
+
+	result, err := Presigner.PresignPutObject(context.TODO(), &s3.PutObjectInput{
+		Bucket:      aws.String(BucketName),
+		Key:         aws.String(key),
+		ContentType: aws.String(contentType),
+	}, s3.WithPresignExpires(1*time.Hour))
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to generate presigned URL: %w", err)
+	}
+
+	publicURL = fmt.Sprintf("%s/%s", PublicURL, key)
+	return result.URL, key, publicURL, nil
+}
+
+// DeleteObject removes a file from the bucket by its storage key.
+func DeleteObject(key string) error {
+	if Client == nil || key == "" {
+		return nil
+	}
+
+	_, err := Client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+		Bucket: aws.String(BucketName),
+		Key:    aws.String(key),
+	})
+	return err
+}
+
+// DeleteByURL extracts the key from a public URL and deletes the object.
+// Convenient when you store full URLs in your database.
+func DeleteByURL(url string) error {
+	key := ExtractKeyFromURL(url)
+	if key == "" {
+		return nil
+	}
+	return DeleteObject(key)
+}
+
+// ExtractKeyFromURL strips the public base URL to get the storage key.
+func ExtractKeyFromURL(url string) string {
+	if url == "" || PublicURL == "" {
+		return ""
+	}
+	prefix := PublicURL + "/"
+	if strings.HasPrefix(url, prefix) {
+		return strings.TrimPrefix(url, prefix)
+	}
+	return ""
+}
+```
+
+**Key design decisions:**
+
+- **UUID prefix on filenames** prevents collisions when two users upload `photo.jpg`
+- **Folder-based organization** (`profiles/`, `documents/`, etc.) keeps storage tidy
+- **1-hour expiry** on presigned URLs gives users enough time without being a security risk
+- **`DeleteByURL`** is a convenience — you store full URLs in the DB, this extracts the key automatically
+
+### 1.4 Upload Handler Endpoints
+
+Create `handlers/upload.go` — two generic endpoints that any part of your app can use:
+
+```go
+package handlers
+
+import (
+	"your-app/storage"
+	"your-app/utils"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+// GetPresignedURL generates a presigned PUT URL for direct R2 upload.
+// POST /api/v1/uploads/presigned-url
+func GetPresignedURL(c *gin.Context) {
+	var req struct {
+		Filename    string `json:"filename" binding:"required"`
+		ContentType string `json:"content_type" binding:"required"`
+		FileSize    int64  `json:"file_size" binding:"required"`
+		Folder      string `json:"folder" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate folder — restrict to known folders to prevent abuse
+	validFolders := map[string]bool{
+		"profiles": true, "documents": true, "guarantors": true, "collaterals": true,
+	}
+	if !validFolders[req.Folder] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid folder"})
+		return
+	}
+
+	// Validate content type
+	validTypes := map[string]bool{
+		"image/jpeg": true, "image/png": true, "application/pdf": true,
+		"image/jpg": true,
+	}
+	if !validTypes[req.ContentType] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only JPG, PNG, and PDF files are allowed"})
+		return
+	}
+
+	// Validate file size (max 10MB)
+	if req.FileSize > 10*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File size must be less than 10MB"})
+		return
+	}
+
+	presignedURL, key, publicURL, err := storage.GeneratePresignedURL(
+		req.Folder, req.Filename, req.ContentType,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate upload URL"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"presigned_url": presignedURL,
+			"key":           key,
+			"public_url":    publicURL,
+		},
+	})
+}
+
+// DeleteUpload removes a file from R2 storage.
+// DELETE /api/v1/uploads/delete
+func DeleteUpload(c *gin.Context) {
+	var req struct {
+		URL string `json:"url" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := storage.DeleteByURL(req.URL); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "File deleted"})
+}
+```
+
+### 1.5 Using It in Your Domain Handlers
+
+Now your domain-specific handlers accept URLs instead of file uploads. Here's a profile photo example:
+
+```go
+// UploadProfilePhoto stores an R2 photo URL as the user's profile photo.
+// The frontend has already uploaded the file to R2 and sends us the URL.
+func UploadProfilePhoto(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+
+	var req struct {
+		PhotoURL string `json:"photo_url" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "photo_url is required"})
+		return
+	}
+
+	// Delete old photo from R2 if replacing
+	var user models.User
+	db.First(&user, userID)
+	if user.ProfilePhotoURL != "" {
+		storage.DeleteByURL(user.ProfilePhotoURL)
+	}
+
+	// Store the new R2 URL
+	db.Model(&models.User{}).Where("id = ?", userID).
+		Update("profile_photo_url", req.PhotoURL)
+
+	user.ProfilePhotoURL = req.PhotoURL
+	c.JSON(http.StatusOK, gin.H{"data": user})
+}
+```
+
+And a document upload example:
+
+```go
+// UploadDocument creates a document record with an R2 file URL.
+func UploadDocument(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+
+	var req struct {
+		DocumentType string `json:"document_type" binding:"required"`
+		FileURL      string `json:"file_url" binding:"required"`
+		FileName     string `json:"file_name" binding:"required"`
+		FileSize     int64  `json:"file_size" binding:"required"`
+		MimeType     string `json:"mime_type" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	doc := models.Document{
+		UserID:       userID.(uint),
+		DocumentType: req.DocumentType,
+		FileName:     req.FileName,
+		FilePath:     req.FileURL, // Store the full R2 URL
+		FileSize:     req.FileSize,
+		MimeType:     req.MimeType,
+		Status:       "pending",
+	}
+
+	db.Create(&doc)
+	c.JSON(http.StatusCreated, gin.H{"data": doc})
+}
+```
+
+**Pattern:** Your handlers never touch files. They receive a URL string, store it in the database, and optionally delete old files from R2 when replacing.
+
+### 1.6 Download Handler (Redirect)
+
+Since files are publicly accessible on R2, "downloading" is just a redirect:
+
+```go
+func DownloadDocument(c *gin.Context, doc models.Document) {
+	// If stored on R2 (full URL), redirect to it
+	if strings.HasPrefix(doc.FilePath, "http") {
+		c.Redirect(http.StatusFound, doc.FilePath)
+		return
+	}
+
+	// Fallback for legacy local files (if migrating)
+	c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+}
+```
+
+### 1.7 Register Routes
+
+```go
+func SetupRouter() *gin.Engine {
+	r := gin.Default()
+
+	// Initialize R2 storage
+	storage.Init()
+
+	api := r.Group("/api/v1")
+
+	protected := api.Group("")
+	protected.Use(authMiddleware())
+	{
+		// Generic upload endpoints (any authenticated user)
+		protected.POST("/uploads/presigned-url", handlers.GetPresignedURL)
+		protected.DELETE("/uploads/delete", handlers.DeleteUpload)
+
+		// Domain-specific endpoints that accept URLs
+		protected.POST("/profile/photo", handlers.UploadProfilePhoto)
+		protected.POST("/documents", handlers.UploadDocument)
+		// ... other routes
+	}
+
+	return r
+}
+```
+
+> **Note:** We removed `r.Static("/uploads", "./uploads")` — no more serving files from disk.
+
+---
+
+## Part 2: Frontend (Next.js + React)
+
+### 2.1 Reusable Upload Utility
+
+Create `lib/upload.ts` — the core function that handles the 3-step upload flow:
+
+```typescript
+import apiClient from "@/lib/api-client"; // your axios instance
+
+interface PresignedURLResponse {
+  presigned_url: string;
+  key: string;
+  public_url: string;
+}
+
+/**
+ * Upload a file directly to R2 via presigned URL.
+ *
+ * Flow:
+ * 1. Request presigned URL from your Go backend
+ * 2. PUT the file directly to R2 (with progress tracking)
+ * 3. Return the public URL to store in your database
+ */
+export async function uploadToR2(
+  file: File,
+  folder: string,
+  onProgress?: (pct: number) => void
+): Promise<string> {
+  // Step 1: Get presigned URL from your backend
+  const res = await apiClient.post<{ data: PresignedURLResponse }>(
+    "/uploads/presigned-url",
+    {
+      filename: file.name,
+      content_type: file.type,
+      file_size: file.size,
+      folder,
+    }
+  );
+  const { presigned_url, public_url } = res.data.data;
+
+  // Step 2: Upload directly to R2 via XHR PUT
+  // We use XMLHttpRequest instead of fetch() because it supports upload progress
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`Upload failed with status ${xhr.status}`));
+
+    xhr.onerror = () => reject(new Error("Upload failed"));
+
+    xhr.open("PUT", presigned_url);
+    xhr.setRequestHeader("Content-Type", file.type);
+    xhr.send(file);
+  });
+
+  // Step 3: Return the public URL — caller stores this in the database
+  return public_url;
+}
+
+/**
+ * Delete a file from R2 storage.
+ */
+export async function deleteFromR2(url: string) {
+  await apiClient.delete("/uploads/delete", { data: { url } });
+}
+```
+
+**Why XMLHttpRequest instead of fetch?**
+
+The `fetch` API doesn't support upload progress tracking. `XMLHttpRequest` gives us `xhr.upload.onprogress` which lets us show a progress bar to the user.
+
+### 2.2 API Functions (JSON Instead of FormData)
+
+Your API functions become simpler — they send JSON instead of FormData:
+
+```typescript
+// lib/api/profile.ts
+
+// Before (multipart FormData):
+// export async function uploadProfilePhoto(file: File) {
+//   const formData = new FormData();
+//   formData.append("file", file);
+//   return apiClient.post("/profile/photo", formData, {
+//     headers: { "Content-Type": "multipart/form-data" },
+//   });
+// }
+
+// After (JSON with R2 URL):
+export async function uploadProfilePhoto(photoUrl: string) {
+  const res = await apiClient.post("/client/profile/photo", {
+    photo_url: photoUrl,
+  });
+  return res.data.data;
+}
+
+export async function uploadDocument(data: {
+  document_type: string;
+  file_url: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+}) {
+  const res = await apiClient.post("/client/documents", data);
+  return res.data.data;
+}
+```
+
+### 2.3 React Query Hooks
+
+```typescript
+// lib/hooks/use-profile.ts
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import * as profileApi from "@/lib/api/profile";
+import { useAuthStore } from "@/lib/stores/auth-store";
+
+export function useUploadProfilePhoto() {
+  const queryClient = useQueryClient();
+  const { setUser, user } = useAuthStore();
+
+  return useMutation({
+    // Now accepts a URL string instead of a File
+    mutationFn: (photoUrl: string) => profileApi.uploadProfilePhoto(photoUrl),
+    onSuccess: (updatedUser) => {
+      // Update local state immediately so the avatar refreshes
+      if (user) {
+        setUser({ ...user, profile_photo_url: updatedUser.profile_photo_url });
+      }
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+  });
+}
+
+export function useUploadDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      document_type: string;
+      file_url: string;
+      file_name: string;
+      file_size: number;
+      mime_type: string;
+    }) => profileApi.uploadDocument(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
+}
+```
+
+### 2.4 Upload Components
+
+Here's the key pattern: **upload to R2 first, then call your API with the URL**.
+
+#### Profile Photo Upload
+
+```tsx
+import { useState } from "react";
+import { uploadToR2 } from "@/lib/upload";
+import { useUploadProfilePhoto } from "@/lib/hooks/use-profile";
+
+function ProfilePhotoUpload() {
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const photoMutation = useUploadProfilePhoto();
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    e.target.value = ""; // Reset input
+
+    try {
+      setUploading(true);
+      // Step 1: Upload to R2 (with progress)
+      const url = await uploadToR2(file, "profiles", setProgress);
+      // Step 2: Tell backend to save the URL
+      photoMutation.mutate(url);
+    } catch (err) {
+      console.error("Upload failed:", err);
+    } finally {
+      setUploading(false);
+      setProgress(0);
+    }
+  };
+
+  return (
+    <div>
+      <label className="cursor-pointer">
+        <input
+          type="file"
+          className="hidden"
+          accept="image/jpeg,image/png"
+          onChange={handlePhotoUpload}
+        />
+        {photoUrl ? (
+          <img
+            src={photoUrl}
+            alt="Profile"
+            className="h-28 w-28 rounded-full object-cover"
+          />
+        ) : (
+          <div className="flex h-28 w-28 items-center justify-center rounded-full bg-gray-100">
+            Upload
+          </div>
+        )}
+      </label>
+
+      {uploading && (
+        <div className="mt-2">
+          <div className="h-2 w-full rounded-full bg-gray-200">
+            <div
+              className="h-2 rounded-full bg-blue-600 transition-all"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="mt-1 text-xs text-gray-500">{progress}%</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+#### Document Upload
+
+```tsx
+function DocumentUpload() {
+  const [uploading, setUploading] = useState(false);
+  const [selectedDocType, setSelectedDocType] = useState("national_id");
+  const uploadMutation = useUploadDocument();
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    try {
+      setUploading(true);
+      // Upload to R2
+      const url = await uploadToR2(file, "documents");
+      // Create document record with the URL
+      uploadMutation.mutate({
+        document_type: selectedDocType,
+        file_url: url,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type,
+      });
+    } catch (err) {
+      console.error("Upload failed:", err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-end gap-4">
+      <select
+        value={selectedDocType}
+        onChange={(e) => setSelectedDocType(e.target.value)}
+      >
+        <option value="national_id">National ID</option>
+        <option value="passport">Passport</option>
+        <option value="bank_statement">Bank Statement</option>
+      </select>
+
+      <label className="cursor-pointer">
+        <input
+          type="file"
+          className="hidden"
+          accept=".pdf,.jpg,.jpeg,.png"
+          onChange={handleFileUpload}
+        />
+        <span className="rounded bg-blue-600 px-4 py-2 text-sm text-white">
+          {uploading ? "Uploading..." : "Upload"}
+        </span>
+      </label>
+    </div>
+  );
+}
+```
+
+#### Multi-File Upload (Collateral with Proof Document)
+
+For forms where a file is part of a larger submission:
+
+```tsx
+function CollateralForm({ applicationId }: { applicationId: number }) {
+  const [colType, setColType] = useState("land_title");
+  const [description, setDescription] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const addCollateralMutation = useAddCollateral();
+
+  const handleSubmit = async () => {
+    let documentUrl = "";
+
+    // Upload file to R2 first (if one was selected)
+    if (file) {
+      try {
+        setUploading(true);
+        documentUrl = await uploadToR2(file, "collaterals");
+      } catch {
+        setUploading(false);
+        return; // Abort if upload fails
+      }
+      setUploading(false);
+    }
+
+    // Now create the collateral record with the URL
+    addCollateralMutation.mutate({
+      applicationId,
+      data: {
+        type: colType,
+        description: description || undefined,
+        document_url: documentUrl || undefined,
+      },
+    });
+  };
+
+  return (
+    <div>
+      <select value={colType} onChange={(e) => setColType(e.target.value)}>
+        <option value="land_title">Land Title</option>
+        <option value="vehicle_logbook">Vehicle Logbook</option>
+      </select>
+
+      <textarea
+        placeholder="Description..."
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
+
+      <input
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png"
+        onChange={(e) => setFile(e.target.files?.[0] || null)}
+      />
+
+      <button onClick={handleSubmit} disabled={uploading}>
+        {uploading ? "Uploading..." : "Add Collateral"}
+      </button>
+    </div>
+  );
+}
+```
+
+### 2.5 Displaying Images (Handling Both Old and New URLs)
+
+If you're migrating from local storage, you may have both relative paths (`/uploads/profiles/1/photo.jpg`) and full R2 URLs (`https://pub-xxx.r2.dev/profiles/abc_photo.jpg`). Handle both:
+
+```tsx
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1"
+).replace("/api/v1", "");
+
+function UserAvatar({ photoUrl }: { photoUrl?: string }) {
+  if (!photoUrl) {
+    return <div className="h-8 w-8 rounded-full bg-gray-200" />;
+  }
+
+  // Full R2 URL → use directly. Old relative path → prefix with API base.
+  const src = photoUrl.startsWith("http") ? photoUrl : `${API_BASE}${photoUrl}`;
+
+  return (
+    <img src={src} alt="Avatar" className="h-8 w-8 rounded-full object-cover" />
+  );
+}
+```
+
+---
+
+## Part 3: CORS Configuration (R2)
+
+For browser-to-R2 uploads to work, you need CORS configured on your bucket.
+
+### Cloudflare R2 CORS
+
+In Cloudflare Dashboard → R2 → your bucket → Settings → CORS Policy:
+
+```json
+[
+  {
+    "AllowedOrigins": ["http://localhost:3000", "https://yourdomain.com"],
+    "AllowedMethods": ["GET", "PUT", "DELETE"],
+    "AllowedHeaders": ["Content-Type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+### AWS S3 CORS
+
+```json
+[
+  {
+    "AllowedHeaders": ["Content-Type"],
+    "AllowedMethods": ["GET", "PUT", "DELETE"],
+    "AllowedOrigins": ["http://localhost:3000", "https://yourdomain.com"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+---
+
+## Part 4: Adapting for AWS S3
+
+The code works with AWS S3 with minimal changes. The only difference is how you initialize the client:
+
+```go
+// For Cloudflare R2:
+Client = s3.New(s3.Options{
+	Region:       "auto",
+	BaseEndpoint: aws.String("https://account-id.r2.cloudflarestorage.com"),
+	Credentials:  credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
+})
+
+// For AWS S3:
+Client = s3.New(s3.Options{
+	Region:      "us-east-1", // your actual AWS region
+	Credentials: credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
+	// No BaseEndpoint needed — SDK uses the default S3 endpoint
+})
+```
+
+The public URL format also differs:
+
+- **R2:** `https://pub-xxx.r2.dev/key`
+- **S3:** `https://bucket-name.s3.region.amazonaws.com/key` (or your CloudFront domain)
+
+Everything else — presigned URLs, upload flow, delete operations — works identically.
+
+---
+
+## Part 5: Security Considerations
+
+### 1. Validate on the Backend
+
+Never trust the frontend. Always validate:
+
+```go
+// Restrict allowed folders
+validFolders := map[string]bool{"profiles": true, "documents": true}
+
+// Restrict file types
+validTypes := map[string]bool{"image/jpeg": true, "image/png": true, "application/pdf": true}
+
+// Enforce file size limits
+if req.FileSize > 10*1024*1024 { ... }
+```
+
+### 2. Authenticate Presigned URL Requests
+
+The presigned URL endpoint must be behind authentication middleware. Otherwise anyone can generate upload URLs for your bucket.
+
+```go
+protected := api.Group("")
+protected.Use(authMiddleware()) // JWT, session, etc.
+{
+	protected.POST("/uploads/presigned-url", handlers.GetPresignedURL)
+}
+```
+
+### 3. Presigned URL Expiry
+
+Set a reasonable expiry (1 hour is good). The URL becomes useless after expiry:
+
+```go
+s3.WithPresignExpires(1 * time.Hour)
+```
+
+### 4. Clean Up Orphaned Files
+
+If a user uploads a file but never completes the form submission, the file sits in R2 unused. Consider:
+
+- A scheduled job that checks for R2 files not referenced in any database record
+- Setting R2/S3 lifecycle rules to auto-delete files older than X days in a `temp/` folder
+- Uploading to a `temp/` folder first, then moving to the final folder on form submission
+
+### 5. Private Files
+
+If some files should not be publicly accessible:
+
+- Don't enable public access on the bucket
+- Generate presigned **GET** URLs for downloads instead of redirecting
+- Set a short expiry (e.g., 5 minutes) on download URLs
+
+```go
+func GeneratePresignedDownloadURL(key string) (string, error) {
+	result, err := Presigner.PresignGetObject(context.TODO(), &s3.GetObjectInput{
+		Bucket: aws.String(BucketName),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(5*time.Minute))
+	if err != nil {
+		return "", err
+	}
+	return result.URL, nil
+}
+```
+
+---
+
+## Summary
+
+| Aspect                 | Old Approach (Multipart)    | New Approach (Presigned URLs)     |
+| ---------------------- | --------------------------- | --------------------------------- |
+| **Upload path**        | Browser → Server → Disk     | Browser → R2 directly             |
+| **Server memory**      | Buffered in RAM             | Zero — server only generates URLs |
+| **File size limit**    | Limited by server config    | Limited only by R2/S3 (5TB)       |
+| **Progress tracking**  | Difficult                   | Native via XHR                    |
+| **CDN delivery**       | Requires separate setup     | Built-in with R2 public URLs      |
+| **Scalability**        | Disk space, single server   | Unlimited cloud storage           |
+| **Handler complexity** | FormFile + SaveUploadedFile | Simple JSON with URL string       |
+
+The presigned URL pattern separates concerns cleanly: your backend handles authorization and metadata, R2/S3 handles storage and delivery, and the frontend handles the actual file transfer. Each piece does what it's best at.
