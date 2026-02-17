@@ -75,9 +75,25 @@ function getPageJsonLd(): WithContext<PageSchema> {
     dateModified: dayjs().toISOString(),
     mainEntity: {
       "@type": "Person",
-      name: USER.displayName,
+      "@id": "https://jb.desishub.com/#person",
+      name: `${USER.firstName} ${USER.lastName}`,
+      alternateName: ["JB", "JB WEB DEVELOPER"],
       identifier: USER.username,
       image: USER.avatar,
+      url: USER.website,
+      jobTitle: USER.jobTitle,
+      description: USER.bio,
+      sameAs: [
+        "https://github.com/MUKE-coder",
+        "https://linkedin.com/in/muke-johnbaptist",
+        "https://x.com/MJohnbaptist",
+        "https://www.youtube.com/@JBWEBDEVELOPER",
+      ],
+      worksFor: {
+        "@type": "Organization",
+        name: "Desishub Technologies",
+        url: "https://desishub.com",
+      },
     },
   };
 }

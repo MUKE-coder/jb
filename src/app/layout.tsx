@@ -2,7 +2,7 @@ import "@/styles/globals.css";
 
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import type { WebSite, WithContext } from "schema-dts";
+import type { Organization, Person, WebSite, WithContext } from "schema-dts";
 
 import { Providers } from "@/components/providers";
 import { META_THEME_COLORS, SITE_INFO } from "@/config/site";
@@ -15,7 +15,82 @@ function getWebSiteJsonLd(): WithContext<WebSite> {
     "@type": "WebSite",
     name: SITE_INFO.name,
     url: SITE_INFO.url,
-    alternateName: [USER.username],
+    alternateName: [USER.username, "JB WEB DEVELOPER", "Muke Johnbaptist"],
+  };
+}
+
+function getPersonJsonLd(): WithContext<Person> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "@id": `${SITE_INFO.url}/#person`,
+    name: `${USER.firstName} ${USER.lastName}`,
+    alternateName: ["JB", "JB WEB DEVELOPER", "jbwebdeveloper"],
+    url: SITE_INFO.url,
+    image: USER.avatar,
+    jobTitle: USER.jobTitle,
+    description: USER.bio,
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: "Kampala",
+      addressRegion: "Central Region",
+      addressCountry: "UG",
+    },
+    worksFor: [
+      {
+        "@type": "Organization",
+        name: "Desishub Technologies",
+        url: "https://desishub.com",
+      },
+      {
+        "@type": "Organization",
+        name: "DesisPay",
+        url: "https://desispay.com",
+      },
+    ],
+    sameAs: [
+      "https://github.com/MUKE-coder",
+      "https://linkedin.com/in/muke-johnbaptist",
+      "https://x.com/MJohnbaptist",
+      "https://www.youtube.com/@JBWEBDEVELOPER",
+      "https://www.tiktok.com/@jbdesishub",
+      "https://app.daily.dev/jbwebdeveloper94",
+    ],
+    knowsAbout: [
+      "Next.js",
+      "React",
+      "Golang",
+      "Docker",
+      "GitHub Actions",
+      "TypeScript",
+      "Tailwind CSS",
+      "PostgreSQL",
+      "Cloudflare",
+      "DevOps",
+    ],
+  };
+}
+
+function getOrganizationJsonLd(): WithContext<Organization> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${SITE_INFO.url}/#organization`,
+    name: "Desishub Technologies",
+    url: "https://desishub.com",
+    founder: { "@type": "Person", name: "Muke Johnbaptist" },
+    foundingLocation: {
+      "@type": "Place",
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: "Kampala",
+        addressCountry: "UG",
+      },
+    },
+    sameAs: [
+      "https://github.com/MUKE-coder",
+      "https://www.youtube.com/@JBWEBDEVELOPER",
+    ],
   };
 }
 
@@ -121,6 +196,21 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(getWebSiteJsonLd()).replace(/</g, "\\u003c"),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(getPersonJsonLd()).replace(/</g, "\\u003c"),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(getOrganizationJsonLd()).replace(
+              /</g,
+              "\\u003c"
+            ),
           }}
         />
       </head>

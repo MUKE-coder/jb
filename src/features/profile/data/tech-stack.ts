@@ -15,6 +15,12 @@ export const TECH_STACK: TechStack[] = [
     theme: true,
   },
   {
+    key: "golang",
+    title: "Golang",
+    href: "https://go.dev/",
+    categories: ["Language", "Backend"],
+  },
+  {
     key: "nodejs",
     title: "Node.js",
     href: "https://nodejs.org/",
@@ -32,12 +38,6 @@ export const TECH_STACK: TechStack[] = [
     title: "TypeScript",
     href: "https://www.typescriptlang.org/",
     categories: ["Language"],
-  },
-  {
-    key: "laravel",
-    title: "Laravel",
-    href: "https://laravel.com/",
-    categories: ["Framework"],
   },
   {
     key: "postgressql",
@@ -78,6 +78,18 @@ export const TECH_STACK: TechStack[] = [
     title: "Docker",
     href: "https://www.docker.com/",
     categories: ["Containerization"],
+  },
+  {
+    key: "github-actions",
+    title: "GitHub Actions",
+    href: "https://github.com/features/actions",
+    categories: ["CI/CD"],
+  },
+  {
+    key: "cloudflare",
+    title: "Cloudflare",
+    href: "https://www.cloudflare.com/",
+    categories: ["DNS", "Edge"],
   },
 
   {

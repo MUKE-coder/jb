@@ -46,9 +46,8 @@ export const MAIN_NAV: NavItem[] = [
   // },
 ];
 
-export const SOURCE_CODE_GITHUB_REPO =
-  "https://www.youtube.com/@JBWEBDEVELOPER";
-export const SOURCE_CODE_GITHUB_URL = "https://www.youtube.com/@JBWEBDEVELOPER";
+export const SOURCE_CODE_GITHUB_REPO = "https://github.com/MUKE-coder";
+export const SOURCE_CODE_GITHUB_URL = "https://github.com/MUKE-coder";
 
 export const UTM_PARAMS = {
   utm_source: "jb.desishub.com",
