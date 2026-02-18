@@ -1,0 +1,603 @@
+---
+title: Grit Framework — Beginner CheatSheet
+description: From zero to a full-stack app in under 5 minutes.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwf0b17w7tvnF3cx4uPCTU9aqg2f0oY8klybGQI
+category: tutorial
+createdAt: 2026-02-18
+updatedAt: 2026-02-18
+---
+
+# Grit Framework — Beginner Cheatsheet
+
+> **Go + React. Built with Grit.**
+> From zero to a full-stack app in under 5 minutes.
+
+---
+
+## 1. Prerequisites
+
+Make sure you have the following installed before starting:
+
+| Tool               | Check Version      | Install From                                                 |
+| ------------------ | ------------------ | ------------------------------------------------------------ |
+| **Node.js** (v18+) | `node -v`          | [nodejs.org](https://nodejs.org)                             |
+| **Go** (v1.21+)    | `go version`       | [go.dev](https://go.dev/dl)                                  |
+| **Git**            | `git --version`    | [git-scm.com](https://git-scm.com)                           |
+| **Docker Desktop** | `docker --version` | [docker.com](https://www.docker.com/products/docker-desktop) |
+| **pnpm**           | `pnpm -v`          | `npm install -g pnpm`                                        |
+
+> **Tip:** Make sure Docker Desktop is **running** before you proceed.
+
+---
+
+## 2. Install Grit
+
+Open **Git Bash** (or any terminal) and run:
+
+```bash
+go install github.com/MUKE-coder/grit/cmd/grit@latest
+```
+
+Verify the installation:
+
+```bash
+grit version
+```
+
+You should see the current Grit version printed (e.g., `v0.14.0`).
+
+---
+
+## 3. Create a New Project
+
+Navigate to the directory where you want your project, then scaffold it:
+
+```bash
+cd ~/projects
+grit new test-app
+```
+
+Enter the project and open it in VS Code:
+
+```bash
+cd test-app
+code .
+```
+
+---
+
+## 4. Check for Port Conflicts
+
+Grit uses the following ports — make sure they're all free **before** starting:
+
+| Port   | Service                |
+| ------ | ---------------------- |
+| `3000` | Web App (Next.js)      |
+| `3001` | Admin Panel            |
+| `5432` | PostgreSQL             |
+| `6379` | Redis                  |
+| `8080` | Go API + Studio + Docs |
+| `9000` | MinIO (File Storage)   |
+
+### How to check if a port is in use
+
+**Windows (Git Bash / CMD / PowerShell):**
+
+```bash
+netstat -ano | findstr :3000
+```
+
+If something shows up, note the **PID** (last column) and kill it:
+
+```bash
+taskkill //PID 12345 //F
+```
+
+**Mac / Linux:**
+
+```bash
+lsof -i :3000
+```
+
+Kill it:
+
+```bash
+kill -9 <PID>
+```
+
+> **Quick check all Grit ports at once (Windows):**
+>
+> ```bash
+> for port in 3000 3001 5432 6379 8080 9000; do echo "Port $port:"; netstat -ano | findstr :$port; done
+> ```
+
+---
+
+## 5. Install Dependencies
+
+Open the **terminal in VS Code** (`Ctrl + `` ` ``) and run from the project root:
+
+```bash
+pnpm install
+```
+
+This installs all client dependencies (web app, admin panel, shared packages).
+
+---
+
+## 6. Run Migrations
+
+Set up the database tables:
+
+```bash
+grit migrate
+```
+
+---
+
+## 7. Start the App
+
+You need **two terminals** — one for the client, one for the server.
+
+**Terminal 1 — Start the client (Next.js apps):**
+
+```bash
+grit start client
+```
+
+**Terminal 2 — Start the server (Go API):**
+
+```bash
+grit start server
+```
+
+---
+
+## 8. You're Live!
+
+Open your browser and visit:
+
+| URL                                                           | What It Is                                                   |
+| ------------------------------------------------------------- | ------------------------------------------------------------ |
+| [localhost:3000](http://localhost:3000)                       | **Web App** — Your main frontend. Create a user and explore. |
+| [localhost:3001](http://localhost:3001)                       | **Admin Panel** — Manage data, users, and resources.         |
+| [localhost:8080/api/health](http://localhost:8080/api/health) | **API Health Check** — Confirm the Go API is running.        |
+| [localhost:8080/studio](http://localhost:8080/studio)         | **GORM Studio** — Visual database browser.                   |
+| [localhost:8080/docs](http://localhost:8080/docs)             | **API Docs** — Auto-generated API documentation.             |
+
+> **First thing to do:** Go to `localhost:3000`, register a new user, and log in.
+
+---
+
+## 9. All CLI Commands
+
+### Quick Reference Table
+
+| Command                          | Description                                          |
+| -------------------------------- | ---------------------------------------------------- |
+| `grit new <n>`                   | Scaffold a new full-stack project                    |
+| `grit new <n> --api`             | Scaffold Go API only (no frontend)                   |
+| `grit new <n> --expo`            | Full stack + Expo mobile app                         |
+| `grit new <n> --mobile`          | API + Expo mobile app only                           |
+| `grit new <n> --full`            | Everything including a docs site                     |
+| `grit new <n> --style <variant>` | Admin style: `default`, `modern`, `minimal`, `glass` |
+| `grit generate resource <n>`     | Generate full-stack CRUD resource                    |
+| `grit g resource <n>`            | Shorthand for generate resource                      |
+| `grit remove resource <n>`       | Remove a generated resource and clean up             |
+| `grit rm resource <n>`           | Shorthand for remove resource                        |
+| `grit add role <ROLE>`           | Add a new role across all project files              |
+| `grit start client`              | Start frontend apps (Next.js via Turborepo)          |
+| `grit start server`              | Start Go API server                                  |
+| `grit migrate`                   | Run GORM AutoMigrate for all models                  |
+| `grit migrate --fresh`           | Drop all tables then re-migrate                      |
+| `grit seed`                      | Populate database with initial/sample data           |
+| `grit sync`                      | Sync Go models → TypeScript types + Zod schemas      |
+| `grit update`                    | Update the Grit CLI itself to latest version         |
+| `grit upgrade`                   | Update your project's scaffold templates to latest   |
+| `grit version`                   | Print CLI version                                    |
+| `grit completion`                | Generate shell autocompletion script                 |
+| `grit help`                      | Show help for any command                            |
+
+---
+
+### `grit new` — Scaffold a Project
+
+Creates the full monorepo: Go API, Next.js web app, admin panel, shared types, Docker setup.
+
+```bash
+# Full-stack monorepo (default)
+grit new my-crm
+
+# Go API only (no frontend)
+grit new billing-service --api
+
+# Full stack + Expo mobile app
+grit new my-app --expo
+
+# API + mobile only
+grit new my-app --mobile
+
+# Everything including docs site
+grit new my-framework --full
+
+# With admin panel style variant
+grit new my-app --style modern
+```
+
+> **Project name rules:** lowercase letters, numbers, and hyphens only. Must start with a letter. Min 2 chars, max 64 chars.
+
+---
+
+### `grit generate resource` — The Most Powerful Command
+
+Generates **8 new files** and modifies **up to 10 existing files** in one command: Go model, handler, service, Zod schema, TypeScript types, React Query hooks, admin page, and resource definition — all wired together.
+
+```bash
+# Basic resource with inline fields
+grit generate resource Post --fields "title:string,content:text,published:bool"
+
+# Shorthand
+grit g resource Post --fields "title:string,content:text,published:bool"
+
+# Interactive mode (prompts you field by field)
+grit g resource Invoice -i
+
+# From a YAML definition file
+grit g resource Post --from post.yaml
+
+# With role-based access restriction
+grit g resource Post --fields "title:string,content:text" --roles ADMIN,EDITOR
+```
+
+#### Field Type Reference
+
+| Type           | Go Type             | Form Component            | Example                          |
+| -------------- | ------------------- | ------------------------- | -------------------------------- |
+| `string`       | `string`            | Text input                | `title:string`                   |
+| `text`         | `string`            | Textarea                  | `content:text`                   |
+| `int`          | `int`               | Number input              | `views:int`                      |
+| `uint`         | `uint`              | Number input              | `stock:uint`                     |
+| `float`        | `float64`           | Number input              | `price:float`                    |
+| `bool`         | `bool`              | Toggle switch             | `published:bool`                 |
+| `datetime`     | `*time.Time`        | Datetime picker           | `starts_at:datetime`             |
+| `date`         | `*time.Time`        | Date picker               | `due_date:date`                  |
+| `slug`         | `string`            | Auto-generated            | `slug:slug` or `slug:slug:title` |
+| `belongs_to`   | `uint` (FK)         | Relationship select       | `category:belongs_to`            |
+| `many_to_many` | `[]uint`            | Multi-select              | `tags:many_to_many:Tag`          |
+| `richtext`     | `string`            | Rich text editor (Tiptap) | `body:richtext`                  |
+| `string_array` | `JSONSlice[string]` | Multi-image upload        | `images:string_array`            |
+
+#### YAML Definition File (for complex resources)
+
+```yaml
+# post.yaml
+name: Post
+fields:
+  - name: title
+    type: string
+    required: true
+    unique: true
+  - name: content
+    type: text
+  - name: excerpt
+    type: string
+  - name: published
+    type: bool
+    default: "false"
+  - name: views
+    type: int
+  - name: published_at
+    type: datetime
+```
+
+```bash
+grit generate resource Post --from post.yaml
+```
+
+---
+
+### `grit remove resource` — Clean Up a Resource
+
+Deletes all generated files and cleans up injection markers:
+
+```bash
+grit remove resource Post
+# or shorthand
+grit rm resource Post
+```
+
+> Use the **same PascalCase name** you used when generating (e.g., `Post`, `BlogCategory`).
+
+---
+
+### `grit add role` — Add a New User Role
+
+Updates **7 locations** across your project in one command (Go constants, Zod enum, TypeScript type, shared constants, admin badge/filter/form):
+
+```bash
+grit add role MODERATOR
+
+# Multi-word roles use underscores
+grit add role CONTENT_MANAGER
+```
+
+---
+
+### `grit start` — Start Dev Servers
+
+```bash
+# Start all frontend apps (web + admin via Turborepo)
+grit start client
+
+# Start the Go API server
+grit start server
+```
+
+> Both commands auto-detect the project root, so you can run them from any subdirectory.
+
+---
+
+### `grit migrate` — Database Migrations
+
+```bash
+# Run migrations (create/update tables)
+grit migrate
+
+# Fresh migration (drop everything and recreate)
+grit migrate --fresh
+```
+
+---
+
+### `grit seed` — Seed the Database
+
+Populate the database with initial or sample data:
+
+```bash
+grit seed
+```
+
+---
+
+### `grit sync` — Sync Go Types to Frontend
+
+After **manually editing** a Go model, run this to regenerate TypeScript types and Zod schemas:
+
+```bash
+grit sync
+```
+
+**When to use it:**
+
+- After manually adding/removing fields from a Go model
+- After changing a field's type in a Go struct
+- After modifying GORM tags
+- After adding a new model file manually
+
+> You do **NOT** need `grit sync` after `grit generate resource` — the generator already handles it.
+
+---
+
+### `grit update` vs `grit upgrade`
+
+These are different commands — don't mix them up!
+
+```bash
+# Update the CLI TOOL itself to latest version
+grit update
+
+# Update your PROJECT'S scaffold files (admin, configs, web app) to latest templates
+grit upgrade
+```
+
+---
+
+## 10. Relationships
+
+Grit handles relationships automatically when you use `belongs_to` and `many_to_many` field types. Everything is generated for you: Go model associations, handler Preloads, Zod schemas, TypeScript types, and admin form components.
+
+---
+
+### `belongs_to` — Foreign Key (One-to-Many)
+
+Use when a resource **belongs to** a parent (e.g., a Product belongs to a Category).
+
+```bash
+# Infer related model from field name (category → Category)
+grit g resource Product --fields "name:string,category:belongs_to,price:float"
+
+# Explicit related model (when field name ≠ model name)
+grit g resource Post --fields "title:string,author:belongs_to:User,content:text"
+```
+
+**What gets generated:**
+
+| Layer           | What Happens                                                                            |
+| --------------- | --------------------------------------------------------------------------------------- |
+| **Go Model**    | `CategoryID uint` (FK column) + `Category Category` (association with `foreignKey` tag) |
+| **Handler**     | `db.Preload("Category")` on all queries (eager loading)                                 |
+| **Admin Form**  | Searchable dropdown that fetches options from `/api/categories`                         |
+| **Admin Table** | Dot notation column `category.name` showing the related name                            |
+| **Zod Schema**  | `category_id: z.number().int().min(1)`                                                  |
+
+**Generated Go Model:**
+
+```go
+type Product struct {
+    ID         uint           `gorm:"primarykey" json:"id"`
+    Name       string         `gorm:"size:255" json:"name" binding:"required"`
+    CategoryID uint           `gorm:"index" json:"category_id" binding:"required"`
+    Category   Category       `gorm:"foreignKey:CategoryID" json:"category"`
+    Price      float64        `json:"price"`
+    CreatedAt  time.Time      `json:"created_at"`
+    UpdatedAt  time.Time      `json:"updated_at"`
+}
+```
+
+---
+
+### `many_to_many` — Junction Table
+
+Use when a resource has **many related records** and vice versa (e.g., Products have many Tags, Tags have many Products). GORM auto-creates the junction table.
+
+```bash
+# Related model name is ALWAYS required for many_to_many
+grit g resource Product --fields "name:string,tags:many_to_many:Tag,price:float"
+```
+
+**What gets generated:**
+
+| Layer          | What Happens                                          |
+| -------------- | ----------------------------------------------------- |
+| **Go Model**   | `Tags []Tag` with `gorm:"many2many:product_tags"`     |
+| **Handler**    | `Association("Tags").Replace(tags)` for create/update |
+| **Admin Form** | Multi-select with removable badge chips               |
+| **Zod Schema** | `tag_ids: z.array(z.number().int())`                  |
+
+**Generated Go Model:**
+
+```go
+type Product struct {
+    // ...other fields...
+    Tags []Tag `gorm:"many2many:product_tags" json:"tags"`
+}
+```
+
+---
+
+### `has_one` & `has_many` — Inverse Side (Manual)
+
+These are the **inverse** of `belongs_to`. Add them manually to the parent model when you need to query children from the parent side:
+
+```go
+// Add to your Category model when you need it
+type Category struct {
+    // ...existing fields...
+    Products []Product `gorm:"foreignKey:CategoryID" json:"products,omitempty"`
+}
+```
+
+> The generator doesn't add inverse relationships automatically since not every parent needs to query its children.
+
+---
+
+### Full Example — E-Commerce with Both Relationship Types
+
+```bash
+# Step 1: Generate the parent models FIRST
+grit g resource Category --fields "name:string,slug:slug,description:text"
+grit g resource Tag --fields "name:string"
+
+# Step 2: Generate Product with both relationship types
+grit g resource Product --fields "name:string,category:belongs_to,tags:many_to_many:Tag,price:float,published:bool"
+
+# Step 3: Run migrations
+grit migrate
+```
+
+This gives you:
+
+- Product **belongs to** Category → searchable dropdown in admin form
+- Product **has many** Tags → multi-select with badge chips in admin form
+- Both relationships are eager-loaded in API responses
+- Admin table shows `category.name` via dot notation
+
+> **Important:** Always generate parent models (Category, Tag) **before** child models (Product) that reference them.
+
+---
+
+### Customizing Relationships
+
+**Change the display field** (defaults to `name`):
+
+```ts
+// Show user email instead of name in the dropdown
+{
+  key: "author_id",
+  type: "relationship-select",
+  relatedEndpoint: "/api/users",
+  displayField: "email",  // ← change this
+}
+```
+
+**Change the API endpoint:**
+
+```ts
+// Hit a filtered endpoint — only show active users
+{
+  key: "assignee_id",
+  type: "relationship-select",
+  relatedEndpoint: "/api/users?active=true",
+  displayField: "name",
+}
+```
+
+**Change what shows in the admin table:**
+
+```ts
+// Show category slug instead of name
+{ key: "category.slug", label: "Category Slug", sortable: false }
+
+// Show author email
+{ key: "author.email", label: "Author Email", sortable: false }
+```
+
+---
+
+## 11. You're Ready to Build!
+
+From here you can:
+
+- **Generate resources** with `grit generate resource` to create models, handlers, hooks, schemas, and admin pages in one command
+- **Edit the frontend** in `apps/web/` (Next.js + Tailwind + shadcn/ui)
+- **Edit the API** in `apps/api/` (Go + Gin + GORM)
+- **Edit the admin panel** in `apps/admin/`
+- **Inspect your database** at `localhost:8080/studio`
+
+---
+
+## Common Gotchas
+
+| Problem                                   | Fix                                                                                          |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `grit: command not found`                 | Make sure `$GOPATH/bin` is in your PATH. Run `export PATH=$PATH:$(go env GOPATH)/bin`        |
+| Docker containers won't start             | Make sure Docker Desktop is running. Try `docker compose up -d` manually in the project root |
+| Port already in use                       | See **Step 4** above to find and kill the process                                            |
+| `pnpm: command not found`                 | Install it globally: `npm install -g pnpm`                                                   |
+| Database connection refused               | Wait a few seconds after `docker compose up` — PostgreSQL needs time to initialize           |
+| Types out of sync after manual model edit | Run `grit sync` to regenerate TypeScript types and Zod schemas                               |
+| Want to start fresh                       | Run `grit migrate --fresh` to drop all tables and re-migrate                                 |
+| CLI is outdated                           | Run `grit update` to install the latest CLI version                                          |
+| Project templates are outdated            | Run `grit upgrade` to update scaffold files                                                  |
+
+---
+
+## Want More Details? Read the Full Docs
+
+**[grit-vert.vercel.app](https://grit-vert.vercel.app)**
+
+| Section             | URL                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Quick Start         | [/docs/getting-started/quick-start](https://grit-vert.vercel.app/docs/getting-started/quick-start)             |
+| Project Structure   | [/docs/getting-started/project-structure](https://grit-vert.vercel.app/docs/getting-started/project-structure) |
+| CLI Commands (full) | [/docs/concepts/cli](https://grit-vert.vercel.app/docs/concepts/cli)                                           |
+| Code Generation     | [/docs/concepts/code-generation](https://grit-vert.vercel.app/docs/concepts/code-generation)                   |
+| Type System         | [/docs/concepts/type-system](https://grit-vert.vercel.app/docs/concepts/type-system)                           |
+| Models & Database   | [/docs/backend/models](https://grit-vert.vercel.app/docs/backend/models)                                       |
+| Authentication      | [/docs/backend/authentication](https://grit-vert.vercel.app/docs/backend/authentication)                       |
+| RBAC & Roles        | [/docs/backend/rbac](https://grit-vert.vercel.app/docs/backend/rbac)                                           |
+| Admin Panel         | [/docs/admin/overview](https://grit-vert.vercel.app/docs/admin/overview)                                       |
+| Relationships       | [/docs/admin/relationships](https://grit-vert.vercel.app/docs/admin/relationships)                             |
+| Form Builder        | [/docs/admin/forms](https://grit-vert.vercel.app/docs/admin/forms)                                             |
+| Dashboard & Widgets | [/docs/admin/widgets](https://grit-vert.vercel.app/docs/admin/widgets)                                         |
+| File Storage        | [/docs/batteries/storage](https://grit-vert.vercel.app/docs/batteries/storage)                                 |
+| Email System        | [/docs/batteries/email](https://grit-vert.vercel.app/docs/batteries/email)                                     |
+| Background Jobs     | [/docs/batteries/jobs](https://grit-vert.vercel.app/docs/batteries/jobs)                                       |
+| Cron Scheduler      | [/docs/batteries/cron](https://grit-vert.vercel.app/docs/batteries/cron)                                       |
+| Redis Caching       | [/docs/batteries/caching](https://grit-vert.vercel.app/docs/batteries/caching)                                 |
+| AI Integration      | [/docs/batteries/ai](https://grit-vert.vercel.app/docs/batteries/ai)                                           |
+| Docker Setup        | [/docs/infrastructure/docker](https://grit-vert.vercel.app/docs/infrastructure/docker)                         |
+| Deployment          | [/docs/infrastructure/deployment](https://grit-vert.vercel.app/docs/infrastructure/deployment)                 |
+| Tutorials           | [/docs/tutorials/blog](https://grit-vert.vercel.app/docs/tutorials/blog)                                       |
+
+> **GitHub:** [github.com/MUKE-coder/grit](https://github.com/MUKE-coder/grit) > **YouTube:** [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
