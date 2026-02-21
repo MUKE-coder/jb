@@ -69,12 +69,13 @@ In 2026, I built two projects I'm especially proud of:
 
 - **[Grit Framework](https://grit-vert.vercel.app)** — A Golang web framework designed for simplicity and speed. Grit makes it easy to build production APIs with built-in routing, middleware, and database support. [GitHub](https://github.com/MUKE-coder/grit)
 - **[Gorm Studio](https://github.com/MUKE-coder/gorm-studio)** — A visual database management tool for GORM (Go's most popular ORM). Browse tables, run queries, and manage your Go database visually.
+- **[Sentinel](https://github.com/MUKE-coder/sentinel)** — Production-grade security intelligence SDK for Go applications. Drop-in middleware for Gin that provides WAF protection, rate limiting, threat detection, audit logging, anomaly detection, AI-powered analysis, and an embedded React dashboard — all mountable with a single function call.
 
 I'm also building **[DesisPay](https://desispay.com)** with my team — a payment platform designed for African businesses and developers.
 
 ### Education & Community
 
-I'm deeply passionate about education. Through my **Nextjs Academy**, I've created 9+ online courses that have helped over 300 students learn to code and build real-world applications. I've trained 100+ students through in-person coding bootcamps at Desishub Coding School. My **YouTube channel** has grown to over 14,700 subscribers, where I share practical programming tutorials covering Next.js, Golang, Docker, DevOps, and more.
+I'm deeply passionate about education. Through my **[Nextjs Academy](https://www.nextjsacademy.com)**, I've created 9+ online courses that have helped over 300 students learn to code and build real-world applications. I've trained 100+ students through in-person coding bootcamps at Desishub Coding School. My **[YouTube channel](https://www.youtube.com/@JBWEBDEVELOPER)** has grown to over 14,700 subscribers, where I share practical programming tutorials covering Next.js, Golang, Docker, DevOps, and more.
 
 ### Open Source Components
 
