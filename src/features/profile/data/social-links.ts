@@ -53,4 +53,11 @@ export const TOOLS_LINKS: SocialLink[] = [
       "Step by step guide for DevOps, SRE or any other Operations Role in 2025.",
     href: "/tools/devops",
   },
+  {
+    icon: "/sandbox.svg",
+    title: "Next.js Sandbox",
+    description:
+      "An interactive sandbox with a code editor, file explorer, and live preview for Next.js.",
+    href: "/sandbox",
+  },
 ];
