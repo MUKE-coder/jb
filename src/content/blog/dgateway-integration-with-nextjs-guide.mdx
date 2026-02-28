@@ -1,0 +1,917 @@
+---
+title: "Integrating DGateway Payments into a Next.js App"
+description: "A step-by-step guide to adding mobile money and card payments to your Next.js application using DGateway."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfFk8LMYcaEDQ5AGptjCf6vkgZK0dTLnWhUxMl
+category: engineering
+createdAt: 2026-02-28
+updatedAt: 2026-02-28
+---
+
+# Integrating DGateway Payments into a Next.js App
+
+A step-by-step guide to adding mobile money and card payments to your Next.js application using DGateway. We'll build a real checkout flow that supports Iotec (mobile money) and Stripe (card payments) — all through a single unified API.
+
+---
+
+## Table of Contents
+
+1. [What is DGateway?](#what-is-dgateway)
+2. [Architecture Overview](#architecture-overview)
+3. [Prerequisites](#prerequisites)
+4. [Step 1 — Environment Setup](#step-1--environment-setup)
+5. [Step 2 — Create the DGateway API Client](#step-2--create-the-dgateway-api-client)
+6. [Step 3 — Build the Checkout API Route](#step-3--build-the-checkout-api-route)
+7. [Step 4 — Build the Status Polling Route](#step-4--build-the-status-polling-route)
+8. [Step 5 — Build the Checkout UI](#step-5--build-the-checkout-ui)
+9. [Accepting Mobile Money Payments (Iotec)](#accepting-mobile-money-payments-iotec)
+10. [Accepting Card Payments (Stripe)](#accepting-card-payments-stripe)
+11. [Polling for Payment Status](#polling-for-payment-status)
+12. [Handling Payment States](#handling-payment-states)
+13. [Currency Conversion](#currency-conversion)
+14. [Error Handling](#error-handling)
+15. [API Reference](#api-reference)
+16. [Full Example Project](#full-example-project)
+
+---
+
+## What is DGateway?
+
+DGateway is a unified payment gateway that lets you collect and disburse payments across multiple providers through a single API. Instead of integrating each payment provider separately, you make one API call and DGateway routes the transaction to the right provider based on the currency and transaction type.
+
+**Supported providers:**
+
+| Provider | Type                | Currencies                         |
+| -------- | ------------------- | ---------------------------------- |
+| Iotec    | Mobile Money        | UGX                                |
+| Relworx  | Mobile Money        | UGX                                |
+| PesaPal  | Mobile Money / Card | KES, UGX, USD                      |
+| Stripe   | Card                | USD, EUR, GBP, and 135+ currencies |
+
+DGateway handles provider credentials at the platform level. Your app only needs a DGateway API key — no need to manage individual provider API keys in your frontend or backend code.
+
+---
+
+## Architecture Overview
+
+Here's how payments flow through the system:
+
+```
+                          DGateway Server
+                      ┌──────────────────────┐
+  Next.js App         │                      │       Payment Providers
+ ┌──────────┐         │  POST /v1/payments/  │      ┌──────────────┐
+ │           │  API   │       collect         │      │   Iotec      │
+ │ API Route ├───────►│                      ├─────►│   (MoMo)     │
+ │ (server)  │  Key   │  Auto-selects the    │      ├──────────────┤
+ │           │◄───────┤  best provider based  │      │   Stripe     │
+ └─────┬─────┘        │  on currency & type   │◄─────┤   (Card)     │
+       │              │                      │      ├──────────────┤
+       │              │  POST /v1/webhooks/  │      │   Relworx    │
+ ┌─────┴─────┐        │       verify          │      ├──────────────┤
+ │  Browser  │        │                      │      │   PesaPal    │
+ │ (client)  │        └──────────────────────┘      └──────────────┘
+ └───────────┘
+```
+
+**Key architectural decisions:**
+
+1. **Server-side API calls only** — Your DGateway API key never leaves the server. All calls to DGateway go through Next.js API routes.
+2. **Status polling over webhooks** — Instead of setting up webhook endpoints, we poll the `POST /v1/webhooks/verify` endpoint to check transaction status. This is simpler for most integrations.
+3. **Provider auto-selection** — You can let DGateway pick the best provider, or specify one explicitly via the `provider` field.
+
+---
+
+## Prerequisites
+
+Before starting, make sure you have:
+
+- A running DGateway server (default: `http://localhost:8080`)
+- An app created in the DGateway admin panel
+- An API key generated for your app
+- Node.js 18+ and a Next.js 14+ project (App Router)
+- For Stripe: `@stripe/react-stripe-js` and `@stripe/stripe-js` packages
+
+---
+
+## Step 1 — Environment Setup
+
+Create a `.env.local` file at the root of your Next.js project:
+
+```env
+# DGateway API
+DGATEWAY_API_URL='http://localhost:8080'
+DGATEWAY_API_KEY='dgw_live_your_api_key_here'
+```
+
+| Variable           | Description                                                      |
+| ------------------ | ---------------------------------------------------------------- |
+| `DGATEWAY_API_URL` | The URL where your DGateway server is running                    |
+| `DGATEWAY_API_KEY` | The API key generated from the DGateway admin panel for your app |
+
+> **Security note:** These variables are server-side only (no `NEXT_PUBLIC_` prefix). They will never be exposed to the browser. All communication with DGateway happens through your Next.js API routes.
+
+---
+
+## Step 2 — Create the DGateway API Client
+
+Create a server-side API client that wraps the DGateway REST API. This file should only be imported in API routes or server components — never in client-side code.
+
+**`lib/dgateway.ts`**
+
+```typescript
+const API_URL = process.env.DGATEWAY_API_URL || "http://localhost:8080";
+const API_KEY = process.env.DGATEWAY_API_KEY || "";
+
+interface CollectParams {
+  amount: number;
+  currency: string;
+  phone_number: string;
+  provider?: string; // optional — "iotec", "stripe", etc.
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export async function collectPayment(params: CollectParams) {
+  const res = await fetch(`${API_URL}/v1/payments/collect`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": API_KEY,
+    },
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+
+export async function verifyTransaction(reference: string) {
+  const res = await fetch(`${API_URL}/v1/webhooks/verify`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": API_KEY,
+    },
+    body: JSON.stringify({ reference }),
+  });
+  return res.json();
+}
+```
+
+### What this does
+
+- **`collectPayment()`** — Initiates a payment collection. DGateway creates a transaction, routes it to the appropriate provider, and returns a reference + provider-specific data (like Stripe's `client_secret`).
+- **`verifyTransaction()`** — Checks the current status of a transaction by its reference. Returns `"pending"`, `"completed"`, or `"failed"`.
+
+### Authentication
+
+DGateway uses API key authentication. Pass your key in the `X-Api-Key` header:
+
+```
+X-Api-Key: dgw_live_your_api_key_here
+```
+
+---
+
+## Step 3 — Build the Checkout API Route
+
+Create an API route that acts as a proxy between your frontend and DGateway. This keeps your API key on the server side.
+
+**`app/api/checkout/route.ts`**
+
+```typescript
+import { NextRequest, NextResponse } from "next/server";
+import { collectPayment } from "@/lib/dgateway";
+
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  const { amount, currency, phone_number, provider, description } = body;
+
+  // Validate required fields
+  if (!amount || !currency) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "amount and currency are required",
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  // Call DGateway
+  const result = await collectPayment({
+    amount,
+    currency,
+    phone_number: phone_number || "0000000000",
+    provider,
+    description,
+  });
+
+  if (result.error) {
+    return NextResponse.json(result, { status: 400 });
+  }
+
+  return NextResponse.json(result);
+}
+```
+
+### Collect API response
+
+When you call this route, DGateway returns:
+
+```json
+{
+  "data": {
+    "reference": "txn_abc123def456",
+    "provider": "iotec",
+    "status": "pending",
+    "amount": 37500,
+    "currency": "UGX"
+  }
+}
+```
+
+For **Stripe** payments, the response also includes:
+
+```json
+{
+  "data": {
+    "reference": "txn_abc123def456",
+    "provider": "stripe",
+    "status": "pending",
+    "client_secret": "pi_xxx_secret_yyy",
+    "stripe_publishable_key": "pk_test_..."
+  }
+}
+```
+
+The `client_secret` and `stripe_publishable_key` are what you need to mount Stripe Elements on the frontend.
+
+---
+
+## Step 4 — Build the Status Polling Route
+
+Create a second API route for checking payment status:
+
+**`app/api/checkout/status/route.ts`**
+
+```typescript
+import { NextRequest, NextResponse } from "next/server";
+import { verifyTransaction } from "@/lib/dgateway";
+
+export async function POST(request: NextRequest) {
+  const { reference } = await request.json();
+
+  if (!reference) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "reference is required",
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  const result = await verifyTransaction(reference);
+  return NextResponse.json(result);
+}
+```
+
+### Verify API response
+
+```json
+{
+  "data": {
+    "reference": "txn_abc123def456",
+    "status": "completed",
+    "provider": "iotec",
+    "amount": 37500,
+    "currency": "UGX"
+  }
+}
+```
+
+The `status` field will be one of: `"pending"`, `"completed"`, or `"failed"`.
+
+---
+
+## Step 5 — Build the Checkout UI
+
+Now for the frontend. The checkout page needs to:
+
+1. Let users choose a payment method (mobile money or card)
+2. Collect method-specific information (phone number for mobile money)
+3. Create the payment via your API route
+4. Handle the provider-specific flow (Stripe Elements for cards, phone prompt for mobile money)
+5. Poll for status until the payment completes or fails
+
+### Install dependencies
+
+```bash
+# For Stripe card payments
+npm install @stripe/react-stripe-js @stripe/stripe-js
+
+# Or with pnpm
+pnpm add @stripe/react-stripe-js @stripe/stripe-js
+```
+
+### Payment state management
+
+Define the states your checkout can be in:
+
+```typescript
+type PaymentMethod = "iotec" | "stripe" | null;
+type PaymentStatus =
+  | "idle" // User is selecting method / entering info
+  | "creating" // API call in progress to create payment
+  | "awaiting_card" // Stripe Elements mounted, waiting for card input
+  | "processing" // Payment submitted, polling for result
+  | "completed" // Payment succeeded
+  | "failed"; // Payment failed
+```
+
+---
+
+## Accepting Mobile Money Payments (Iotec)
+
+Mobile money payments work in three steps:
+
+1. **Your app** sends a collect request with the payer's phone number
+2. **DGateway** forwards the request to Iotec, which sends a USSD prompt to the payer's phone
+3. **Your app** polls for status until the user confirms on their phone
+
+### Creating the payment
+
+```typescript
+const createIotecPayment = async (phoneNumber: string) => {
+  setStatus("creating");
+
+  const res = await fetch("/api/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      amount: 37500, // Amount in UGX
+      currency: "UGX",
+      phone_number: phoneNumber, // e.g. "256771234567"
+      provider: "iotec",
+      description: "Order #1234",
+    }),
+  });
+
+  const data = await res.json();
+  const reference = data.data.reference;
+
+  // Start polling for status
+  setStatus("processing");
+  pollStatus(reference);
+};
+```
+
+### The phone number field
+
+Iotec requires the phone number with the country code (no `+` prefix):
+
+```tsx
+<input
+  type="tel"
+  placeholder="e.g. 256771234567"
+  value={phone}
+  onChange={(e) => setPhone(e.target.value)}
+/>
+<p className="text-xs text-gray-500">
+  Enter with country code (e.g. 256 for Uganda)
+</p>
+```
+
+### User experience during processing
+
+While waiting for the user to confirm on their phone, show a loading state:
+
+```tsx
+{
+  status === "processing" && method === "iotec" && (
+    <div className="text-center">
+      <Loader2 className="animate-spin" />
+      <p>
+        A payment prompt has been sent to <strong>{phone}</strong>.
+      </p>
+      <p>Please confirm on your phone.</p>
+    </div>
+  );
+}
+```
+
+---
+
+## Accepting Card Payments (Stripe)
+
+Card payments use Stripe Elements for PCI-compliant card input. The flow is:
+
+1. **Your app** creates a PaymentIntent via DGateway (which returns `client_secret` and `stripe_publishable_key`)
+2. **Stripe.js** mounts the Payment Element using the `client_secret`
+3. **The user** enters their card details and submits
+4. **Your app** confirms the payment with `stripe.confirmPayment()`
+5. **Your app** polls DGateway for the final status
+
+### Creating the PaymentIntent
+
+When the user selects "Card Payment", immediately create the payment to get the `client_secret`:
+
+```typescript
+const createStripePayment = async () => {
+  setStatus("creating");
+
+  const res = await fetch("/api/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      amount: 10.0, // Amount in USD
+      currency: "USD",
+      provider: "stripe",
+      description: "Order #1234",
+    }),
+  });
+
+  const data = await res.json();
+  const { client_secret, stripe_publishable_key, reference } = data.data;
+
+  // Store for later use
+  setReference(reference);
+  setClientSecret(client_secret);
+  setStripePromise(loadStripe(stripe_publishable_key));
+  setStatus("awaiting_card");
+};
+```
+
+### Mounting Stripe Elements
+
+Once you have the `client_secret` and `stripePromise`, mount the Payment Element:
+
+```tsx
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
+
+// In your checkout page:
+{
+  status === "awaiting_card" && clientSecret && stripePromise && (
+    <Elements
+      stripe={stripePromise}
+      options={{
+        clientSecret,
+        appearance: {
+          theme: "stripe",
+          variables: { colorPrimary: "#4f46e5" },
+        },
+      }}
+    >
+      <StripeCardForm
+        onSuccess={handleStripeSuccess}
+        onError={(msg) => setError(msg)}
+      />
+    </Elements>
+  );
+}
+```
+
+### The Stripe card form component
+
+This component lives inside the `<Elements>` provider and has access to the Stripe hooks:
+
+```tsx
+function StripeCardForm({
+  onSuccess,
+  onError,
+}: {
+  onSuccess: () => void;
+  onError: (msg: string) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setSubmitting(true);
+
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: "if_required",
+    });
+
+    if (error) {
+      onError(error.message || "Payment failed");
+      setSubmitting(false);
+      return;
+    }
+
+    if (paymentIntent?.status === "succeeded") {
+      onSuccess();
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {!ready && <p>Loading card form...</p>}
+      <PaymentElement
+        onReady={() => setReady(true)}
+        onLoadError={(e) => onError(e.error.message || "Failed to load Stripe")}
+      />
+      {ready && (
+        <button type="submit" disabled={!stripe || submitting}>
+          {submitting ? "Processing..." : "Pay Now"}
+        </button>
+      )}
+    </form>
+  );
+}
+```
+
+### Important: DGateway provides the publishable key
+
+Notice that you don't hardcode the Stripe publishable key in your frontend. DGateway returns it in the collect response (`stripe_publishable_key`), so it's configured once on the server and automatically passed to the client when needed.
+
+---
+
+## Polling for Payment Status
+
+Both mobile money and card payments use the same polling mechanism. After a payment is created (or after the user confirms their card), poll the status endpoint every 5 seconds:
+
+```typescript
+const pollStatus = useCallback(
+  (ref: string) => {
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutes max (60 * 5s)
+
+    const poll = async () => {
+      if (attempts >= maxAttempts) {
+        setError("Payment verification timed out.");
+        setStatus("failed");
+        return;
+      }
+
+      attempts++;
+
+      try {
+        const res = await fetch("/api/checkout/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reference: ref }),
+        });
+        const data = await res.json();
+
+        if (data.data?.status === "completed") {
+          setStatus("completed");
+          clearCart(); // Clear the cart on success
+          return;
+        }
+
+        if (data.data?.status === "failed") {
+          setError("Payment failed. Please try again.");
+          setStatus("failed");
+          return;
+        }
+      } catch {
+        // Network error — keep polling
+      }
+
+      setTimeout(poll, 5000); // Poll every 5 seconds
+    };
+
+    setTimeout(poll, 3000); // First poll after 3 seconds
+  },
+  [clearCart]
+);
+```
+
+### When to start polling
+
+| Provider | Start polling...                                                              |
+| -------- | ----------------------------------------------------------------------------- |
+| Iotec    | Immediately after `collectPayment()` returns (user needs to confirm on phone) |
+| Stripe   | After `stripe.confirmPayment()` succeeds (card has been charged)              |
+
+---
+
+## Handling Payment States
+
+Your UI should reflect the current payment state. Here's a complete state machine:
+
+```
+           selectMethod()
+  idle ──────────────────► creating
+                              │
+                    ┌─────────┴─────────┐
+                    ▼                   ▼
+             awaiting_card        processing
+             (Stripe only)        (both providers)
+                    │                   │
+                    │ confirmPayment()  │ poll result
+                    ▼                   │
+               processing              │
+                    │                   │
+              ┌─────┴─────┐      ┌─────┴─────┐
+              ▼           ▼      ▼           ▼
+          completed     failed  completed   failed
+```
+
+### Success view
+
+```tsx
+if (status === "completed") {
+  return (
+    <div className="text-center">
+      <CheckCircle className="text-green-500" />
+      <h1>Payment Successful!</h1>
+      <p>Your order has been confirmed.</p>
+      <p>Reference: {reference}</p>
+      <button onClick={() => router.push("/")}>Continue Shopping</button>
+    </div>
+  );
+}
+```
+
+### Failed view
+
+```tsx
+if (status === "failed") {
+  return (
+    <div className="text-center">
+      <XCircle className="text-red-500" />
+      <h1>Payment Failed</h1>
+      <p>{error || "Something went wrong."}</p>
+      <button
+        onClick={() => {
+          setStatus("idle");
+          setMethod(null);
+        }}
+      >
+        Try Again
+      </button>
+    </div>
+  );
+}
+```
+
+---
+
+## Currency Conversion
+
+If your products are priced in USD but you accept mobile money in UGX, you'll need to handle currency conversion. In our example, we use a hardcoded exchange rate for demo purposes:
+
+```typescript
+const USD_TO_UGX = 3750;
+
+const totalPrice = 10.0; // USD
+const totalUGX = Math.round(totalPrice * USD_TO_UGX); // 37,500 UGX
+```
+
+Then send the correct amount and currency to DGateway based on the provider:
+
+```typescript
+const createPayment = async (provider: "iotec" | "stripe") => {
+  const isIotec = provider === "iotec";
+
+  const res = await fetch("/api/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      amount: isIotec ? totalUGX : totalPrice,
+      currency: isIotec ? "UGX" : "USD",
+      phone_number: phoneNumber,
+      provider,
+      description: "My order",
+    }),
+  });
+
+  // ...
+};
+```
+
+Show the converted amount to the user:
+
+```tsx
+{
+  method === "iotec" && (
+    <div className="bg-blue-50 p-3 text-sm text-blue-800">
+      UGX {totalUGX.toLocaleString()} (approx. rate: 1 USD ={" "}
+      {USD_TO_UGX.toLocaleString()} UGX)
+    </div>
+  );
+}
+```
+
+> **Production tip:** For production apps, fetch the exchange rate from a real-time API instead of hardcoding it.
+
+---
+
+## Error Handling
+
+DGateway returns errors in a consistent format:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "amount and currency are required"
+  }
+}
+```
+
+### Common error codes
+
+| Code                   | Description                            | What to do                     |
+| ---------------------- | -------------------------------------- | ------------------------------ |
+| `VALIDATION_ERROR`     | Missing or invalid request fields      | Check your request body        |
+| `AUTHENTICATION_ERROR` | Invalid or missing API key             | Verify your `DGATEWAY_API_KEY` |
+| `PROVIDER_ERROR`       | The payment provider returned an error | Show the message to the user   |
+| `NOT_FOUND`            | Transaction or resource not found      | Check the reference/ID         |
+| `RATE_LIMIT`           | Too many requests                      | Back off and retry             |
+
+### Handling errors in your checkout
+
+```typescript
+const result = await collectPayment(params);
+
+if (result.error) {
+  setError(result.error.message || "Failed to initiate payment");
+  setStatus("idle");
+  return;
+}
+```
+
+### Network errors
+
+Always wrap API calls in try/catch to handle network failures:
+
+```typescript
+try {
+  const res = await fetch("/api/checkout", { ... });
+  const data = await res.json();
+  // ...
+} catch {
+  setError("Network error. Is the DGateway server running?");
+  setStatus("idle");
+}
+```
+
+---
+
+## API Reference
+
+### Collect Payment
+
+```
+POST /v1/payments/collect
+```
+
+**Headers:**
+
+```
+Content-Type: application/json
+X-Api-Key: dgw_live_your_key_here
+```
+
+**Request body:**
+
+```json
+{
+  "amount": 37500,
+  "currency": "UGX",
+  "phone_number": "256771234567",
+  "provider": "iotec",
+  "description": "Order #1234"
+}
+```
+
+| Field          | Type   | Required         | Description                                                                            |
+| -------------- | ------ | ---------------- | -------------------------------------------------------------------------------------- |
+| `amount`       | number | Yes              | Amount in the smallest currency unit for mobile money (UGX), or decimal for card (USD) |
+| `currency`     | string | Yes              | ISO 4217 currency code (UGX, USD, EUR, etc.)                                           |
+| `phone_number` | string | For mobile money | Payer's phone number with country code                                                 |
+| `provider`     | string | No               | Specific provider slug. If omitted, DGateway auto-selects based on currency            |
+| `description`  | string | No               | Human-readable description of the payment                                              |
+| `metadata`     | object | No               | Arbitrary key-value pairs stored with the transaction                                  |
+
+**Response:**
+
+```json
+{
+  "data": {
+    "reference": "txn_abc123",
+    "provider": "iotec",
+    "status": "pending",
+    "amount": 37500,
+    "currency": "UGX",
+    "provider_ref": "iot_xyz789"
+  }
+}
+```
+
+### Verify Transaction
+
+```
+POST /v1/webhooks/verify
+```
+
+**Request body:**
+
+```json
+{
+  "reference": "txn_abc123"
+}
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "reference": "txn_abc123",
+    "status": "completed",
+    "provider": "iotec",
+    "amount": 37500,
+    "currency": "UGX"
+  }
+}
+```
+
+---
+
+## Full Example Project
+
+A complete working example is available in the `examples/ecommerce-app/` directory of the DGateway repository. It's a Next.js e-commerce store with a shopping cart powered by Zustand and a full checkout flow supporting both Iotec mobile money and Stripe card payments.
+
+### Project structure
+
+```
+examples/ecommerce-app/
+├── .env.local                     # DGateway API credentials
+├── lib/
+│   └── dgateway.ts                # Server-side DGateway client
+├── app/
+│   ├── api/
+│   │   └── checkout/
+│   │       ├── route.ts           # POST /api/checkout → DGateway collect
+│   │       └── status/
+│   │           └── route.ts       # POST /api/checkout/status → DGateway verify
+│   ├── checkout/
+│   │   └── page.tsx               # Full checkout UI with Iotec + Stripe
+│   └── page.tsx                   # Product listing page
+└── components/
+    └── zustand-cart.tsx            # Shopping cart with Zustand
+```
+
+### Running the example
+
+```bash
+# 1. Start the DGateway server
+cd dgateway/apps/api
+go run ./cmd/server
+
+# 2. Start the example app
+cd examples/ecommerce-app
+cp .env.local.example .env.local   # Add your API key
+pnpm install
+pnpm dev                           # Runs on http://localhost:3002
+```
+
+### Quick start checklist
+
+- [ ] DGateway server is running
+- [ ] You've created an app in the admin panel
+- [ ] You've generated an API key for the app
+- [ ] `.env.local` has `DGATEWAY_API_URL` and `DGATEWAY_API_KEY`
+- [ ] `lib/dgateway.ts` is created (server-side only)
+- [ ] API routes proxy requests to DGateway
+- [ ] Frontend never exposes the API key
+- [ ] Polling is implemented for payment status
+- [ ] Error states are handled in the UI
+
+---
+
+## Summary
+
+Integrating DGateway into a Next.js app follows a clean three-layer pattern:
+
+1. **`lib/dgateway.ts`** — Thin server-side client that talks to the DGateway API with your API key
+2. **`app/api/checkout/`** — Next.js API routes that proxy requests, keeping credentials on the server
+3. **`app/checkout/page.tsx`** — Client-side UI that handles payment method selection, provider-specific flows, and status polling
+
+The key benefits of this approach:
+
+- **Single integration** — One API for mobile money and cards
+- **No provider keys in the frontend** — DGateway manages all credentials
+- **Auto-routing** — DGateway picks the best provider for each currency
+- **Simple status checking** — Poll one endpoint instead of building webhook handlers
+- **Provider-agnostic** — Switch providers without changing your frontend code
