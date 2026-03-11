@@ -57,6 +57,10 @@ export function SiteFooter() {
             >
               Omnistack
             </a>
+            <span className="text-muted-foreground">•</span>
+            <a className="link" href="/ai-prompts">
+              AI Prompts
+            </a>
             {/* <a
               className="link"
               href="https://wesendall.com"

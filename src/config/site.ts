@@ -32,10 +32,6 @@ export const MAIN_NAV: NavItem[] = [
     href: "/golang",
   },
   {
-    title: "AI Prompts",
-    href: "/ai-prompts",
-  },
-  {
     title: "Ebooks",
     href: "/ebooks",
   },
