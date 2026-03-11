@@ -17,6 +17,14 @@ export const AI_PROMPTS: AIPrompt[] = [
     body: `A graphic design of a clean, aesthetic education slide template, set against a subtle off-white square grid paper background with faint parchment texture, referencing image_0.png. The overall composition is a modern journal-style layout. In the top-left, the bold title "Prompt Engineering" is present, with the word 'Prompt' in deep black and 'Engineering' in a warm golden-mustard color, partially layered over a large white watercolor brush stroke. Below this title, two informational sections are organized with subheaders over muted tan-peach watercolor brush strokes: first, "What it is", with a hand-drawn grey arrow pointing to text: "It's the difference between generic AI output and answers you can actually execute.", marked by a golden four-point sparkle bullet; and second, "Why it matters", with a similar arrow to text: "It matters when you need strategy and operational thinking – not just chatbot replies.", also marked by a sparkle bullet. Centered in the lower half is a row of four distinct, rounded-square (squircle) app icons: the green OpenAI/ChatGPT logo, the blue Google Gemini gradient sparkle, the terracotta Anthropic Claude asterisk, and the black-and-white geometric Perplexity logo, each with its name in small, bold text below (ChatGPT, Gemini, Claude, Perplexity). A clean footer section spans the bottom, containing the Instagram logo and handle "Instagram @Roman.Knox" on the far left, a central "Page 1/9" text element, and a "swipe ←" pill button on the right. In the top-right corner, a dark, pill-shaped badge displays the text "2/10". The design has generous negative space, maintaining a clear, readable hierarchy.`,
   },
   {
+    id: "isometric-infographic-diagram",
+    title: "Isometric Infographic — Process Flow Diagram",
+    category: "Design & Visuals",
+    howToUse:
+      "Use in any image-generating AI (Midjourney, DALL-E, Ideogram, NotebookLM). Replace '[INSERT YOUR TOPIC HERE]' with your subject and '[INSERT SECONDARY CONTEXT]' with supporting context like a tool name, category, or subtitle.",
+    body: `A clean, modern isometric 2D infographic diagram on a minimalist cream background. The top features a bold sans-serif title: '[INSERT YOUR TOPIC HERE]'. Below the title, four rounded-square cards are arranged in a horizontal row, each containing a 3D-shaded, stylized icon in a warm orange and red color scheme. Between the cards are thin directional arrows showing a process flow. Include a secondary floating card at the top right representing '[INSERT SECONDARY CONTEXT]'. Scatter subtle tech-related decorative elements like code brackets, signal waves, and soft sparkles around the diagram. Professional, sleek, and high-resolution, similar to a high-end tech blog illustration.`,
+  },
+  {
     id: "youtube-thumbnail-bold",
     title: "YouTube Thumbnail — Bold & Clickable",
     category: "Design & Visuals",
