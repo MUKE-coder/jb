@@ -1,0 +1,289 @@
+---
+title: "Scaling Your App from Uganda to East Africa: A Payment Integration Story"
+description: "How one API key lets you expand from Kampala to Nairobi, Kigali, and Dar es Salaam without rewriting your payment code."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfFk8LMYcaEDQ5AGptjCf6vkgZK0dTLnWhUxMl
+category: payments
+createdAt: 2026-03-12
+updatedAt: 2026-03-12
+---
+
+# Scaling Your App from Uganda to East Africa: A Payment Integration Story
+
+_How one API key lets you expand from Kampala to Nairobi, Kigali, and Dar es Salaam without rewriting your payment code._
+
+---
+
+You built an app in Uganda. Payments work. MTN MoMo and Airtel Money customers can pay you seamlessly. Business is growing.
+
+Then a customer in Nairobi asks: "Can I pay with M-Pesa?"
+
+Another one in Kigali: "Do you accept MTN MoMo Rwanda?"
+
+A business partner in Dar es Salaam: "We want to launch in Tanzania too."
+
+Suddenly, your Uganda-only payment integration needs to work in three more countries. If you integrated directly with Iotec for Uganda, you're now looking at adding Relworx for Kenya and Rwanda, PesaPal for Tanzania, and rewriting your webhook handlers to support multiple providers.
+
+**Unless you're using DGateway.**
+
+## The One-Line Expansion
+
+If your app already uses DGateway for Uganda payments, here's what it takes to support Kenya:
+
+```diff
+  body: JSON.stringify({
+    amount: 1500,
+-   currency: "UGX",
+-   phone_number: "256771234567",
++   currency: "KES",
++   phone_number: "254712345678",
+    description: "Order #200",
+  }),
+```
+
+That's it. Change the currency and phone number format. No new provider integration. No new API keys. No new webhook handlers. DGateway automatically routes `KES` to the right provider.
+
+## The Multi-Country Architecture
+
+Here's what a production multi-country checkout looks like with DGateway:
+
+```typescript
+// lib/dgateway.ts — works for ALL countries
+const API_URL = process.env.DGATEWAY_API_URL!;
+const API_KEY = process.env.DGATEWAY_API_KEY!;
+
+export async function collectPayment(params: {
+  amount: number;
+  currency: string;
+  phone_number: string;
+  description?: string;
+}) {
+  const res = await fetch(`${API_URL}/v1/payments/collect`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": API_KEY,
+    },
+    body: JSON.stringify(params),
+  });
+  return res.json();
+}
+```
+
+```typescript
+// Your checkout component — handles all four countries
+const COUNTRIES = [
+  { code: "UG", currency: "UGX", prefix: "256", label: "Uganda", flag: "🇺🇬" },
+  { code: "KE", currency: "KES", prefix: "254", label: "Kenya", flag: "🇰🇪" },
+  { code: "RW", currency: "RWF", prefix: "250", label: "Rwanda", flag: "🇷🇼" },
+  { code: "TZ", currency: "TZS", prefix: "255", label: "Tanzania", flag: "🇹🇿" },
+];
+
+const handlePayment = async () => {
+  const country = COUNTRIES.find((c) => c.code === selectedCountry);
+  if (!country) return;
+
+  const result = await fetch("/api/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      amount: convertedAmount,
+      currency: country.currency,
+      phone_number: `${country.prefix}${localPhone}`,
+      description: `Order #${orderId}`,
+    }),
+  });
+
+  const data = await result.json();
+  // Same polling logic works for all countries
+  if (!data.error) pollStatus(data.data.reference);
+};
+```
+
+One component. Four countries. Zero provider-specific code.
+
+## Country-by-Country: What Happens Behind the Scenes
+
+When a payment request hits DGateway, the routing engine evaluates available providers based on the currency:
+
+### Uganda (UGX)
+
+```
+Request: { currency: "UGX", phone_number: "256771234567" }
+
+DGateway evaluates:
+  1. Iotec — supports UGX ✓, configured ✓ → SELECTED
+  2. Relworx — supports UGX ✓ (fallback)
+  3. PesaPal — supports UGX ✓ (fallback)
+
+Result: Iotec sends USSD prompt to 256771234567
+```
+
+Iotec is the highest-priority provider for Uganda. It handles both MTN MoMo and Airtel Money with a single API call.
+
+### Kenya (KES)
+
+```
+Request: { currency: "KES", phone_number: "254712345678" }
+
+DGateway evaluates:
+  1. Iotec — supports KES? ✗ → skip
+  2. Relworx — supports KES ✓, configured ✓ → SELECTED
+  3. PesaPal — supports KES ✓ (fallback)
+
+Result: Relworx sends STK push to 254712345678
+```
+
+Relworx handles M-Pesa and Airtel Money in Kenya. If Relworx is down, DGateway falls back to PesaPal automatically.
+
+### Rwanda (RWF)
+
+```
+Request: { currency: "RWF", phone_number: "250781234567" }
+
+DGateway evaluates:
+  1. Iotec — supports RWF? ✗ → skip
+  2. Relworx — supports RWF ✓, configured ✓ → SELECTED
+
+Result: Relworx sends payment prompt to 250781234567
+```
+
+Relworx is currently the only provider supporting RWF, covering both MTN MoMo and Airtel Money in Rwanda.
+
+### Tanzania (TZS)
+
+```
+Request: { currency: "TZS", phone_number: "255712345678" }
+
+DGateway evaluates:
+  1. Iotec — supports TZS? ✗ → skip
+  2. Relworx — supports TZS ✓, configured ✓ → SELECTED
+  3. PesaPal — supports TZS ✓ (fallback)
+
+Result: Relworx sends payment prompt to 255712345678
+```
+
+Tanzania has M-Pesa (Vodacom), Tigo Pesa, and Airtel Money — all reachable through Relworx.
+
+## Handling Multi-Currency Pricing
+
+If your products are priced in USD, you'll need to convert for each local currency. Here's a practical approach:
+
+```typescript
+// lib/currency.ts
+const EXCHANGE_RATES: Record<string, number> = {
+  UGX: 3750, // 1 USD = 3,750 UGX
+  KES: 155, // 1 USD = 155 KES
+  RWF: 1350, // 1 USD = 1,350 RWF
+  TZS: 2650, // 1 USD = 2,650 TZS
+};
+
+export function convertFromUSD(amountUSD: number, currency: string): number {
+  const rate = EXCHANGE_RATES[currency];
+  if (!rate) throw new Error(`Unsupported currency: ${currency}`);
+  return Math.round(amountUSD * rate);
+}
+
+// Usage
+const priceUSD = 10.0;
+const priceUGX = convertFromUSD(priceUSD, "UGX"); // 37,500
+const priceKES = convertFromUSD(priceUSD, "KES"); // 1,550
+const priceRWF = convertFromUSD(priceUSD, "RWF"); // 13,500
+const priceTZS = convertFromUSD(priceUSD, "TZS"); // 26,500
+```
+
+> **Pro tip:** For production, fetch live exchange rates from an API like ExchangeRate-API or Open Exchange Rates. Hard-coded rates drift quickly.
+
+## International Customers? Add Cards Too
+
+DGateway also supports Stripe for card payments. If you have customers paying in USD, EUR, or GBP, they can use Visa or Mastercard:
+
+```typescript
+// Card payment — same API, just different currency
+const result = await collectPayment({
+  amount: 25.0,
+  currency: "USD",
+  phone_number: "", // Not needed for cards
+  description: "Premium Plan",
+});
+
+// DGateway returns a Stripe client_secret
+// Mount Stripe Elements in your frontend
+const { client_secret, stripe_publishable_key } = result.data;
+```
+
+Your checkout page can offer both options: Mobile Money for local customers, cards for international ones. One API handles both.
+
+## Disbursements: Pay People Across Borders
+
+Collecting payments is half the story. When you need to pay affiliates, vendors, or customers across the region, DGateway handles that too:
+
+```typescript
+// Pay a Ugandan affiliate
+await disburse(250000, "UGX", "256771234567", "June affiliate commission");
+
+// Pay a Kenyan vendor
+await disburse(15000, "KES", "254712345678", "Invoice #456 payment");
+
+// Pay a Rwandan partner
+await disburse(50000, "RWF", "250781234567", "Revenue share Q2");
+
+// Pay a Tanzanian contractor
+await disburse(100000, "TZS", "255712345678", "Project milestone payment");
+```
+
+Same API. Same response format. Money lands in the recipient's Mobile Money wallet within seconds.
+
+## Withdrawals: Cash Out Your Balance
+
+As your app collects payments across multiple countries, your DGateway balance grows. Request withdrawals to cash out:
+
+```typescript
+// Withdraw to your Mobile Money
+await fetch(`${API_URL}/v1/withdrawals`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-Api-Key": API_KEY,
+  },
+  body: JSON.stringify({
+    amount: 2000000,
+    currency: "UGX",
+    method: "mobile_money",
+    destination: "256771234567",
+    note: "June revenue withdrawal",
+  }),
+});
+```
+
+## The Dashboard: Visibility Across Everything
+
+The DGateway admin dashboard gives you a single view of all your transactions across all countries and providers:
+
+- **Transaction list** with filters by country, provider, status, and date range
+- **Live/Test toggle** to separate sandbox testing from production data
+- **Provider health** — test connectivity for each provider directly from the dashboard
+- **Wallet balance** — see your earnings across all currencies
+- **Export** — download transaction data as Excel or PDF for accounting
+
+## The Expansion Checklist
+
+Here's everything you need to do to take your Uganda-only app to all of East Africa:
+
+- [ ] You already have a DGateway account and API key (same key works everywhere)
+- [ ] Add a country selector to your checkout UI
+- [ ] Map country codes to currency and phone prefix (5 lines of code)
+- [ ] Add exchange rate conversion if you price in USD
+- [ ] Update your phone number input to accept the customer's local format
+- [ ] Deploy. Done.
+
+No new provider accounts. No new API keys. No new webhook endpoints. No new payment code.
+
+## What's Next?
+
+DGateway is actively expanding to more East African markets and payment methods. The API stays the same — when new countries or providers are added, your integration automatically gains access to them.
+
+If you're building for East Africa, build on DGateway. Write your payment code once, and let it grow with your business.
+
+---
+
+_Ready to go multi-country? [Sign up for DGateway](https://dgatewayadmin.desispay.com/sign-up), read the [country-specific guides](https://dgateway.desispay.com/docs#guide-kenya), or [chat with us on WhatsApp](https://wa.me/message/5USU26346OWRF1)._
