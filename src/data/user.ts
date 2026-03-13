@@ -92,7 +92,7 @@ Beyond tech, I'm deeply invested in my community at **St. Gonzaga Gonza Kamuli P
 
 ### Personal
 
-I am married to my wife **Irankuda Odeth**. My journey is proof that you don't need a computer science degree to build a successful tech career. I believe anyone can learn, anyone can build, and anyone can succeed.
+I am married to my lovely wife **Irankuda Odeth**, who is a Biomedical Engineer. My journey is proof that you don't need a computer science degree to build a successful tech career. I believe anyone can learn, anyone can build, and anyone can succeed.
 
 When I'm not coding, creating content, or teaching, you'll find me working out, watching Netflix, or cheering on Manchester United FC. Let's connect and build something amazing together!
   `,
