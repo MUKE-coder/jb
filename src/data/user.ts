@@ -55,7 +55,7 @@ export const USER = {
     },
   ],
   about: `
-Hello, World! I'm JB (Muke Johnbaptist) — a self-taught fullstack developer, tech entrepreneur, educator, and open-source creator based in Kampala, Uganda.
+Hello, World! I'm JB (Muke Johnbaptist) — a fullstack developer, tech entrepreneur, educator, and open-source creator based in Kampala, Uganda. I hold a **Bachelor of Science in Agro-Processing Engineering** from **Busitema University**, but my passion for technology led me to transition into software engineering — and I've never looked back.
 
 I'm the Founder and CEO of **Desishub Technologies** and **Desishub Coding School** — building digital solutions and training the next generation of African developers. What started as a personal journey to learn coding has grown into a thriving tech company serving clients across Africa and beyond.
 
