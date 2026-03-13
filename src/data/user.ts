@@ -81,7 +81,18 @@ I'm deeply passionate about education. Through my **[Nextjs Academy](https://www
 
 I maintain a growing library of free, production-ready shadcn/ui components including File Storage UI, Better Auth UI, Zustand Cart, Multi Step Form, and Work Experience components — all installable with a single CLI command.
 
-My journey is proof that you don't need a computer science degree to build a successful tech career. I believe anyone can learn, anyone can build, and anyone can succeed.
+### Social & Community Impact
+
+Beyond tech, I'm deeply invested in my community at **St. Gonzaga Gonza Kamuli Parish**:
+
+- **Chairman, St. Gonzaga Fitness Team** — I lead our parish fitness community and built them a **savings app** that has been in operation for over 2 years, helping members save and track their finances digitally.
+- **Secretary, Men's Guild** (Parish & Sub-parish) — I serve as secretary and built a **Treasurer app** that manages members, financial contributions, and generates reports — replacing manual bookkeeping entirely.
+- **Church Management System** — I've been developing a comprehensive **Church Management System** that helps the parish run all its operations paperless — from member records to finances to reporting. It's already running and set to launch soon.
+- **Youth Re-skilling Initiative** — We're launching a **Youth Group** focused on re-skilling, financial literacy, and digital literacy to uplift young people's earnings and opportunities. Launching soon.
+
+### Personal
+
+I am married to my wife **Irankuda Odeth**. My journey is proof that you don't need a computer science degree to build a successful tech career. I believe anyone can learn, anyone can build, and anyone can succeed.
 
 When I'm not coding, creating content, or teaching, you'll find me working out, watching Netflix, or cheering on Manchester United FC. Let's connect and build something amazing together!
   `,
