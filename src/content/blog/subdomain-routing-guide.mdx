@@ -1,0 +1,393 @@
+---
+title: Wildcard Subdomain Routing with Dokploy, Cloudflare, Next.js & Go
+description: A complete guide to implementing multi-tenant wildcard subdomain routing for SaaS applications deployed on Dokploy (Traefik) with Cloudflare DNS and SSL.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfOBtL1HkoJbWuGYVc5EZHf1m7xFl3IvOpeSqz
+category: tutorial
+createdAt: 2026-03-23
+updatedAt: 2026-03-23
+---
+
+# Wildcard Subdomain Routing with Dokploy, Cloudflare, Next.js & Go
+
+A complete guide to implementing multi-tenant wildcard subdomain routing for SaaS applications deployed on Dokploy (Traefik) with Cloudflare DNS and SSL.
+
+## The Goal
+
+```
+tenant-a.myapp.com  →  Tenant A's dashboard
+tenant-b.myapp.com  →  Tenant B's dashboard
+admin.myapp.com     →  Admin panel (super admin)
+api.myapp.com       →  API server
+myapp.com           →  Marketing site
+```
+
+All powered by a single Next.js app with middleware-based routing.
+
+## Architecture Overview
+
+```
+User → Cloudflare (SSL + CDN) → Dokploy/Traefik → Docker containers
+                                    ↓
+                              *.myapp.com → admin container (Next.js)
+                              admin.myapp.com → admin container
+                              api.myapp.com → api container (Go)
+                              myapp.com → web container (Next.js)
+```
+
+## Prerequisites
+
+- A VPS with Dokploy installed
+- A domain on Cloudflare (free plan works)
+- Next.js app with middleware support
+- Go API (or any backend)
+
+---
+
+## Step 1: DNS Setup (Cloudflare)
+
+Add these DNS records:
+
+| Type | Name    | Content       | Proxy                |
+| ---- | ------- | ------------- | -------------------- |
+| A    | `@`     | `your_vps_ip` | DNS only (gray)      |
+| A    | `api`   | `your_vps_ip` | DNS only (gray)      |
+| A    | `admin` | `your_vps_ip` | DNS only (gray)      |
+| A    | `*`     | `your_vps_ip` | **Proxied** (orange) |
+
+**Why the wildcard is proxied:** Cloudflare Free plan provides SSL for `*.myapp.com` only through their proxy. Let's Encrypt cannot issue wildcard certs via HTTP challenge.
+
+**Why others are DNS only:** They use Let's Encrypt certs issued by Dokploy/Traefik directly. Mixing Cloudflare proxy with Let's Encrypt causes cert conflicts.
+
+### Cloudflare SSL Settings
+
+Go to **SSL/TLS → Overview** and set mode to **Flexible**.
+
+This means:
+
+- User → Cloudflare: HTTPS (Cloudflare's cert)
+- Cloudflare → Your server: HTTP (no cert needed on origin for wildcard)
+
+> **Important:** If you set it to "Full (Strict)", wildcard subdomains will fail with `ERR_SSL_VERSION_OR_CIPHER_MISMATCH` because your origin doesn't have a valid wildcard cert.
+
+---
+
+## Step 2: Dokploy Domain Configuration
+
+In Dokploy, add only your **fixed** domains:
+
+| Service | Domain            | Port | HTTPS | Cert        |
+| ------- | ----------------- | ---- | ----- | ----------- |
+| api     | `api.myapp.com`   | 8080 | Yes   | letsencrypt |
+| web     | `myapp.com`       | 3000 | Yes   | letsencrypt |
+| admin   | `admin.myapp.com` | 3001 | Yes   | letsencrypt |
+
+**Do NOT add `*.myapp.com` in Dokploy's UI.** Dokploy uses `Host()` for wildcard domains, but Traefik v3 requires `HostRegexp()` for wildcards. We handle this with a custom Traefik config file.
+
+---
+
+## Step 3: Traefik Wildcard Config (The Key Part)
+
+SSH into your VPS and create a dynamic Traefik config file:
+
+```bash
+cat > /etc/dokploy/traefik/dynamic/wildcard-tenants.yml << 'ENDOFFILE'
+http:
+  routers:
+    tenant-wildcard:
+      rule: 'HostRegexp(`^[a-z0-9-]+\.myapp\.com$`)'
+      service: your-admin-service-name@docker
+      entryPoints:
+        - web
+      priority: 100
+ENDOFFILE
+```
+
+### Finding your service name
+
+Dokploy auto-generates service names. Find yours:
+
+```bash
+docker exec $(docker ps -q -f name=traefik) wget -qO- \
+  http://localhost:8080/api/http/routers 2>/dev/null | \
+  python3 -c "
+import sys, json
+for r in json.load(sys.stdin):
+    if 'admin.myapp.com' in r.get('rule',''):
+        print(r['service'])
+"
+```
+
+This outputs something like `myapp-myapp-abc123-42-web`. Use that exact name with `@docker` suffix in the config.
+
+### Critical details
+
+1. **Traefik v3 regex syntax**: ``HostRegexp(`^[a-z0-9-]+\.myapp\.com$`)`` — NOT the old v2 `{subdomain:.+}` syntax
+2. **Single quotes in YAML**: Use `'` not `"` to avoid backslash escape issues
+3. **`@docker` suffix**: Required when referencing a Docker-provided service from a file config
+4. **Priority 100**: Higher than Dokploy's auto-generated routers (typically 20-40) so wildcards match before falling through
+5. **`web` entryPoint only**: Since Cloudflare handles SSL, Traefik only needs to listen on HTTP (port 80)
+
+### Verifying it loaded
+
+```bash
+# Check for errors
+docker logs $(docker ps -q -f name=traefik) --tail 5 2>&1
+
+# Verify router exists
+docker exec $(docker ps -q -f name=traefik) wget -qO- \
+  http://localhost:8080/api/http/routers 2>/dev/null | \
+  python3 -c "
+import sys, json
+for r in json.load(sys.stdin):
+    if 'wildcard' in r.get('name',''):
+        print(json.dumps(r, indent=2))
+"
+```
+
+### Common errors and fixes
+
+| Error                                     | Cause                                                | Fix                                                     |
+| ----------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------- |
+| `services cannot be a standalone element` | YAML indentation wrong — `services` not under `http` | Put `services` at same indent as `routers` under `http` |
+| `found unknown escape character`          | Double quotes around regex with backslashes          | Use single quotes: `rule: 'HostRegexp(...)'`            |
+| `service "xyz@file" does not exist`       | File config can't find a file-provider service       | Add `@docker` suffix to reference Docker services       |
+| `invalid value for HostSNI`               | Using `Host()` for wildcard on HTTPS entrypoint      | Use `HostRegexp()` and only `web` entrypoint            |
+
+---
+
+## Step 4: Next.js Middleware (Subdomain → Path Rewrite)
+
+The Next.js app receives requests on the wildcard subdomain. The middleware extracts the subdomain and rewrites the URL internally.
+
+```typescript
+// middleware.ts
+import { NextRequest, NextResponse } from "next/server";
+
+const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || "localhost:3001";
+const RESERVED = new Set(["admin", "api", "www", "mail", "docs"]);
+
+function extractTenantSlug(host: string): string | null {
+  const hostname = host.split(":")[0];
+
+  // Dev: {slug}.localhost
+  if (hostname.endsWith(".localhost")) {
+    const sub = hostname.replace(".localhost", "");
+    if (sub && !RESERVED.has(sub)) return sub;
+    return null;
+  }
+
+  // Production: {slug}.myapp.com
+  const root = ROOT_DOMAIN.split(":")[0];
+  if (hostname.endsWith(`.${root}`)) {
+    const sub = hostname.replace(`.${root}`, "");
+    if (sub && !RESERVED.has(sub)) return sub;
+  }
+
+  return null;
+}
+
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Skip static files
+  if (pathname.startsWith("/_next") || pathname.includes(".")) {
+    return NextResponse.next();
+  }
+
+  const host = request.headers.get("host") || "";
+  const slug = extractTenantSlug(host);
+
+  if (slug) {
+    // Rewrite: tenant-a.myapp.com/dashboard → /tenant/tenant-a/dashboard
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = `/tenant/${slug}/login`;
+      return NextResponse.rewrite(url);
+    }
+
+    const url = request.nextUrl.clone();
+    url.pathname = `/tenant/${slug}${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  // Dev fallback: /tenant/{slug}/... works as-is
+  if (pathname.startsWith("/tenant/")) {
+    return NextResponse.next();
+  }
+
+  // Main domain (admin panel)
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
+```
+
+### URL Helper (for links in components)
+
+```typescript
+// lib/tenant-url.ts
+const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN || "";
+const RESERVED = new Set(["admin", "api", "www"]);
+
+export function getTenantBasePath(slug: string): string {
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    const root = ROOT_DOMAIN.split(":")[0];
+    if (root && hostname.endsWith(`.${root}`)) {
+      const sub = hostname.replace(`.${root}`, "");
+      if (sub && !RESERVED.has(sub)) return ""; // Subdomain mode
+    }
+    if (hostname.endsWith(".localhost")) return ""; // Dev subdomain
+  }
+  return `/tenant/${slug}`; // Path fallback
+}
+
+export function getTenantPortalUrl(slug: string, path = "/login"): string {
+  if (ROOT_DOMAIN && !ROOT_DOMAIN.includes("localhost")) {
+    return `https://${slug}.${ROOT_DOMAIN}${path}`;
+  }
+  return `http://localhost:3001/tenant/${slug}${path}`;
+}
+```
+
+---
+
+## Step 5: Go API — Wildcard CORS
+
+Standard CORS middleware does exact string matching. `https://*.myapp.com` won't match `https://tenant-a.myapp.com`. You need wildcard-aware CORS:
+
+```go
+func CORS(allowedOrigins []string) gin.HandlerFunc {
+    exact := make(map[string]bool)
+    var wildcardSuffixes []string
+
+    for _, origin := range allowedOrigins {
+        if strings.Contains(origin, "*") {
+            suffix := strings.Replace(origin, "https://*", "", 1)
+            wildcardSuffixes = append(wildcardSuffixes, suffix)
+        } else {
+            exact[origin] = true
+        }
+    }
+
+    return func(c *gin.Context) {
+        origin := c.GetHeader("Origin")
+        allowed := exact[origin]
+
+        if !allowed {
+            host := strings.TrimPrefix(strings.TrimPrefix(origin, "https://"), "http://")
+            for _, suffix := range wildcardSuffixes {
+                if strings.HasSuffix(host, suffix) {
+                    allowed = true
+                    break
+                }
+            }
+        }
+
+        if allowed {
+            c.Header("Access-Control-Allow-Origin", origin)
+        }
+        c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+        c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+        c.Header("Access-Control-Allow-Credentials", "true")
+
+        if c.Request.Method == http.MethodOptions {
+            c.AbortWithStatus(http.StatusNoContent)
+            return
+        }
+        c.Next()
+    }
+}
+```
+
+Set in your `.env`:
+
+```
+CORS_ORIGINS=https://myapp.com,https://admin.myapp.com,https://*.myapp.com
+```
+
+---
+
+## Step 6: Docker & Environment Variables
+
+### Dockerfile (Next.js)
+
+```dockerfile
+ARG NEXT_PUBLIC_ROOT_DOMAIN
+ENV NEXT_PUBLIC_ROOT_DOMAIN=$NEXT_PUBLIC_ROOT_DOMAIN
+ENV DOCKER_BUILD=1
+```
+
+### next.config.ts
+
+```typescript
+const nextConfig: NextConfig = {
+  output: process.env.DOCKER_BUILD ? "standalone" : undefined,
+  // standalone causes symlink errors on Windows, only enable in Docker
+};
+```
+
+### Build args in docker-compose or Dokploy
+
+```
+NEXT_PUBLIC_ROOT_DOMAIN=myapp.com
+NEXT_PUBLIC_API_URL=https://api.myapp.com
+```
+
+---
+
+## Debugging Checklist
+
+If subdomains aren't working, check in this order:
+
+1. **DNS resolves?** `dig tenant-a.myapp.com` should return your VPS IP (or Cloudflare IPs if proxied)
+2. **Cloudflare SSL mode?** Must be "Flexible" for wildcard (unless you have Advanced Certificate Manager)
+3. **Traefik config loaded?** Check `docker logs traefik --tail 10` for YAML errors
+4. **Traefik router exists?** Query the API: `wget -qO- http://localhost:8080/api/http/routers`
+5. **Service name correct?** Must end with `@docker` when referencing Docker services from file config
+6. **CORS allows subdomain?** Check `Access-Control-Allow-Origin` header in browser DevTools Network tab
+7. **NEXT_PUBLIC_ROOT_DOMAIN set?** Must be a build arg (not runtime env) for Next.js
+
+---
+
+## The IP Change Problem
+
+The Traefik file config references a Docker container by service name (e.g., `myapp-admin@docker`). This is stable across container restarts. **Never** hardcode container IPs — they change on restart.
+
+If you initially used a hardcoded IP during debugging, replace it with the `@docker` service reference:
+
+```yaml
+# BAD (breaks on restart):
+service: my-custom-service
+# with loadBalancer url: "http://172.20.0.3:3001"
+
+# GOOD (stable):
+service: myapp-myapp-abc123-42-web@docker
+```
+
+---
+
+## Cost
+
+- **Cloudflare Free Plan**: Wildcard SSL via proxy ✅
+- **Dokploy**: Free (self-hosted) ✅
+- **Let's Encrypt**: Free (for fixed domains) ✅
+- **Total: $0/month** for unlimited subdomains
+
+The only paid alternative would be Cloudflare Advanced Certificate Manager ($10/month) if you need sub-subdomains like `*.admin.myapp.com`.
+
+---
+
+## Summary
+
+| Component                         | What It Does                                                   |
+| --------------------------------- | -------------------------------------------------------------- |
+| Cloudflare `*` A record (proxied) | Routes all subdomains to your VPS + provides SSL               |
+| Traefik dynamic file config       | `HostRegexp` routes wildcard to admin container                |
+| Next.js middleware                | Extracts subdomain, rewrites `/login` → `/tenant/{slug}/login` |
+| Go CORS middleware                | Allows `*.myapp.com` origins with suffix matching              |
+| `NEXT_PUBLIC_ROOT_DOMAIN`         | Tells the app which domain to extract subdomains from          |
+
+Built with: Next.js 15, Go (Gin), Dokploy v0.26, Traefik v3, Cloudflare Free
