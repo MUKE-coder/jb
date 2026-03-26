@@ -70,8 +70,19 @@ In 2026, I built two projects I'm especially proud of:
 - **[Grit Framework](https://grit-vert.vercel.app)** — A Golang web framework designed for simplicity and speed. Grit makes it easy to build production APIs with built-in routing, middleware, and database support. [GitHub](https://github.com/MUKE-coder/grit)
 - **[Gorm Studio](https://github.com/MUKE-coder/gorm-studio)** — A visual database management tool for GORM (Go's most popular ORM). Browse tables, run queries, and manage your Go database visually.
 - **[Sentinel](https://github.com/MUKE-coder/sentinel)** — Production-grade security intelligence SDK for Go applications. Drop-in middleware for Gin that provides WAF protection, rate limiting, threat detection, audit logging, anomaly detection, AI-powered analysis, and an embedded React dashboard — all mountable with a single function call.
+- **[Orbita](https://github.com/MUKE-coder/orbita)** — A self-hosted Platform-as-a-Service (PaaS) built in Go that enables developers to manage multiple isolated client organizations on a single VPS, with multi-tenancy, RBAC, Docker deployment, database management, and cron job scheduling.
+- **[Pulse](https://github.com/MUKE-coder/pulse)** — A self-hosted observability and performance monitoring SDK for Go applications. Provides request tracing, database query analysis, runtime metrics, error tracking, and a real-time dashboard with zero external dependencies.
 
-I'm also building **[DesisPay](https://desispay.com)** with my team — a payment platform designed for African businesses and developers.
+### Current Projects
+
+I'm actively building and shipping products across multiple domains:
+
+- **[DGateway](https://dgateway.desispay.com)** — Unified payments for Uganda. A payment aggregation platform that consolidates MTN Mobile Money, Airtel Money, and Stripe into a single API for collecting, disbursing, and managing payments across East Africa.
+- **[Nexora AI](https://nexora.gritcms.com)** — Build, train, and deploy AI agents that understand your business and delight your customers. An AI agent platform enabling businesses to create custom chatbots trained on their data and deploy them across multiple channels.
+- **[Fynlo](https://fynloapp.com)** — Smart accounting for growing businesses. An AI-powered accounting platform that automates invoicing, expense tracking, payroll management, and financial reporting.
+- **[Nexus School](https://nexusschool.app)** — A multi-school management system for East Africa with an offline-first desktop application and cloud portals, designed with modular features and flexible billing.
+- **[Omnistack](https://omnistack.desishub.com)** — Write less, ship faster. A batteries-included, full-stack component library for Next.js, Expo, and Go that provides complete features like authentication, payments, and file storage via CLI.
+- **[CodeMint](https://codemint.desishub.com)** — Premium fullstack projects with source code. A marketplace offering production-ready fullstack templates and starter kits built with modern technologies.
 
 ### Education & Community
 
