@@ -1,0 +1,78 @@
+---
+title: Currency Input
+description: Formatted currency input with comma separators and configurable prefix.
+image: https://jb.desishub.com/og/currency-input
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/currency-input.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install clsx tailwind-merge
+```
+
+<Step>Add the required shadcn/ui components</Step>
+
+```bash
+npx shadcn@latest add input
+```
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="currency-input"
+  title="components/currency-input.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import { CurrencyInput } from "@/components/currency-input";
+```
+
+```tsx
+const [amount, setAmount] = useState(0);
+
+<CurrencyInput value={amount} onChange={setAmount} prefix="USD" />
+<CurrencyInput value={amount} onChange={setAmount} prefix="UGX" />
+```
+
+## Props
+
+| Prop       | Type                      | Default | Description                   |
+| ---------- | ------------------------- | ------- | ----------------------------- |
+| `value`    | `number \| string`        | -       | Current numeric value.        |
+| `onChange` | `(value: number) => void` | -       | Called with the parsed value. |
+| `prefix`   | `string`                  | `"USD"` | Currency prefix label.        |

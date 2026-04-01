@@ -1,0 +1,19 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "currency-input",
+  "type": "registry:component",
+  "title": "Currency Input",
+  "description": "Formatted currency input with comma separators and configurable prefix.",
+  "registryDependencies": [
+    "input",
+    "undefined/utils.json"
+  ],
+  "files": [
+    {
+      "path": "src/registry/components/currency-input/currency-input.tsx",
+      "content": "\"use client\";\n\nimport type { ChangeEvent } from \"react\";\nimport { forwardRef } from \"react\";\n\nimport { Input } from \"@/components/ui/input\";\nimport { cn } from \"@/lib/utils\";\n\nexport interface CurrencyInputProps\n  extends Omit<React.ComponentProps<\"input\">, \"value\" | \"onChange\" | \"type\"> {\n  /** Current numeric value. */\n  value: number | string;\n  /** Called with the parsed numeric value. */\n  onChange: (value: number) => void;\n  /** Currency prefix label. @default \"USD\" */\n  prefix?: string;\n}\n\nfunction formatWithCommas(val: number | string): string {\n  const num = typeof val === \"string\" ? parseFloat(val) : val;\n  if (isNaN(num) || num === 0) return \"\";\n  return num.toLocaleString(\"en-US\");\n}\n\nfunction stripCommas(str: string): number {\n  const cleaned = str.replace(/,/g, \"\");\n  const num = parseFloat(cleaned);\n  return isNaN(num) ? 0 : num;\n}\n\nconst CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(\n  ({ value, onChange, prefix = \"USD\", className, ...props }, ref) => {\n    function handleChange(e: ChangeEvent<HTMLInputElement>) {\n      const raw = e.target.value.replace(/[^0-9.,]/g, \"\");\n      onChange(stripCommas(raw));\n    }\n\n    return (\n      <div className=\"relative\">\n        {prefix && (\n          <span className=\"pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground\">\n            {prefix}\n          </span>\n        )}\n        <Input\n          ref={ref}\n          type=\"text\"\n          inputMode=\"numeric\"\n          className={cn(prefix && \"pl-12\", className)}\n          value={formatWithCommas(value)}\n          onChange={handleChange}\n          {...props}\n        />\n      </div>\n    );\n  },\n);\n\nCurrencyInput.displayName = \"CurrencyInput\";\n\nexport { CurrencyInput };\n",
+      "type": "registry:component"
+    }
+  ],
+  "docs": "https://jb.desishub.com/components/currency-input-component"
+}

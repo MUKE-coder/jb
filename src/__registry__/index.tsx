@@ -214,6 +214,72 @@ export const Index: Record<string, any> = {
       type: "registry:hook",
     }],
   },
+  "data-table": {
+    name: "data-table",
+    description: "Advanced data table with search, sorting, pagination, column visibility, and row selection using TanStack React Table.",
+    type: "registry:ui",
+    files: [{
+      path: "src/registry/components/data-table/data-table.tsx",
+      type: "registry:component",
+    },{
+      path: "src/registry/components/data-table/column-helpers.tsx",
+      type: "registry:component",
+    }],
+  },
+  "star-rating": {
+    name: "star-rating",
+    description: "Display star ratings with half-star support and configurable sizes.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/star-rating/star-rating.tsx",
+      type: "registry:component",
+    }],
+  },
+  "quantity-control": {
+    name: "quantity-control",
+    description: "Increment/decrement quantity spinner with min/max bounds and size variants.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/quantity-control/quantity-control.tsx",
+      type: "registry:component",
+    }],
+  },
+  "currency-input": {
+    name: "currency-input",
+    description: "Formatted currency input with comma separators and configurable prefix.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/currency-input/currency-input.tsx",
+      type: "registry:component",
+    }],
+  },
+  "editable-cell": {
+    name: "editable-cell",
+    description: "Inline editable table cell supporting text, number, select, and date types with async save.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/editable-cell/editable-cell.tsx",
+      type: "registry:component",
+    }],
+  },
+  "tag-input": {
+    name: "tag-input",
+    description: "Dynamic tag/chip input with validation, max limits, and comma-separated output.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/tag-input/tag-input.tsx",
+      type: "registry:component",
+    }],
+  },
+  "searchable-select": {
+    name: "searchable-select",
+    description: "Filterable select dropdown with search, clear button, and optional descriptions.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/searchable-select/searchable-select.tsx",
+      type: "registry:component",
+    }],
+  },
   "apple-hello-effect-vi-demo": {
     name: "apple-hello-effect-vi-demo",
     description: "",

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "quantity-control",
+  "type": "registry:component",
+  "title": "Quantity Control",
+  "description": "Increment/decrement quantity spinner with min/max bounds and size variants.",
+  "dependencies": [
+    "lucide-react"
+  ],
+  "registryDependencies": [
+    "undefined/utils.json"
+  ],
+  "files": [
+    {
+      "path": "src/registry/components/quantity-control/quantity-control.tsx",
+      "content": "\"use client\";\n\nimport { Minus, Plus } from \"lucide-react\";\n\nimport { cn } from \"@/lib/utils\";\n\nexport interface QuantityControlProps {\n  /** Current quantity value. */\n  value: number;\n  /** Minimum value. @default 1 */\n  min?: number;\n  /** Maximum value. @default 99 */\n  max?: number;\n  /** Called when the value changes. */\n  onChange: (value: number) => void;\n  /** Size variant. @default \"default\" */\n  size?: \"sm\" | \"default\" | \"lg\";\n  /** Disable the control. */\n  disabled?: boolean;\n  className?: string;\n}\n\nconst sizeClasses = {\n  sm: {\n    button: \"h-6 w-6\",\n    icon: \"h-3 w-3\",\n    display: \"h-6 w-8 text-xs\",\n  },\n  default: {\n    button: \"h-8 w-8\",\n    icon: \"h-4 w-4\",\n    display: \"h-8 w-10 text-sm\",\n  },\n  lg: {\n    button: \"h-10 w-10\",\n    icon: \"h-5 w-5\",\n    display: \"h-10 w-12 text-base\",\n  },\n};\n\nexport function QuantityControl({\n  value,\n  min = 1,\n  max = 99,\n  onChange,\n  size = \"default\",\n  disabled = false,\n  className,\n}: QuantityControlProps) {\n  const sizes = sizeClasses[size];\n\n  return (\n    <div\n      className={cn(\n        \"inline-flex items-center overflow-hidden rounded-lg border border-border bg-background\",\n        className,\n      )}\n    >\n      <button\n        type=\"button\"\n        onClick={() => value > min && onChange(value - 1)}\n        disabled={disabled || value <= min}\n        className={cn(\n          sizes.button,\n          \"flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50\",\n        )}\n      >\n        <Minus className={sizes.icon} />\n      </button>\n      <span\n        className={cn(\n          sizes.display,\n          \"flex items-center justify-center border-x border-border font-medium tracking-tight\",\n        )}\n      >\n        {value}\n      </span>\n      <button\n        type=\"button\"\n        onClick={() => value < max && onChange(value + 1)}\n        disabled={disabled || value >= max}\n        className={cn(\n          sizes.button,\n          \"flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50\",\n        )}\n      >\n        <Plus className={sizes.icon} />\n      </button>\n    </div>\n  );\n}\n",
+      "type": "registry:component"
+    }
+  ],
+  "docs": "https://jb.desishub.com/components/quantity-control-component"
+}

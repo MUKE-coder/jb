@@ -309,4 +309,130 @@ export const components: Registry["items"] = [
     ],
     docs: "https://jb.desishub.com/components/copy-button-component",
   },
+  {
+    name: "data-table",
+    type: "registry:ui",
+    title: "Data Table",
+    description:
+      "Advanced data table with search, sorting, pagination, column visibility, and row selection using TanStack React Table.",
+    dependencies: ["@tanstack/react-table", "lucide-react"],
+    registryDependencies: [
+      "table",
+      "button",
+      "dropdown-menu",
+      "select",
+      "badge",
+    ],
+    files: [
+      {
+        path: "components/data-table/data-table.tsx",
+        type: "registry:component",
+      },
+      {
+        path: "components/data-table/column-helpers.tsx",
+        type: "registry:component",
+      },
+    ],
+    docs: "https://jb.desishub.com/components/data-table-component",
+  },
+  {
+    name: "star-rating",
+    type: "registry:component",
+    title: "Star Rating",
+    description:
+      "Display star ratings with half-star support and configurable sizes.",
+    dependencies: ["lucide-react"],
+    registryDependencies: ["<registryBaseUrl>/utils.json"],
+    files: [
+      {
+        path: "components/star-rating/star-rating.tsx",
+        type: "registry:component",
+      },
+    ],
+    docs: "https://jb.desishub.com/components/star-rating-component",
+  },
+  {
+    name: "quantity-control",
+    type: "registry:component",
+    title: "Quantity Control",
+    description:
+      "Increment/decrement quantity spinner with min/max bounds and size variants.",
+    dependencies: ["lucide-react"],
+    registryDependencies: ["<registryBaseUrl>/utils.json"],
+    files: [
+      {
+        path: "components/quantity-control/quantity-control.tsx",
+        type: "registry:component",
+      },
+    ],
+    docs: "https://jb.desishub.com/components/quantity-control-component",
+  },
+  {
+    name: "currency-input",
+    type: "registry:component",
+    title: "Currency Input",
+    description:
+      "Formatted currency input with comma separators and configurable prefix.",
+    registryDependencies: ["input", "<registryBaseUrl>/utils.json"],
+    files: [
+      {
+        path: "components/currency-input/currency-input.tsx",
+        type: "registry:component",
+      },
+    ],
+    docs: "https://jb.desishub.com/components/currency-input-component",
+  },
+  {
+    name: "editable-cell",
+    type: "registry:component",
+    title: "Editable Cell",
+    description:
+      "Inline editable table cell supporting text, number, select, and date types with async save.",
+    dependencies: ["lucide-react"],
+    registryDependencies: ["input", "select", "<registryBaseUrl>/utils.json"],
+    files: [
+      {
+        path: "components/editable-cell/editable-cell.tsx",
+        type: "registry:component",
+      },
+    ],
+    docs: "https://jb.desishub.com/components/editable-cell-component",
+  },
+  {
+    name: "tag-input",
+    type: "registry:component",
+    title: "Tag Input",
+    description:
+      "Dynamic tag/chip input with validation, max limits, and comma-separated output.",
+    dependencies: ["lucide-react"],
+    registryDependencies: ["<registryBaseUrl>/utils.json"],
+    files: [
+      {
+        path: "components/tag-input/tag-input.tsx",
+        type: "registry:component",
+      },
+    ],
+    docs: "https://jb.desishub.com/components/tag-input-component",
+  },
+  {
+    name: "searchable-select",
+    type: "registry:component",
+    title: "Searchable Select",
+    description:
+      "Filterable select dropdown with search, clear button, and optional descriptions.",
+    dependencies: ["lucide-react"],
+    registryDependencies: [
+      "button",
+      "command",
+      "popover",
+      "<registryBaseUrl>/utils.json",
+    ],
+    files: [
+      {
+        path: "components/searchable-select/searchable-select.tsx",
+        type: "registry:component",
+      },
+    ],
+    docs: "https://jb.desishub.com/components/searchable-select-component",
+  },
 ];

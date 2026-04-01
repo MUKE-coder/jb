@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "star-rating",
+  "type": "registry:component",
+  "title": "Star Rating",
+  "description": "Display star ratings with half-star support and configurable sizes.",
+  "dependencies": [
+    "lucide-react"
+  ],
+  "registryDependencies": [
+    "undefined/utils.json"
+  ],
+  "files": [
+    {
+      "path": "src/registry/components/star-rating/star-rating.tsx",
+      "content": "\"use client\";\n\nimport { Star } from \"lucide-react\";\n\nimport { cn } from \"@/lib/utils\";\n\nexport interface StarRatingProps {\n  /** Rating value (supports half stars via 0.5 increments). */\n  rating: number;\n  /** Maximum number of stars. @default 5 */\n  maxRating?: number;\n  /** Size variant. @default \"default\" */\n  size?: \"sm\" | \"default\" | \"lg\";\n  /** Show numeric rating and review count. @default false */\n  showCount?: boolean;\n  /** Number of reviews to display. */\n  reviewCount?: number;\n  className?: string;\n}\n\nconst sizeClasses = {\n  sm: \"h-3 w-3\",\n  default: \"h-4 w-4\",\n  lg: \"h-5 w-5\",\n};\n\nexport function StarRating({\n  rating,\n  maxRating = 5,\n  size = \"default\",\n  showCount = false,\n  reviewCount,\n  className,\n}: StarRatingProps) {\n  const fullStars = Math.floor(rating);\n  const hasHalfStar = rating - fullStars >= 0.5;\n  const emptyStars = maxRating - fullStars - (hasHalfStar ? 1 : 0);\n\n  return (\n    <div className={cn(\"flex items-center gap-1\", className)}>\n      <div className=\"flex items-center\">\n        {Array.from({ length: fullStars }).map((_, i) => (\n          <Star\n            key={`full-${i}`}\n            className={cn(sizeClasses[size], \"fill-amber-400 text-amber-400\")}\n          />\n        ))}\n\n        {hasHalfStar && (\n          <div className=\"relative\">\n            <Star\n              className={cn(sizeClasses[size], \"text-muted-foreground/30\")}\n            />\n            <div className=\"absolute inset-0 w-1/2 overflow-hidden\">\n              <Star\n                className={cn(\n                  sizeClasses[size],\n                  \"fill-amber-400 text-amber-400\",\n                )}\n              />\n            </div>\n          </div>\n        )}\n\n        {Array.from({ length: emptyStars }).map((_, i) => (\n          <Star\n            key={`empty-${i}`}\n            className={cn(sizeClasses[size], \"text-muted-foreground/30\")}\n          />\n        ))}\n      </div>\n\n      {showCount && reviewCount !== undefined && (\n        <span className=\"ml-1 text-xs text-muted-foreground\">\n          {rating.toFixed(1)} ({reviewCount})\n        </span>\n      )}\n    </div>\n  );\n}\n",
+      "type": "registry:component"
+    }
+  ],
+  "docs": "https://jb.desishub.com/components/star-rating-component"
+}

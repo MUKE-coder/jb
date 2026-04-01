@@ -1,0 +1,77 @@
+---
+title: Tag Input
+description: Dynamic tag/chip input with validation, max limits, and comma-separated output.
+image: https://jb.desishub.com/og/tag-input
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/tag-input.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install lucide-react clsx tailwind-merge
+```
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="tag-input"
+  title="components/tag-input.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import { TagInput } from "@/components/tag-input";
+```
+
+```tsx
+<TagInput
+  initialValue="react, nextjs, typescript"
+  onChange={(tags) => console.log(tags)}
+  maxTags={5}
+  maxTagLength={20}
+/>
+```
+
+## Props
+
+| Prop           | Type                      | Default         | Description                      |
+| -------------- | ------------------------- | --------------- | -------------------------------- |
+| `initialValue` | `string`                  | `""`            | Initial tags as comma-separated. |
+| `onChange`     | `(value: string) => void` | -               | Called with updated tag string.  |
+| `placeholder`  | `string`                  | `"Add tags..."` | Input placeholder.               |
+| `maxTags`      | `number`                  | -               | Maximum number of tags.          |
+| `maxTagLength` | `number`                  | -               | Max characters per tag.          |
+| `disabled`     | `boolean`                 | `false`         | Disable the input.               |
