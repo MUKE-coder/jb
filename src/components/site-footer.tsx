@@ -1,9 +1,4 @@
-import { Github, Linkedin, RssIcon, Youtube } from "lucide-react";
-
-import { SITE_INFO, SOURCE_CODE_GITHUB_URL } from "@/config/site";
-import { cn } from "@/lib/utils";
-
-import { Icons } from "./icons";
+import { Github, Linkedin, Youtube } from "lucide-react";
 
 export function SiteFooter() {
   const currentYear = new Date().getFullYear();
@@ -185,8 +180,4 @@ export function SiteFooter() {
       </div>
     </footer>
   );
-}
-
-function Separator() {
-  return <div className="flex h-11 w-px bg-edge" />;
 }

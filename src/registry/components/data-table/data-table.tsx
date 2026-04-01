@@ -43,8 +43,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
-
 // ─── SearchBar ──────────────────────────────────────────────
 function DataTableSearch({
   data,
@@ -142,7 +140,7 @@ function DataTablePagination<TData>({
           <p className="text-sm font-medium">Rows per page</p>
           <Select
             value={`${table.getState().pagination.pageSize}`}
-            onValueChange={(value) => table.setPageSize(Number(value))}
+            onValueChange={(value: string) => table.setPageSize(Number(value))}
           >
             <SelectTrigger className="h-8 w-[70px]">
               <SelectValue placeholder={table.getState().pagination.pageSize} />

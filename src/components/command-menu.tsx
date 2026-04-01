@@ -4,23 +4,18 @@ import { useCommandState } from "cmdk";
 import type { LucideProps } from "lucide-react";
 import {
   BriefcaseBusinessIcon,
-  CircleUserIcon,
   Code,
   CornerDownLeftIcon,
-  DownloadIcon,
   LetterTextIcon,
   MoonStarIcon,
   RssIcon,
   SunIcon,
   TextIcon,
-  TriangleDashedIcon,
-  TypeIcon,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import {
   CommandDialog,
@@ -34,10 +29,8 @@ import {
 import { SOCIAL_LINKS } from "@/features/profile/data/social-links";
 import { cn } from "@/lib/utils";
 import type { Post } from "@/types/blog";
-import { copyText } from "@/utils/copy";
 
-import { ChanhDaiMark, getMarkSVG } from "./chanhdai-mark";
-import { getWordmarkSVG } from "./chanhdai-wordmark";
+import { ChanhDaiMark } from "./chanhdai-mark";
 import { Icons } from "./icons";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
@@ -118,7 +111,7 @@ const SOCIAL_LINK_ITEMS: CommandLinkItem[] = SOCIAL_LINKS.map((item) => ({
 export function CommandMenu({ posts }: { posts: Post[] }) {
   const router = useRouter();
 
-  const { setTheme, resolvedTheme } = useTheme();
+  const { setTheme } = useTheme();
 
   const [open, setOpen] = useState(false);
 
@@ -161,12 +154,6 @@ export function CommandMenu({ posts }: { posts: Post[] }) {
     },
     [router]
   );
-
-  const handleCopyText = useCallback((text: string, message: string) => {
-    setOpen(false);
-    copyText(text);
-    toast.success(message);
-  }, []);
 
   const handleThemeChange = useCallback(
     (theme: "light" | "dark" | "system") => {

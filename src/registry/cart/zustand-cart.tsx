@@ -144,7 +144,10 @@ interface ProductCardProps {
   showCategory?: boolean;
 }
 
-function ProductCard({ product, showCategory = false }: ProductCardProps) {
+function ProductCard({
+  product,
+  showCategory: _showCategory = false,
+}: ProductCardProps) {
   const addToCart = useCartStore((state) => state.addToCart);
 
   return (

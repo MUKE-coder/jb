@@ -1,9 +1,6 @@
-// @ts-expect-error - @c15t/nextjs is an optional peer dependency
 import {
   ConsentManagerDialog,
-  // @ts-expect-error - @c15t/nextjs is an optional peer dependency
   ConsentManagerProvider,
-  // @ts-expect-error - @c15t/nextjs is an optional peer dependency
   CookieBanner,
 } from "@c15t/nextjs";
 

@@ -1,14 +1,9 @@
 // import "@/styles/go.css";
 
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import React from "react";
 
-import { SiteHeader } from "@/components/site-header";
 import { ToggleTheme } from "@/components/toggle-theme";
-
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Go: Zero to Hero - DevOps Mastery",

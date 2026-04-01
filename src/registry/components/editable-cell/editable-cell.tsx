@@ -133,7 +133,7 @@ export function EditableCell(props: EditableCellProps) {
     return (
       <Select
         value={editValue as string}
-        onValueChange={async (v) => {
+        onValueChange={async (v: string) => {
           setEditValue(v);
           setSaving(true);
           setError(false);

@@ -42,8 +42,6 @@ export default function DatabaseFormatter() {
       const password = url.password;
       const hostname = url.hostname;
       const database = url.pathname.replace("/", "");
-      const searchParams = new URLSearchParams(url.search);
-
       // Extract endpoint from host
       const endpoint = extractEndpoint(hostname);
 

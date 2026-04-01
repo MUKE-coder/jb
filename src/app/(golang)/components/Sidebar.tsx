@@ -2,25 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
 
 import { goCourse } from "@/lib/courseData";
 
-// import { goCourse } from "@/lib/courseData";
 import CourseSearch from "./CourseSearch";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [expandedSections, setExpandedSections] = useState<string[]>([
-    "basics",
-  ]);
-
-  const toggleSection = (id: string) => {
-    setExpandedSections((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
-    );
-  };
-
   const isActive = (sectionId: string) =>
     pathname === `/golang/section/${sectionId}`;
 

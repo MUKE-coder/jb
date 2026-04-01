@@ -1,6 +1,5 @@
 "use client";
 
-import { BookOpen, Code2, Zap } from "lucide-react";
 import Link from "next/link";
 
 import type { Section } from "@/lib/courseData";

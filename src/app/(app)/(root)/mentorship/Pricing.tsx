@@ -128,7 +128,7 @@ export function PricingSection() {
         </div>
 
         <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-          {pricingTiers.map((tier, index) => (
+          {pricingTiers.map((tier) => (
             <Card
               key={tier.name}
               className={`relative transition-all duration-300 ${
