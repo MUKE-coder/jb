@@ -1,0 +1,105 @@
+---
+title: Glow Card Grid
+description: Display cards with glowing border and background effects.
+image: https://jb.desishub.com/og/glow-card-grid
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+<ComponentPreview name="glow-card-grid-demo-01" codeCollapsible />
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/glow-card-grid.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install clsx tailwind-merge
+```
+
+<Step>Add a cn helper</Step>
+
+<ComponentSource
+  src="src/lib/utils.ts"
+  title="lib/utils.ts"
+  showLineNumbers
+  collapsible={false}
+/>
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="glow-card-grid"
+  title="components/glow-card-grid.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import { GlowCardGrid } from "@/components/glow-card-grid/glow-card-grid";
+import { GlowCard } from "@/components/glow-card-grid/glow-card";
+```
+
+```tsx
+<GlowCardGrid>
+  <GlowCard
+    name="John Doe"
+    handle="@johndoe"
+    avatar="https://example.com/avatar.jpg"
+  />
+</GlowCardGrid>
+```
+
+## Props
+
+### GlowCardGrid
+
+| Prop               | Type     | Default | Description                  |
+| ------------------ | -------- | ------- | ---------------------------- |
+| `cardRadius`       | `number` | `16`    | Border radius of cards.      |
+| `iconBlur`         | `number` | `25`    | Blur amount for icon glow.   |
+| `iconSaturate`     | `number` | `5.0`   | Saturation for icon glow.    |
+| `iconBrightness`   | `number` | `1.3`   | Brightness for icon glow.    |
+| `iconScale`        | `number` | `4`     | Scale factor for icon glow.  |
+| `iconOpacity`      | `number` | `0.3`   | Opacity of icon glow.        |
+| `borderWidth`      | `number` | `3`     | Width of the glowing border. |
+| `borderBlur`       | `number` | `10`    | Blur amount for border glow. |
+| `borderSaturate`   | `number` | `4.2`   | Saturation for border glow.  |
+| `borderBrightness` | `number` | `2.5`   | Brightness for border glow.  |
+| `borderContrast`   | `number` | `2.5`   | Contrast for border glow.    |
+
+### GlowCard
+
+| Prop     | Type     | Description                    |
+| -------- | -------- | ------------------------------ |
+| `name`   | `string` | Display name for the card.     |
+| `handle` | `string` | Handle text (e.g., @username). |
+| `avatar` | `string` | Avatar image URL.              |

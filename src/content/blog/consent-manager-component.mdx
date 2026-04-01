@@ -1,0 +1,69 @@
+---
+title: Consent Manager
+description: Cookie and tracking consent banner for Next.js, built on c15t.
+image: https://jb.desishub.com/og/consent-manager
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/consent-manager.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install @c15t/nextjs clsx tailwind-merge
+```
+
+<Step>Add the required shadcn/ui components</Step>
+
+```bash
+npx shadcn@latest add button
+```
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="consent-manager"
+  title="components/consent-manager.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import { ConsentManager } from "@/components/consent-manager";
+```
+
+```tsx
+<ConsentManager>{children}</ConsentManager>
+```
+
+Wrap your app with the `ConsentManager` component to enable cookie consent management throughout your application.

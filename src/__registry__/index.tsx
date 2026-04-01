@@ -16,6 +16,15 @@ export const Index: Record<string, any> = {
       type: "registry:lib",
     }],
   },
+  "haptic": {
+    name: "haptic",
+    description: "Trigger haptic feedback on mobile devices.",
+    type: "registry:lib",
+    files: [{
+      path: "src/registry/lib/haptic/haptic.ts",
+      type: "registry:lib",
+    }],
+  },
   "use-controllable-state": {
     name: "use-controllable-state",
     description: "",
@@ -25,6 +34,15 @@ export const Index: Record<string, any> = {
       type: "registry:hook",
     },{
       path: "src/registry/src/hooks/use-controllable-state.ts",
+      type: "registry:hook",
+    }],
+  },
+  "use-sound": {
+    name: "use-sound",
+    description: "Custom React hook to load and play a sound from a given URL using the Web Audio API.",
+    type: "registry:hook",
+    files: [{
+      path: "src/registry/src/hooks/use-sound.ts",
       type: "registry:hook",
     }],
   },
@@ -91,6 +109,111 @@ export const Index: Record<string, any> = {
       type: "registry:component",
     }],
   },
+  "shimmering-text": {
+    name: "shimmering-text",
+    description: "Smooth, light-sweeping shimmer animation for text.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/shimmering-text/shimmering-text.tsx",
+      type: "registry:component",
+    }],
+  },
+  "slide-to-unlock": {
+    name: "slide-to-unlock",
+    description: "Interactive slider inspired by the classic iPhone 'slide to unlock' gesture.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/slide-to-unlock/slide-to-unlock.tsx",
+      type: "registry:component",
+    }],
+  },
+  "testimonial": {
+    name: "testimonial",
+    description: "Display user feedback with author info, avatar, and verified badge.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/testimonial/testimonial.tsx",
+      type: "registry:component",
+    }],
+  },
+  "testimonial-spotlight": {
+    name: "testimonial-spotlight",
+    description: "Testimonial card with spotlight effect on hover.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/testimonial-spotlight/testimonial-spotlight.tsx",
+      type: "registry:component",
+    }],
+  },
+  "github-stars": {
+    name: "github-stars",
+    description: "Display GitHub repo star count with formatted numbers and full-count tooltip.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/github-stars/github-stars.tsx",
+      type: "registry:component",
+    }],
+  },
+  "scroll-fade-effect": {
+    name: "scroll-fade-effect",
+    description: "Fade content edges as you scroll, for both vertical and horizontal layouts.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/scroll-fade-effect/scroll-fade-effect.tsx",
+      type: "registry:component",
+    }],
+  },
+  "consent-manager": {
+    name: "consent-manager",
+    description: "Cookie and tracking consent banner for Next.js, built on c15t.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/consent-manager/consent-manager.tsx",
+      type: "registry:component",
+    }],
+  },
+  "glow-card-grid": {
+    name: "glow-card-grid",
+    description: "Display cards with glowing border and background effects.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/glow-card-grid/glow-card-grid.tsx",
+      type: "registry:component",
+    },{
+      path: "src/registry/components/glow-card-grid/glow-card.tsx",
+      type: "registry:component",
+    }],
+  },
+  "middle-truncation": {
+    name: "middle-truncation",
+    description: "Truncate text in the middle while preserving start and end.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/middle-truncation/middle-truncation.tsx",
+      type: "registry:component",
+    }],
+  },
+  "chevrons-up-down-icon": {
+    name: "chevrons-up-down-icon",
+    description: "Animated chevrons up-down icon using Motion.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/chevrons-up-down-icon/chevrons-up-down-icon.tsx",
+      type: "registry:component",
+    }],
+  },
+  "copy-button": {
+    name: "copy-button",
+    description: "Copy text to clipboard with visual feedback and animation.",
+    type: "registry:component",
+    files: [{
+      path: "src/registry/components/copy-button/copy-button.tsx",
+      type: "registry:component",
+    },{
+      path: "src/registry/src/hooks/use-copy-to-clipboard.ts",
+      type: "registry:hook",
+    }],
+  },
   "apple-hello-effect-vi-demo": {
     name: "apple-hello-effect-vi-demo",
     description: "",
@@ -150,5 +273,145 @@ export const Index: Record<string, any> = {
       type: "registry:example",
     }],
     component: React.lazy(() => import("@/registry/examples/work-experience-demo.tsx")),
+  },
+  "shimmering-text-demo-01": {
+    name: "shimmering-text-demo-01",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/shimmering-text-demo-01.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/shimmering-text-demo-01.tsx")),
+  },
+  "shimmering-text-demo-02": {
+    name: "shimmering-text-demo-02",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/shimmering-text-demo-02.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/shimmering-text-demo-02.tsx")),
+  },
+  "slide-to-unlock-demo-01": {
+    name: "slide-to-unlock-demo-01",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/slide-to-unlock-demo-01.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/slide-to-unlock-demo-01.tsx")),
+  },
+  "slide-to-unlock-demo-02": {
+    name: "slide-to-unlock-demo-02",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/slide-to-unlock-demo-02.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/slide-to-unlock-demo-02.tsx")),
+  },
+  "slide-to-unlock-demo-03": {
+    name: "slide-to-unlock-demo-03",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/slide-to-unlock-demo-03.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/slide-to-unlock-demo-03.tsx")),
+  },
+  "testimonial-demo": {
+    name: "testimonial-demo",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/testimonial-demo.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/testimonial-demo.tsx")),
+  },
+  "testimonial-spotlight-demo-01": {
+    name: "testimonial-spotlight-demo-01",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/testimonial-spotlight-demo-01.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/testimonial-spotlight-demo-01.tsx")),
+  },
+  "testimonial-spotlight-demo-02": {
+    name: "testimonial-spotlight-demo-02",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/testimonial-spotlight-demo-02.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/testimonial-spotlight-demo-02.tsx")),
+  },
+  "github-stars-demo": {
+    name: "github-stars-demo",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/github-stars-demo.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/github-stars-demo.tsx")),
+  },
+  "scroll-fade-effect-demo-01": {
+    name: "scroll-fade-effect-demo-01",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/scroll-fade-effect-demo-01.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/scroll-fade-effect-demo-01.tsx")),
+  },
+  "scroll-fade-effect-demo-02": {
+    name: "scroll-fade-effect-demo-02",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/scroll-fade-effect-demo-02.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/scroll-fade-effect-demo-02.tsx")),
+  },
+  "copy-button-demo": {
+    name: "copy-button-demo",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/copy-button-demo.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/copy-button-demo.tsx")),
+  },
+  "glow-card-grid-demo-01": {
+    name: "glow-card-grid-demo-01",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/glow-card-grid-demo-01.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/glow-card-grid-demo-01.tsx")),
+  },
+  "middle-truncation-demo": {
+    name: "middle-truncation-demo",
+    description: "",
+    type: "registry:example",
+    files: [{
+      path: "src/registry/examples/middle-truncation-demo.tsx",
+      type: "registry:example",
+    }],
+    component: React.lazy(() => import("@/registry/examples/middle-truncation-demo.tsx")),
   },
 }

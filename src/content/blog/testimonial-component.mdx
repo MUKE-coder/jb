@@ -1,0 +1,96 @@
+---
+title: Testimonial
+description: Display user feedback with author info, avatar, and verified badge.
+image: https://jb.desishub.com/og/testimonial
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+<ComponentPreview name="testimonial-demo" codeCollapsible />
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/testimonial.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install clsx tailwind-merge
+```
+
+<Step>Add a cn helper</Step>
+
+<ComponentSource
+  src="src/lib/utils.ts"
+  title="lib/utils.ts"
+  showLineNumbers
+  collapsible={false}
+/>
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="testimonial"
+  title="components/testimonial.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import {
+  Testimonial,
+  TestimonialAuthor,
+  TestimonialAuthorName,
+  TestimonialAuthorTagline,
+  TestimonialAvatar,
+  TestimonialAvatarImg,
+  TestimonialAvatarRing,
+  TestimonialQuote,
+  TestimonialVerifiedBadge,
+} from "@/components/testimonial";
+```
+
+```tsx
+<Testimonial>
+  <TestimonialQuote>
+    <p>Great work!</p>
+  </TestimonialQuote>
+
+  <TestimonialAuthor>
+    <TestimonialAvatar>
+      <TestimonialAvatarImg src="/avatar.jpg" alt="Name" />
+      <TestimonialAvatarRing />
+    </TestimonialAvatar>
+
+    <TestimonialAuthorName>John Doe</TestimonialAuthorName>
+    <TestimonialAuthorTagline>CEO @Company</TestimonialAuthorTagline>
+  </TestimonialAuthor>
+</Testimonial>
+```

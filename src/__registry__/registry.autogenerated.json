@@ -20,6 +20,18 @@
       ]
     },
     {
+      "name": "haptic",
+      "type": "registry:lib",
+      "title": "Haptic Feedback",
+      "description": "Trigger haptic feedback on mobile devices.",
+      "files": [
+        {
+          "path": "src/registry/lib/haptic/haptic.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "use-controllable-state",
       "type": "registry:hook",
       "title": "Controllable State Hook",
@@ -30,6 +42,18 @@
         },
         {
           "path": "src/hooks/use-controllable-state.ts",
+          "type": "registry:hook"
+        }
+      ]
+    },
+    {
+      "name": "use-sound",
+      "type": "registry:hook",
+      "title": "Sound Hook",
+      "description": "Custom React hook to load and play a sound from a given URL using the Web Audio API.",
+      "files": [
+        {
+          "path": "src/hooks/use-sound.ts",
           "type": "registry:hook"
         }
       ]
@@ -199,6 +223,190 @@
         }
       },
       "docs": "https://chanhdai.com/components/work-experience-component"
+    },
+    {
+      "name": "shimmering-text",
+      "type": "registry:component",
+      "title": "Shimmering Text",
+      "description": "Smooth, light-sweeping shimmer animation for text.",
+      "dependencies": [
+        "motion"
+      ],
+      "registryDependencies": [
+        "undefined/utils.json"
+      ],
+      "files": [
+        {
+          "path": "src/registry/components/shimmering-text/shimmering-text.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/shimmering-text-component"
+    },
+    {
+      "name": "slide-to-unlock",
+      "type": "registry:component",
+      "title": "Slide to Unlock",
+      "description": "Interactive slider inspired by the classic iPhone 'slide to unlock' gesture.",
+      "dependencies": [
+        "motion"
+      ],
+      "registryDependencies": [
+        "undefined/shimmering-text.json"
+      ],
+      "files": [
+        {
+          "path": "src/registry/components/slide-to-unlock/slide-to-unlock.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/slide-to-unlock-component"
+    },
+    {
+      "name": "testimonial",
+      "type": "registry:component",
+      "title": "Testimonial",
+      "description": "Display user feedback with author info, avatar, and verified badge.",
+      "files": [
+        {
+          "path": "src/registry/components/testimonial/testimonial.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/testimonial-component"
+    },
+    {
+      "name": "testimonial-spotlight",
+      "type": "registry:component",
+      "title": "Testimonial Spotlight",
+      "description": "Testimonial card with spotlight effect on hover.",
+      "registryDependencies": [
+        "undefined/testimonial.json"
+      ],
+      "files": [
+        {
+          "path": "src/registry/components/testimonial-spotlight/testimonial-spotlight.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/testimonial-spotlight-component"
+    },
+    {
+      "name": "github-stars",
+      "type": "registry:component",
+      "title": "GitHub Stars",
+      "description": "Display GitHub repo star count with formatted numbers and full-count tooltip.",
+      "registryDependencies": [
+        "button",
+        "tooltip"
+      ],
+      "files": [
+        {
+          "path": "src/registry/components/github-stars/github-stars.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/github-stars-component"
+    },
+    {
+      "name": "scroll-fade-effect",
+      "type": "registry:component",
+      "title": "Scroll Fade Effect",
+      "description": "Fade content edges as you scroll, for both vertical and horizontal layouts.",
+      "files": [
+        {
+          "path": "src/registry/components/scroll-fade-effect/scroll-fade-effect.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/scroll-fade-effect-component"
+    },
+    {
+      "name": "consent-manager",
+      "type": "registry:component",
+      "title": "Consent Manager",
+      "description": "Cookie and tracking consent banner for Next.js, built on c15t.",
+      "dependencies": [
+        "@c15t/nextjs"
+      ],
+      "registryDependencies": [
+        "button"
+      ],
+      "files": [
+        {
+          "path": "src/registry/components/consent-manager/consent-manager.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/consent-manager-component"
+    },
+    {
+      "name": "glow-card-grid",
+      "type": "registry:component",
+      "title": "Glow Card Grid",
+      "description": "Display cards with glowing border and background effects.",
+      "files": [
+        {
+          "path": "src/registry/components/glow-card-grid/glow-card-grid.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/registry/components/glow-card-grid/glow-card.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/glow-card-grid-component"
+    },
+    {
+      "name": "middle-truncation",
+      "type": "registry:component",
+      "title": "Middle Truncation",
+      "description": "Truncate text in the middle while preserving start and end.",
+      "files": [
+        {
+          "path": "src/registry/components/middle-truncation/middle-truncation.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/middle-truncation-component"
+    },
+    {
+      "name": "chevrons-up-down-icon",
+      "type": "registry:component",
+      "description": "Animated chevrons up-down icon using Motion.",
+      "dependencies": [
+        "motion"
+      ],
+      "files": [
+        {
+          "path": "src/registry/components/chevrons-up-down-icon/chevrons-up-down-icon.tsx",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
+      "name": "copy-button",
+      "type": "registry:component",
+      "title": "Copy Button",
+      "description": "Copy text to clipboard with visual feedback and animation.",
+      "dependencies": [
+        "lucide-react",
+        "motion"
+      ],
+      "registryDependencies": [
+        "button"
+      ],
+      "files": [
+        {
+          "path": "src/registry/components/copy-button/copy-button.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/hooks/use-copy-to-clipboard.ts",
+          "type": "registry:hook"
+        }
+      ],
+      "docs": "https://jb.desishub.com/components/copy-button-component"
     }
   ]
 }

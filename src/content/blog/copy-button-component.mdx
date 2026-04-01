@@ -1,0 +1,80 @@
+---
+title: Copy Button
+description: Copy text to clipboard with visual feedback and animation.
+image: https://jb.desishub.com/og/copy-button
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+<ComponentPreview name="copy-button-demo" codeCollapsible />
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/copy-button.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install lucide-react motion clsx tailwind-merge
+```
+
+<Step>Add the required shadcn/ui components</Step>
+
+```bash
+npx shadcn@latest add button
+```
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="copy-button"
+  title="components/copy-button.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import { CopyButton } from "@/components/copy-button";
+```
+
+```tsx
+<CopyButton text="Text to copy" />
+```
+
+## Props
+
+| Prop            | Type                       | Default     | Description                             |
+| --------------- | -------------------------- | ----------- | --------------------------------------- |
+| `text`          | `string \| (() => string)` | -           | The text to copy.                       |
+| `onCopySuccess` | `(text: string) => void`   | -           | Called with the copied text on success. |
+| `onCopyError`   | `(error: Error) => void`   | -           | Called with the error if copy fails.    |
+| `idleIcon`      | `React.ReactNode`          | CopyIcon    | Custom icon for idle state.             |
+| `doneIcon`      | `React.ReactNode`          | CheckIcon   | Custom icon for done state.             |
+| `errorIcon`     | `React.ReactNode`          | CircleXIcon | Custom icon for error state.            |

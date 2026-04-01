@@ -1,0 +1,86 @@
+---
+title: Shimmering Text
+description: Smooth, light-sweeping shimmer animation for text.
+image: https://jb.desishub.com/og/shimmering-text
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+<ComponentPreview name="shimmering-text-demo-01" codeCollapsible />
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/shimmering-text.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install motion clsx tailwind-merge
+```
+
+<Step>Add a cn helper</Step>
+
+<ComponentSource
+  src="src/lib/utils.ts"
+  title="lib/utils.ts"
+  showLineNumbers
+  collapsible={false}
+/>
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="shimmering-text"
+  title="components/shimmering-text.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import { ShimmeringText } from "@/components/shimmering-text";
+```
+
+```tsx
+<ShimmeringText text="Shimmering Text" />
+```
+
+## Props
+
+| Prop        | Type      | Default | Description                                |
+| ----------- | --------- | ------- | ------------------------------------------ |
+| `text`      | `string`  | -       | The text to render with shimmer effect.    |
+| `duration`  | `number`  | `1`     | Duration in seconds for one shimmer cycle. |
+| `isStopped` | `boolean` | `false` | Whether the shimmer animation is paused.   |
+
+## Examples
+
+### Custom Colors
+
+<ComponentPreview name="shimmering-text-demo-02" codeCollapsible />

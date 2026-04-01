@@ -1,0 +1,83 @@
+---
+title: Middle Truncation
+description: Truncate text in the middle while preserving start and end.
+image: https://jb.desishub.com/og/middle-truncation
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+<ComponentPreview name="middle-truncation-demo" codeCollapsible />
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/middle-truncation.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install clsx tailwind-merge
+```
+
+<Step>Add a cn helper</Step>
+
+<ComponentSource
+  src="src/lib/utils.ts"
+  title="lib/utils.ts"
+  showLineNumbers
+  collapsible={false}
+/>
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="middle-truncation"
+  title="components/middle-truncation.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import { MiddleTruncation } from "@/components/middle-truncation";
+```
+
+```tsx
+<MiddleTruncation>
+  /Users/jb/Code/portfolio/src/components/ui/button.tsx
+</MiddleTruncation>
+```
+
+## Props
+
+| Prop       | Type     | Default | Description                                          |
+| ---------- | -------- | ------- | ---------------------------------------------------- |
+| `children` | `string` | -       | The text content to truncate.                        |
+| `end`      | `number` | -       | Fixed number of characters to preserve at the end.   |
+| `minEnd`   | `number` | -       | Minimum characters at the end when splitting evenly. |
+| `ellipsis` | `string` | `"..."` | Custom ellipsis string.                              |

@@ -1,0 +1,84 @@
+---
+title: Scroll Fade Effect
+description: Fade content edges as you scroll, for both vertical and horizontal layouts.
+image: https://jb.desishub.com/og/scroll-fade-effect
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+<ComponentPreview name="scroll-fade-effect-demo-01" codeCollapsible />
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/scroll-fade-effect.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install clsx tailwind-merge
+```
+
+<Step>Add a cn helper</Step>
+
+<ComponentSource
+  src="src/lib/utils.ts"
+  title="lib/utils.ts"
+  showLineNumbers
+  collapsible={false}
+/>
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="scroll-fade-effect"
+  title="components/scroll-fade-effect.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import { ScrollFadeEffect } from "@/components/scroll-fade-effect";
+```
+
+```tsx
+<ScrollFadeEffect className="h-72">{/* Scrollable content */}</ScrollFadeEffect>
+```
+
+## Props
+
+| Prop          | Type                           | Default      | Description                                |
+| ------------- | ------------------------------ | ------------ | ------------------------------------------ |
+| `orientation` | `"horizontal"` \| `"vertical"` | `"vertical"` | Scroll direction to apply the fade effect. |
+
+## Examples
+
+### Horizontal Scroll
+
+<ComponentPreview name="scroll-fade-effect-demo-02" codeCollapsible />

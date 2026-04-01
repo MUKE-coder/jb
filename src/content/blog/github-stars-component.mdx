@@ -1,0 +1,77 @@
+---
+title: GitHub Stars
+description: Display GitHub repo star count with formatted numbers and full-count tooltip.
+image: https://jb.desishub.com/og/github-stars
+category: components
+createdAt: 2026-04-01
+updatedAt: 2026-04-01
+---
+
+<ComponentPreview name="github-stars-demo" codeCollapsible />
+
+## Installation
+
+<CodeTabs className="gap-0">
+
+<TabsList>
+  <TabsTriggerShadcnCLI />
+  <TabsTrigger value="manual">Manual</TabsTrigger>
+</TabsList>
+
+<TabsContent value="cli" className="[&>figure]:last:mb-0">
+
+```bash
+npx shadcn@latest add https://jb.desishub.com/r/github-stars.json
+```
+
+</TabsContent>
+
+<TabsContent value="manual">
+
+<Steps>
+
+<Step>Install the following dependencies</Step>
+
+```bash
+npm install clsx tailwind-merge
+```
+
+<Step>Add the required shadcn/ui components</Step>
+
+```bash
+npx shadcn@latest add button tooltip
+```
+
+<Step>Copy and paste the following code into your project</Step>
+
+<ComponentSource
+  name="github-stars"
+  title="components/github-stars.tsx"
+  showLineNumbers
+/>
+
+<Step>Update the import paths to match your project setup</Step>
+
+</Steps>
+
+</TabsContent>
+
+</CodeTabs>
+
+## Usage
+
+```tsx
+import { GitHubStars } from "@/components/github-stars";
+```
+
+```tsx
+<GitHubStars repo="MUKE-coder/jb" stargazersCount={1560} />
+```
+
+## Props
+
+| Prop              | Type                   | Default   | Description                               |
+| ----------------- | ---------------------- | --------- | ----------------------------------------- |
+| `repo`            | `string`               | -         | GitHub repository in `owner/repo` format. |
+| `stargazersCount` | `number`               | -         | Number of stars to display.               |
+| `locales`         | `Intl.LocalesArgument` | `"en-US"` | Locales for number formatting.            |
