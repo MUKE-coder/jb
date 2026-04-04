@@ -1,0 +1,734 @@
+---
+title: Building a Production-Ready MCP Server with Next.js 16, Prisma & Vercel
+description: A Beginner's Step-by-Step Guide to Exposing Your Contact App via Model Context Protocol.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfZ1KTaEU9C3gHFdyzTE0q7PpDnjchu6XsKk1l
+category: tutorial
+createdAt: 2026-04-04
+updatedAt: 2026-04-04
+---
+
+# Building a Production-Ready MCP Server with Next.js 16, Prisma & Vercel
+
+### A Beginner's Step-by-Step Guide to Exposing Your Contact App via Model Context Protocol
+
+---
+
+## What Is an MCP Server — and Why Should You Care?
+
+The **Model Context Protocol (MCP)** is an open standard that lets AI agents (like Claude, Cursor, or Windsurf) interact with your application through a standardized interface — think of it as a universal plugin system for AI. Instead of an AI having to guess what your app can do, you explicitly declare a set of **tools** the AI can call.
+
+In this guide you will build an MCP server for a simple **Contact app**. By the end, an AI agent will be able to:
+
+- 📋 **List** all contacts stored in your database
+- ➕ **Create** a new contact
+- 🗑️ **Delete** a contact by email
+
+The server will run as a **Next.js 16 API route**, store data with **Prisma + PostgreSQL**, be protected by an **API Key**, and be deployed on **Vercel**.
+
+---
+
+## Architecture Overview
+
+```
+AI Agent (Claude / Cursor / Windsurf)
+        │
+        │  HTTP (Streamable HTTP transport)
+        ▼
+┌─────────────────────────────┐
+│   Next.js 16 on Vercel      │
+│  /api/[transport]/route.ts  │  ◄── MCP Server (mcp-handler)
+│   ↳ list_contacts           │
+│   ↳ create_contact          │
+│   ↳ delete_contact          │
+│                             │
+│  API Key Guard (Bearer)     │
+└──────────────┬──────────────┘
+               │
+               ▼
+     Prisma ORM → PostgreSQL
+```
+
+---
+
+## Prerequisites
+
+Before starting, make sure you have:
+
+- **Node.js 20+** installed
+- A **PostgreSQL** database (free tier on [Neon](https://neon.tech) or [Supabase](https://supabase.com) works great)
+- A **Vercel account** (free tier is fine)
+- Basic knowledge of TypeScript and Next.js App Router
+
+---
+
+## Step 1 — Create Your Next.js 16 Project
+
+Open your terminal and run:
+
+```bash
+npx create-next-app@latest contacts-mcp --typescript --app --no-src-dir
+cd contacts-mcp
+```
+
+When prompted, select:
+
+- ✅ TypeScript: **Yes**
+- ✅ ESLint: **Yes**
+- ✅ Tailwind CSS: **No** (not needed for an API-only MCP)
+- ✅ App Router: **Yes**
+- ✅ Import alias: **Yes** (`@/*`)
+
+---
+
+## Step 2 — Install Dependencies
+
+Install the MCP handler, Prisma, and Zod (for input validation):
+
+```bash
+npm install mcp-handler @modelcontextprotocol/sdk@1.26.0 zod
+npm install prisma @prisma/client
+npm install --save-dev @types/node
+```
+
+> ⚠️ **Important:** Use `@modelcontextprotocol/sdk@1.26.0` or later. Earlier versions have a known security vulnerability.
+
+---
+
+## Step 3 — Set Up Prisma and Your Database Schema
+
+### 3.1 — Initialize Prisma
+
+```bash
+npx prisma init
+```
+
+This creates a `prisma/` folder with a `schema.prisma` file and a `.env` file.
+
+### 3.2 — Define the Contact Model
+
+Open `prisma/schema.prisma` and replace its contents with:
+
+```prisma
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+```
+
+### 3.3 — Configure Your Database URL
+
+Open your `.env` file and add your PostgreSQL connection string:
+
+```env
+# .env
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/contacts_db?sslmode=require"
+```
+
+> 💡 If you're using **Neon**, copy the connection string from your Neon dashboard. If using **Supabase**, use the "Transaction" connection string from the database settings.
+
+### 3.4 — Run Your First Migration
+
+```bash
+npx prisma migrate dev --name init
+```
+
+This creates the `Contact` table in your database. You should see output like:
+
+```
+✔ Generated Prisma Client
+The following migration(s) have been created and applied:
+  migrations/20240101000000_init/migration.sql
+```
+
+### 3.5 — Generate the Prisma Client
+
+```bash
+npx prisma generate
+```
+
+---
+
+## Step 4 — Create the Prisma Client Singleton
+
+In Next.js, it's important to reuse a single Prisma client instance to avoid connection exhaustion — especially in serverless environments like Vercel.
+
+Create the file `lib/prisma.ts`:
+
+```typescript
+// lib/prisma.ts
+
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === "development" ? ["query"] : [],
+  });
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+```
+
+This pattern ensures Prisma doesn't open a new connection on every hot-reload during development.
+
+---
+
+## Step 5 — Add the API Key to Your Environment
+
+Your MCP server should only be accessible to trusted clients. You'll protect it with a **Bearer token** (API key).
+
+Add the key to your `.env` file:
+
+```env
+# .env
+DATABASE_URL="postgresql://..."
+
+# Generate a strong key: openssl rand -hex 32
+MCP_API_KEY="your-super-secret-api-key-here"
+```
+
+To generate a secure key, run this in your terminal:
+
+```bash
+openssl rand -hex 32
+```
+
+---
+
+## Step 6 — Build the MCP Server Route
+
+This is the core of the guide. You'll create a dynamic route that handles the MCP protocol.
+
+### 6.1 — Create the Route File
+
+Create the directory and file:
+
+```
+app/
+  api/
+    [transport]/
+      route.ts
+```
+
+```bash
+mkdir -p app/api/\[transport\]
+touch "app/api/[transport]/route.ts"
+```
+
+### 6.2 — Write the MCP Handler
+
+Open `app/api/[transport]/route.ts` and add the following:
+
+```typescript
+// app/api/[transport]/route.ts
+
+import { createMcpHandler, withMcpAuth } from "mcp-handler";
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+
+// ─── 1. Define the MCP Handler with all tools ────────────────────────────────
+
+const handler = createMcpHandler(
+  (server) => {
+    // ── Tool 1: List All Contacts ──────────────────────────────────────────
+    server.tool(
+      "list_contacts",
+      "Returns a list of all contacts stored in the database.",
+      {}, // No input parameters needed
+      async () => {
+        const contacts = await prisma.contact.findMany({
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (contacts.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "No contacts found.",
+              },
+            ],
+          };
+        }
+
+        const formatted = contacts
+          .map(
+            (c) => `• ${c.name} | ${c.email}${c.phone ? ` | ${c.phone}` : ""}`
+          )
+          .join("\n");
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Found ${contacts.length} contact(s):\n\n${formatted}`,
+            },
+          ],
+        };
+      }
+    );
+
+    // ── Tool 2: Create a Contact ───────────────────────────────────────────
+    server.tool(
+      "create_contact",
+      "Creates a new contact in the database. Email must be unique.",
+      {
+        name: z.string().min(1, "Name is required"),
+        email: z.string().email("Must be a valid email address"),
+        phone: z.string().optional(),
+      },
+      async ({ name, email, phone }) => {
+        // Check if a contact with this email already exists
+        const existing = await prisma.contact.findUnique({
+          where: { email },
+        });
+
+        if (existing) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ A contact with email "${email}" already exists.`,
+              },
+            ],
+          };
+        }
+
+        const contact = await prisma.contact.create({
+          data: { name, email, phone },
+        });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ Contact created successfully!\nName: ${contact.name}\nEmail: ${contact.email}${contact.phone ? `\nPhone: ${contact.phone}` : ""}\nID: ${contact.id}`,
+            },
+          ],
+        };
+      }
+    );
+
+    // ── Tool 3: Delete a Contact by Email ─────────────────────────────────
+    server.tool(
+      "delete_contact",
+      "Deletes a contact from the database by their email address.",
+      {
+        email: z.string().email("Must be a valid email address"),
+      },
+      async ({ email }) => {
+        const existing = await prisma.contact.findUnique({
+          where: { email },
+        });
+
+        if (!existing) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ No contact found with email "${email}".`,
+              },
+            ],
+          };
+        }
+
+        await prisma.contact.delete({
+          where: { email },
+        });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `🗑️ Contact "${existing.name}" (${email}) has been deleted successfully.`,
+            },
+          ],
+        };
+      }
+    );
+  },
+  {}, // Server options (leave empty for defaults)
+  {
+    basePath: "/api", // Must match where [transport] is located
+    maxDuration: 60, // 60 seconds max per request
+    verboseLogs: process.env.NODE_ENV === "development",
+  }
+);
+
+// ─── 2. Wrap the handler with API Key authentication ─────────────────────────
+
+const authenticatedHandler = withMcpAuth(
+  handler,
+  async (request: Request, bearer: string | undefined): Promise<AuthInfo> => {
+    // Reject requests with no token
+    if (!bearer) {
+      throw new Error(
+        "Unauthorized: No API key provided. Pass your key as a Bearer token."
+      );
+    }
+
+    // Compare the provided token with our secret key
+    const validKey = process.env.MCP_API_KEY;
+
+    if (!validKey) {
+      throw new Error("Server misconfiguration: MCP_API_KEY is not set.");
+    }
+
+    if (bearer !== validKey) {
+      throw new Error("Unauthorized: Invalid API key.");
+    }
+
+    // Return AuthInfo — you can attach extra metadata here
+    return {
+      token: bearer,
+      clientId: "api-key-client",
+      scopes: ["contacts:read", "contacts:write"],
+    };
+  }
+);
+
+// ─── 3. Export the handler for GET and POST HTTP methods ─────────────────────
+
+export { authenticatedHandler as GET, authenticatedHandler as POST };
+```
+
+Let's break down what's happening:
+
+- `createMcpHandler` sets up the MCP protocol, registers your tools, and handles transport negotiation automatically.
+- Each `server.tool(name, description, inputSchema, handler)` call declares one capability the AI can invoke.
+- `withMcpAuth` wraps the entire handler. Every request must include an `Authorization: Bearer <your-api-key>` header, or it's rejected before any tool runs.
+- We export `GET` and `POST` because the MCP Streamable HTTP transport uses both.
+
+---
+
+## Step 7 — (Optional) Seed the Database for Testing
+
+To add some test data, create a seed script:
+
+```typescript
+// prisma/seed.ts
+
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+async function main() {
+  await prisma.contact.createMany({
+    data: [
+      {
+        name: "Alice Martin",
+        email: "alice@example.com",
+        phone: "+1-555-0101",
+      },
+      { name: "Bob Johnson", email: "bob@example.com", phone: "+1-555-0102" },
+      { name: "Carol White", email: "carol@example.com" },
+    ],
+    skipDuplicates: true,
+  });
+
+  console.log("✅ Seed data inserted!");
+}
+
+main()
+  .catch(console.error)
+  .finally(() => prisma.$disconnect());
+```
+
+Add the seed config to `package.json`:
+
+```json
+{
+  "prisma": {
+    "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"
+  }
+}
+```
+
+Install `ts-node`:
+
+```bash
+npm install --save-dev ts-node
+```
+
+Run the seed:
+
+```bash
+npx prisma db seed
+```
+
+---
+
+## Step 8 — Test Locally with MCP Inspector
+
+Before deploying, test your server locally.
+
+### 8.1 — Start the Dev Server
+
+```bash
+npm run dev
+```
+
+Your MCP server is now running at:
+
+```
+http://localhost:3000/api/mcp
+```
+
+### 8.2 — Test with curl
+
+Open a new terminal and test the authentication guard:
+
+```bash
+# This should return 401 Unauthorized
+curl -X POST http://localhost:3000/api/mcp
+
+# This should work — replace YOUR_KEY with the value in your .env
+curl -X POST http://localhost:3000/api/mcp \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -H "Content-Type: application/json"
+```
+
+### 8.3 — Connect an AI Client (Claude Desktop)
+
+Add this to your Claude Desktop config file:
+
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "contacts-local": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:3000/api/mcp",
+        "--header",
+        "Authorization: Bearer YOUR_KEY"
+      ]
+    }
+  }
+}
+```
+
+Restart Claude Desktop, and you'll see a 🔌 icon in the chat interface indicating the MCP server is connected. Try asking:
+
+> "List all my contacts"
+> "Create a contact named David Lee with email david@example.com"
+> "Delete the contact with email bob@example.com"
+
+---
+
+## Step 9 — Deploy to Vercel
+
+### 9.1 — Push Your Code to GitHub
+
+```bash
+git init
+git add .
+git commit -m "feat: contacts MCP server"
+gh repo create contacts-mcp --public --push
+# Or use the GitHub website to create and push manually
+```
+
+### 9.2 — Import to Vercel
+
+1. Go to [vercel.com](https://vercel.com) and click **"Add New Project"**
+2. Import your GitHub repository
+3. Keep all default settings (Vercel auto-detects Next.js)
+4. Click **"Deploy"**
+
+### 9.3 — Add Environment Variables
+
+After the first deploy, go to your project's **Settings → Environment Variables** and add:
+
+| Name           | Value                             |
+| -------------- | --------------------------------- |
+| `DATABASE_URL` | Your PostgreSQL connection string |
+| `MCP_API_KEY`  | Your secret API key               |
+
+> ⚠️ Make sure to select **"Production", "Preview"**, and **"Development"** for each variable.
+
+After adding the variables, click **"Redeploy"** to apply them.
+
+### 9.4 — Enable Fluid Compute (Recommended)
+
+For MCP servers, Vercel recommends enabling **Fluid Compute** for better performance with long-lived connections:
+
+1. In your Vercel project, go to **Settings → Functions**
+2. Enable **"Fluid Compute"**
+
+This optimizes how Vercel handles MCP's irregular traffic patterns (idle periods between AI calls).
+
+---
+
+## Step 10 — Connect Your Deployed MCP to AI Clients
+
+Your server is now live at something like:
+
+```
+https://contacts-mcp.vercel.app/api/mcp
+```
+
+### Connect Claude Desktop to Production
+
+Update your Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "contacts": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://contacts-mcp.vercel.app/api/mcp",
+        "--header",
+        "Authorization: Bearer YOUR_PRODUCTION_KEY"
+      ]
+    }
+  }
+}
+```
+
+### Connect Cursor
+
+Add to `.cursor/mcp.json` in your project or `~/.cursor/mcp.json` globally:
+
+```json
+{
+  "mcpServers": {
+    "contacts": {
+      "url": "https://contacts-mcp.vercel.app/api/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_PRODUCTION_KEY"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Final Project Structure
+
+Here's what your finished project should look like:
+
+```
+contacts-mcp/
+├── app/
+│   └── api/
+│       └── [transport]/
+│           └── route.ts        ← MCP Server (all tools live here)
+├── lib/
+│   └── prisma.ts               ← Prisma client singleton
+├── prisma/
+│   ├── schema.prisma           ← Database schema
+│   ├── seed.ts                 ← Test data
+│   └── migrations/             ← Migration history
+├── .env                        ← DATABASE_URL + MCP_API_KEY
+├── .env.example                ← Commit this (without real values!)
+├── next.config.ts
+├── package.json
+└── tsconfig.json
+```
+
+---
+
+## Quick Reference: Adding More Tools
+
+The pattern for adding a new tool is always the same. Here's how you'd add a "search contacts by name" tool:
+
+```typescript
+server.tool(
+  "search_contacts",
+  "Searches for contacts by name (case-insensitive).",
+  {
+    query: z.string().min(1, "Search query is required"),
+  },
+  async ({ query }) => {
+    const contacts = await prisma.contact.findMany({
+      where: {
+        name: { contains: query, mode: "insensitive" },
+      },
+    });
+
+    if (contacts.length === 0) {
+      return {
+        content: [
+          { type: "text", text: `No contacts found matching "${query}".` },
+        ],
+      };
+    }
+
+    const formatted = contacts
+      .map((c) => `• ${c.name} | ${c.email}`)
+      .join("\n");
+
+    return {
+      content: [
+        { type: "text", text: `Results for "${query}":\n\n${formatted}` },
+      ],
+    };
+  }
+);
+```
+
+Just add it inside the `createMcpHandler` callback, alongside the existing tools.
+
+---
+
+## Troubleshooting
+
+**"Cannot find module 'mcp-handler'"**
+Run `npm install` again and make sure your `node_modules` is up to date.
+
+**"Unauthorized: No API key provided"**
+Make sure your client sends the header: `Authorization: Bearer YOUR_KEY`
+
+**Prisma: "Environment variable not found: DATABASE_URL"**
+Add `DATABASE_URL` to your `.env` file and restart the dev server.
+
+**Tools don't appear in Claude Desktop**
+Restart Claude Desktop after editing the config file. Check the MCP server logs in the Claude menu bar → "Developer" → "Open MCP Log File".
+
+**Vercel deploy fails with "Cannot connect to database"**
+Ensure `DATABASE_URL` is set in Vercel's environment variables and that your database allows connections from Vercel's IP ranges (or set it to allow all connections in dev).
+
+---
+
+## What's Next?
+
+Now that you have a working MCP server, here are some natural next steps:
+
+- **Add pagination** to `list_contacts` using Prisma's `take` and `skip`
+- **Add update_contact** tool to modify a contact's name or phone
+- **Scope API keys per user** by storing them in the database and looking them up in `withMcpAuth`
+- **Add OAuth** using Clerk or Auth0 for a proper multi-tenant setup
+- **Add a UI** — your Next.js app can have regular pages alongside the MCP API route
+
+The power of this architecture is that your Contact app is now accessible to any MCP-compatible AI agent, making it a first-class citizen in the AI agent ecosystem.
+
+---
+
+_Built with Next.js 16 · Prisma · mcp-handler · Vercel_
