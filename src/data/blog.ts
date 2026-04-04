@@ -39,11 +39,13 @@ function getMDXData(dir: string) {
 }
 
 export function getAllPosts() {
-  return getMDXData(path.join(process.cwd(), "src/content/blog")).sort(
-    (a, b) =>
-      new Date(b.metadata.createdAt).getTime() -
-      new Date(a.metadata.createdAt).getTime()
-  );
+  return getMDXData(path.join(process.cwd(), "src/content/blog"))
+    .sort(
+      (a, b) =>
+        new Date(b.metadata.createdAt).getTime() -
+        new Date(a.metadata.createdAt).getTime()
+    )
+    .filter((post) => post.metadata.category !== "components");
 }
 
 export function getPostBySlug(slug: string) {
