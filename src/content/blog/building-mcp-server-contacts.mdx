@@ -590,6 +590,21 @@ Your server is now live at something like:
 https://contacts-mcp.vercel.app/api/mcp
 ```
 
+### Installing MCP Servers in Claude code
+
+```ts
+# Basic syntax
+claude mcp add --transport http <name> <url>
+
+# Real example: Connect to Notion
+claude mcp add --transport http notion https://mcp.notion.com/mcp
+
+# Example with Bearer token
+claude mcp add --transport http secure-api https://api.example.com/mcp \
+  --header "Authorization: Bearer your-token"
+
+```
+
 ### Connect Claude Desktop to Production
 
 Update your Claude Desktop config:
