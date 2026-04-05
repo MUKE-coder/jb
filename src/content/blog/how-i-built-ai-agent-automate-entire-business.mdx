@@ -1,0 +1,223 @@
+---
+title: How I Built an AI Agent That Automates My Entire Business with Claude Code
+description: A deep dive into ATLAS — my personal AI automation system that handles emails, calendar, sales outreach, content creation, and client management. Built in 16 hours from Kampala, Uganda.
+image: https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&q=80&w=2070
+category: tutorial
+createdAt: 2026-04-05
+updatedAt: 2026-04-05
+---
+
+# How I Built an AI Agent That Automates My Entire Business with Claude Code
+
+Every morning at 4:00 AM, before I even touch my keyboard, my AI agent has already:
+
+- Read and categorised all my emails
+- Checked my calendar for today's meetings
+- Found 3 new potential clients
+- Drafted personalised outreach emails
+- Generated a full content package for LinkedIn, YouTube, and TikTok
+- Created AI-designed YouTube thumbnails
+- Set my top 3 priorities for the day
+
+I call it **ATLAS** — Automated Tasks & Life Automation System. I built it in 16 hours using Claude Code, and it changed how I run my business.
+
+Here is exactly how it works.
+
+---
+
+## The Problem I Was Solving
+
+I run [Desishub Technologies](https://desishub.com) from Kampala, Uganda. I build custom web apps, run 6 SaaS products, teach 300+ students, create YouTube content, and sell source code on Gumroad.
+
+Before ATLAS, my typical day involved:
+
+- **45 minutes** reading and replying to emails
+- **30 minutes** researching potential clients
+- **20 minutes** staring at LinkedIn wondering what to post
+- **90 minutes** designing YouTube thumbnails in Canva
+- **2 hours** writing proposals from scratch
+
+That is 4+ hours of admin. Every. Single. Day.
+
+I was spending more time managing my business than building in it.
+
+---
+
+## What ATLAS Actually Is
+
+ATLAS is a collection of **28 slash commands** and **5 AI skills** that run inside [Claude Code](https://claude.com/product/claude-code). It connects to my real tools via MCP (Model Context Protocol) servers:
+
+| Integration          | What It Accesses                                          |
+| -------------------- | --------------------------------------------------------- |
+| **Gmail**            | Read emails, search, create drafts (never sends directly) |
+| **Google Calendar**  | Read events, check availability                           |
+| **YouTube Data API** | Channel stats, competitor analysis, video engagement      |
+| **Gemini AI**        | Generate YouTube thumbnails and images                    |
+
+The key safety rule: **ATLAS never sends emails directly.** It saves everything to Gmail Drafts with a `[REVIEW NEEDED]` prefix. I review and send manually.
+
+---
+
+## The Architecture
+
+```
+Claude Code (Runtime)
+    ├── .claude/commands/     (28 slash commands)
+    ├── .claude/skills/       (5 AI skills)
+    ├── .mcp.json            (MCP server configs)
+    └── CLAUDE.md            (System instructions)
+
+MCP Servers (Tool Layer)
+    ├── google-workspace     (Gmail + Calendar)
+    ├── youtube-data         (YouTube API)
+    ├── github               (Repo management)
+    └── nanobanana           (Gemini image generation)
+
+Data Layer (D:\jb-brain\)
+    ├── system/              (ICP, voice guide)
+    ├── clients/active/      (Prospect files)
+    ├── content/             (Daily packages + thumbnails)
+    ├── logs/                (Morning briefs + EOD reviews)
+    └── drafts/              (Email drafts)
+```
+
+Everything runs locally. No cloud service, no subscription. Just Claude Code and MCP servers.
+
+---
+
+## The Commands That Matter Most
+
+### `/today` — Morning Brief
+
+This is the first command I run every day. It:
+
+1. Reads yesterday's end-of-day review
+2. Checks Gmail for unread emails from the last 12 hours
+3. Checks Google Calendar for today's events
+4. Scans my client files for leads that need follow-up
+5. Detects what type of content day it is (YouTube, TikTok, or Course day)
+6. Compiles everything into a 250-word brief
+
+Output looks like this:
+
+```
+🌅 GOOD MORNING JB — Sunday, April 5, 2026
+
+🔄 YESTERDAY: 3 prospects emailed. Allan replied — wants Zoom call.
+📌 TOP 3 TODAY:
+1. Reply to Godwin on LinkedIn (messaged twice)
+2. Book Allan's Zoom call (he's warm, don't let it cool)
+3. Plan next week's YouTube videos
+
+📅 1 event: WEBINAR ALERT at 3:30 PM
+📧 Godwin messaged you again. Reply NOW.
+💰 Quick win: Reply to Godwin. 2 minutes.
+```
+
+### `/inbox` — Email Processing
+
+This reads EVERY email, not just previews. For each email it:
+
+- Categorises: 🔴 Action Needed / 🟡 FYI / ⚪ Skip
+- Drafts a response for every action item
+- Saves all drafts to Gmail with `[REVIEW NEEDED]` prefix
+- Never sends anything directly
+
+On Day 1, it processed 16 emails in 2 minutes. Manually, that would have taken 45 minutes.
+
+### `/find-prospects` — Sales Pipeline
+
+Searches the web for 3 new prospects matching my ICP (Ideal Client Profile). For each one, it:
+
+1. Researches their business (website, LinkedIn, press)
+2. Checks them against my Anti-ICP filter (no know-it-alls, no low budgets)
+3. Finds a specific gap in their business I can help with
+4. Creates a prospect file in `~/jb-brain/clients/active/`
+
+### `/thumbnail [title]` — AI Thumbnails
+
+Generates 4 YouTube thumbnail concepts using Gemini AI in the style of Code With Antonio and JavaScript Mastery. Features:
+
+- 3D device mockups (MacBook, browser windows, phones)
+- Glassmorphic icon badges
+- Bold typography with accent colors
+- Dark premium backgrounds
+- Auto-crops to 16:9
+
+I went from spending 90 minutes per thumbnail in Canva to 2 minutes with `/thumbnail`.
+
+---
+
+## Day 1 Results
+
+| Metric                         | Result                      |
+| ------------------------------ | --------------------------- |
+| Emails processed               | 16                          |
+| Prospects found                | 3                           |
+| Outreach emails sent           | 4                           |
+| Replies received               | 2 (Allan from ProGigFinder) |
+| Warm leads                     | 1 (Allan wants a Zoom call) |
+| Content pieces generated       | 12+                         |
+| Thumbnails created             | 16 (across 5 iterations)    |
+| Commands built                 | 28                          |
+| Time building ATLAS            | 16 hours                    |
+| Time saved per day (estimated) | 3-4 hours                   |
+
+The standout: **Allan from ProGigFinder replied within 3 hours** of receiving my cold email and asked for a Zoom call. The email was drafted by ATLAS, reviewed by me, and sent. The system works.
+
+---
+
+## The Tech Stack
+
+- **Runtime:** Claude Code (Anthropic CLI)
+- **AI Model:** Claude Opus 4.6 (1M context)
+- **Image Generation:** Gemini 2.5 Flash Image API
+- **Email:** Google Workspace MCP
+- **YouTube Data:** YouTube Data API v3 via MCP
+- **Data Storage:** Markdown files in Obsidian (migrating to custom CRM)
+- **Languages I build with:** Go + Next.js (my production stack)
+
+---
+
+## What I Learned
+
+**1. MCP servers are the real power.** Claude Code without MCP is just a coding assistant. With MCP, it becomes a business operator. Connecting Gmail and Calendar was the inflection point.
+
+**2. Safety rules are non-negotiable.** ATLAS never sends emails directly. Ever. Everything goes to drafts. This one rule prevents catastrophic mistakes.
+
+**3. Fewer commands, done well.** I started with 22 commands and grew to 28. But `/today`, `/inbox`, `/find-prospects`, and `/eod` handle 80% of my daily workflow. Build the critical path first.
+
+**4. The prompt is everything.** My YouTube thumbnail skill went through 5 complete rewrites before the output matched what I wanted. Iteration is the process.
+
+**5. This is not a toy project.** Allan replied to my cold email in 3 hours. That is real revenue potential from an AI system I built in a day.
+
+---
+
+## Source Code
+
+The entire ATLAS system is open source:
+
+**GitHub:** [github.com/MUKE-coder/atlas](https://github.com/MUKE-coder/atlas)
+
+28 commands, 5 skills, MCP configurations, and the complete CLAUDE.md system instructions.
+
+---
+
+## What Is Next
+
+I am building a full CRM ([ATLAS CRM Design Doc](https://github.com/MUKE-coder/atlas/blob/main/ATLAS-CRM-DESIGN.md)) with:
+
+- 10 database modules (contacts, projects, courses, AI agents, content, revenue)
+- 30+ MCP tools so Claude Code reads and writes directly to the database
+- Go API + Next.js admin dashboard
+- PostgreSQL + Redis
+
+When complete, ATLAS will not log to markdown files — it will operate a full business database.
+
+I am also offering **AI agent setup as a service** for professionals: doctors, lawyers, accountants, real estate agents. Same system, customised per career. UGX 1.5M-5M setup + monthly maintenance.
+
+If you want your own ATLAS, [reach out](https://desishub.com/contact-us).
+
+---
+
+_Built from Kampala, Uganda. Powered by Claude Code._
