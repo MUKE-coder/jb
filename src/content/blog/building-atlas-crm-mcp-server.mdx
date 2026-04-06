@@ -1,0 +1,1738 @@
+---
+title: Building a Custom CRM with an MCP Server — Go + Next.js Full Stack Guide
+description: How I built ATLAS CRM with 12 database models, 64 REST endpoints, and 30+ MCP tools, then exposed it as a remote MCP server so Claude Code manages my entire business from the terminal.
+image: /blog/atlas-crm-mcp-server.webp
+category: tutorial
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+---
+
+**How I built ATLAS CRM (12 database models, 64 REST endpoints, 30+ MCP tools) and exposed it as a remote MCP server so Claude Code can manage my entire business from the terminal.**
+
+---
+
+## Table of Contents
+
+1. [Why I Needed ATLAS](#why-i-needed-atlas)
+2. [What is an MCP Server and Why It Matters](#what-is-an-mcp-server)
+3. [Architecture Overview](#architecture-overview)
+4. [Part 1: Backend — Go (Gin + GORM)](#part-1-backend)
+   - [Step 1: Define the Database Models](#step-1-models)
+   - [Step 2: Build the REST API Handlers](#step-2-handlers)
+   - [Step 3: Register the Routes](#step-3-routes)
+5. [Part 2: The MCP Server](#part-2-mcp-server)
+   - [Step 4: Set Up the MCP Server with mcp-go](#step-4-mcp-setup)
+   - [Step 5: Register MCP Tools](#step-5-mcp-tools)
+   - [Step 6: Implement Tool Handlers](#step-6-tool-handlers)
+   - [Step 7: Mount on Your Existing API](#step-7-mount)
+6. [Part 3: Frontend — Next.js (App Router)](#part-3-frontend)
+   - [Step 8: Define TypeScript Types](#step-8-types)
+   - [Step 9: Build React Query Hooks](#step-9-hooks)
+   - [Step 10: Build the Admin UI](#step-10-ui)
+7. [Deployment & Configuration](#deployment)
+8. [Connecting Claude Code to Your MCP Server](#connecting-claude)
+9. [The Result](#the-result)
+
+---
+
+## Why I Needed ATLAS {#why-i-needed-atlas}
+
+I'm a solo founder running Desishub Technologies from Kampala. I build custom web apps, mobile apps, and websites for clients. I run 6 SaaS products. I teach 300+ students. I create YouTube content. I sell source code and courses on Gumroad. I do cold outreach to find new clients.
+
+Before ATLAS, my typical day looked like this:
+
+- Wake up at 4am, spend 45 minutes reading and replying to emails manually
+- Open LinkedIn, scroll for 20 minutes trying to think of what to post
+- Spend 30 minutes researching potential clients, forget to follow up on last week's leads
+- Realize I haven't posted on YouTube in 2 weeks
+- A client emails asking for a proposal — I spend 2 hours writing one from scratch
+- End of day: I built nothing. I coded nothing. I just did admin.
+
+**The headaches were real:**
+
+| Problem                  | Impact                                                                                         |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| **Email overwhelm**      | 30+ emails/day across personal, business, and notifications. No system to triage them          |
+| **Prospect amnesia**     | I'd find a lead, draft an email, then forget to follow up. Warm leads went cold                |
+| **Content paralysis**    | I knew I should post on LinkedIn and YouTube, but staring at a blank screen killed my momentum |
+| **No CRM**               | Client info scattered across WhatsApp, Gmail, sticky notes, and my memory                      |
+| **Zero daily structure** | Some days I'd context-switch between 15 tasks and finish none                                  |
+| **Revenue blindness**    | No idea which revenue stream was actually making money                                         |
+
+**The cost:** 3-4 hours per day on admin tasks that generated zero revenue. That's 60-80 hours per month of my most productive hours — gone.
+
+I needed a CRM that understood **my** business — not a generic Salesforce or HubSpot, but one built around my exact revenue streams, my content pillars, my student pipeline, and my AI agent clients. And I needed it accessible from Claude Code so ATLAS (my AI automation system) could read and write to it via slash commands.
+
+---
+
+## What is an MCP Server and Why It Matters {#what-is-an-mcp-server}
+
+**MCP (Model Context Protocol)** is an open standard from Anthropic that lets AI models interact with external systems through a standardized interface. Think of it as a universal adapter that gives any AI assistant (Claude, GPT, etc.) the ability to read from and write to your custom tools.
+
+### Why MCP Servers Matter for Developers
+
+**Before MCP:**
+
+```
+You: "Claude, add a new prospect named John to my CRM"
+Claude: "I can't do that. I don't have access to your CRM."
+```
+
+**After MCP:**
+
+```
+You: "Claude, add a new prospect named John to my CRM"
+Claude: [calls createContact tool via MCP] "Done. Created contact #42 — John, status: new, source: cold_outreach."
+```
+
+An MCP server exposes **tools** — functions that AI models can call with structured parameters and get structured results back. Instead of copy-pasting data between your terminal and a web dashboard, you tell Claude what to do and it executes it directly against your database.
+
+### Remote vs Local MCP Servers
+
+There are two transport modes:
+
+| Mode                       | How it works                                                         | Best for                            |
+| -------------------------- | -------------------------------------------------------------------- | ----------------------------------- |
+| **stdio**                  | AI spawns the server as a subprocess, communicates over stdin/stdout | Local development, desktop tools    |
+| **HTTP (Streamable HTTP)** | Server runs at a URL, AI sends HTTP requests with auth headers       | Production, remote access, team use |
+
+We'll build a **remote HTTP MCP server** so it can be accessed from anywhere:
+
+```json
+{
+  "mcpServers": {
+    "atlas-crm": {
+      "type": "http",
+      "url": "https://api.yoursite.com/mcp",
+      "headers": {
+        "Authorization": "Bearer your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+### Why Not Just Use the REST API Directly?
+
+You could write custom skills or scripts that call your REST API. But MCP gives you:
+
+1. **Tool discovery** — Claude automatically knows what tools are available, what parameters they accept, and what they return
+2. **No code on the client** — You don't need to write a custom integration for each AI assistant
+3. **Standardized auth** — Bearer token, API key, or no auth — works with any MCP-compatible client
+4. **Type-safe parameters** — Each tool defines required/optional params with descriptions. The AI validates input before calling
+
+---
+
+## Architecture Overview {#architecture-overview}
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        Your VPS / Cloud                       │
+│                                                              │
+│  ┌──────────────────┐    ┌──────────────────────────────┐   │
+│  │   Next.js Admin   │    │       Go API (Gin)            │   │
+│  │   (App Router)    │◄──►│                              │   │
+│  │                   │    │  /api/atlas/* — REST (64)     │   │
+│  │  - Dashboard tab  │    │  /mcp         — MCP (30+)    │   │
+│  │  - Contacts tab   │    │                              │   │
+│  │  - Projects tab   │    │  ┌─────────────────────┐     │   │
+│  │  - Revenue tab    │    │  │   PostgreSQL (GORM)  │     │   │
+│  │  - Content tab    │    │  │                     │     │   │
+│  │  - Daily ops tab  │    │  │  atlas_contacts     │     │   │
+│  └──────────────────┘    │  │  atlas_interactions  │     │   │
+│                          │  │  atlas_projects      │     │   │
+│  ┌──────────────────┐    │  │  atlas_courses       │     │   │
+│  │   Claude Code     │    │  │  atlas_enrollments   │     │   │
+│  │   (MCP Client)    │◄──►│  │  atlas_agent_clients │     │   │
+│  │                   │    │  │  atlas_content       │     │   │
+│  │  "create contact" │    │  │  atlas_products      │     │   │
+│  │  "log revenue"    │    │  │  atlas_revenue_entries│     │   │
+│  │  "get pipeline"   │    │  │  atlas_daily_logs    │     │   │
+│  └──────────────────┘    │  │  atlas_website_tasks  │     │   │
+│                          │  └─────────────────────┘     │   │
+│                          └──────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Tech stack:**
+
+- **Backend:** Go 1.23+, Gin (HTTP router), GORM (ORM), PostgreSQL
+- **MCP:** [mcp-go](https://github.com/mark3labs/mcp-go) — Go SDK for MCP servers
+- **Frontend:** Next.js 15 (App Router), React Query (TanStack Query), TypeScript
+- **Auth:** JWT for REST API, Bearer token for MCP
+
+---
+
+## Part 1: Backend — Go (Gin + GORM) {#part-1-backend}
+
+### Step 1: Define the Database Models {#step-1-models}
+
+Every CRM starts with data models. ATLAS has 10 sub-modules, each with its own model. The key design decisions:
+
+- All tables prefixed with `atlas_` to avoid conflicts with the rest of the application
+- Every model has `TenantID` for multi-tenancy (default 1 for single-user)
+- Use `datatypes.JSON` (from GORM) for flexible JSONB fields (tags, metadata, tech stacks)
+- Soft deletes via `gorm.DeletedAt` — never lose data
+
+Create `models/atlas.go`:
+
+```go
+package models
+
+import (
+    "time"
+
+    "gorm.io/datatypes"
+    "gorm.io/gorm"
+)
+
+// ============================================================
+// Contacts & Leads
+// ============================================================
+
+const (
+    AtlasContactTypeProspect    = "prospect"
+    AtlasContactTypeClient      = "client"
+    AtlasContactTypeStudent     = "student"
+    AtlasContactTypeAgentClient = "agent_client"
+    AtlasContactTypePartner     = "partner"
+
+    AtlasContactStatusNew          = "new"
+    AtlasContactStatusContacted    = "contacted"
+    AtlasContactStatusReplied      = "replied"
+    AtlasContactStatusCallBooked   = "call_booked"
+    AtlasContactStatusProposalSent = "proposal_sent"
+    AtlasContactStatusWon          = "won"
+    AtlasContactStatusLost         = "lost"
+    AtlasContactStatusChurned      = "churned"
+
+    AtlasSourceYoutube      = "youtube"
+    AtlasSourceLinkedin     = "linkedin"
+    AtlasSourceTiktok       = "tiktok"
+    AtlasSourceReferral     = "referral"
+    AtlasSourceColdOutreach = "cold_outreach"
+    AtlasSourceWebsite      = "website"
+    AtlasSourceGumroad      = "gumroad"
+)
+
+type AtlasContact struct {
+    ID              uint           `gorm:"primarykey" json:"id"`
+    TenantID        uint           `gorm:"index;not null;default:1" json:"tenant_id"`
+    Name            string         `gorm:"size:255;not null" json:"name"`
+    Email           string         `gorm:"size:255;index" json:"email"`
+    Phone           string         `gorm:"size:50" json:"phone"`
+    LinkedinURL     string         `gorm:"size:500" json:"linkedin_url"`
+    Company         string         `gorm:"size:255" json:"company"`
+    Role            string         `gorm:"size:255" json:"role"`
+    Location        string         `gorm:"size:255" json:"location"`
+    Source          string         `gorm:"size:100;index" json:"source"`
+    Type            string         `gorm:"size:50;index" json:"type"`
+    Status          string         `gorm:"size:50;index;default:'new'" json:"status"`
+    ICPProfile      string         `gorm:"size:10" json:"icp_profile"`
+    AntiICPFlags    datatypes.JSON `gorm:"type:jsonb" json:"anti_icp_flags"`
+    Notes           string         `gorm:"type:text" json:"notes"`
+    Tags            datatypes.JSON `gorm:"type:jsonb" json:"tags"`
+    LastContactedAt *time.Time     `json:"last_contacted_at"`
+    NextFollowupAt  *time.Time     `gorm:"index" json:"next_followup_at"`
+    DealValue       float64        `gorm:"type:decimal(12,2);default:0" json:"deal_value"`
+    Currency        string         `gorm:"size:3;default:'UGX'" json:"currency"`
+    CreatedAt       time.Time      `json:"created_at"`
+    UpdatedAt       time.Time      `json:"updated_at"`
+    DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+
+    Interactions     []AtlasInteraction `gorm:"foreignKey:ContactID" json:"interactions,omitempty"`
+    Projects         []AtlasProject     `gorm:"foreignKey:ContactID" json:"projects,omitempty"`
+    InteractionCount int64              `gorm:"-" json:"interaction_count,omitempty"`
+    ProjectCount     int64              `gorm:"-" json:"project_count,omitempty"`
+}
+
+func (AtlasContact) TableName() string { return "atlas_contacts" }
+```
+
+**Key pattern:** The `InteractionCount` and `ProjectCount` fields use `gorm:"-"` — they're not database columns. We populate them manually in handlers with COUNT queries, giving the frontend useful aggregated data without extra API calls.
+
+Now add the **Interactions** model — every email, call, meeting, and DM gets logged:
+
+```go
+type AtlasInteraction struct {
+    ID        uint           `gorm:"primarykey" json:"id"`
+    TenantID  uint           `gorm:"index;not null;default:1" json:"tenant_id"`
+    ContactID uint           `gorm:"index;not null" json:"contact_id"`
+    Type      string         `gorm:"size:50;index" json:"type"`
+    Channel   string         `gorm:"size:50" json:"channel"`
+    Subject   string         `gorm:"size:500" json:"subject"`
+    Body      string         `gorm:"type:text" json:"body"`
+    Direction string         `gorm:"size:10" json:"direction"`
+    Status    string         `gorm:"size:50" json:"status"`
+    Metadata  datatypes.JSON `gorm:"type:jsonb" json:"metadata"`
+    CreatedAt time.Time      `json:"created_at"`
+    DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+    Contact *AtlasContact `gorm:"foreignKey:ContactID" json:"contact,omitempty"`
+}
+
+func (AtlasInteraction) TableName() string { return "atlas_interactions" }
+```
+
+And the **Projects & Deals** model — this tracks every client project from discovery to payment:
+
+```go
+type AtlasProject struct {
+    ID                uint           `gorm:"primarykey" json:"id"`
+    TenantID          uint           `gorm:"index;not null;default:1" json:"tenant_id"`
+    ContactID         *uint          `gorm:"index" json:"contact_id"`
+    Name              string         `gorm:"size:255;not null" json:"name"`
+    Description       string         `gorm:"type:text" json:"description"`
+    Status            string         `gorm:"size:50;index;default:'discovery'" json:"status"`
+    Stage             string         `gorm:"size:50;index;default:'lead'" json:"stage"`
+    DealValue         float64        `gorm:"type:decimal(12,2);default:0" json:"deal_value"`
+    Currency          string         `gorm:"size:3;default:'UGX'" json:"currency"`
+    UpfrontPercentage int            `gorm:"default:40" json:"upfront_percentage"`
+    UpfrontPaid       bool           `gorm:"default:false" json:"upfront_paid"`
+    FinalPaid         bool           `gorm:"default:false" json:"final_paid"`
+    TechStack         datatypes.JSON `gorm:"type:jsonb" json:"tech_stack"`
+    StartDate         *time.Time     `json:"start_date"`
+    Deadline          *time.Time     `json:"deadline"`
+    DeliveredDate     *time.Time     `json:"delivered_date"`
+    ContractSigned    bool           `gorm:"default:false" json:"contract_signed"`
+    ContractURL       string         `gorm:"size:500" json:"contract_url"`
+    ProposalURL       string         `gorm:"size:500" json:"proposal_url"`
+    RepoURL           string         `gorm:"size:500" json:"repo_url"`
+    Notes             string         `gorm:"type:text" json:"notes"`
+    CreatedAt         time.Time      `json:"created_at"`
+    UpdatedAt         time.Time      `json:"updated_at"`
+    DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
+
+    Contact *AtlasContact `gorm:"foreignKey:ContactID" json:"contact,omitempty"`
+}
+
+func (AtlasProject) TableName() string { return "atlas_projects" }
+```
+
+**Why two fields — Status and Stage?** `Status` tracks the operational state (discovery → in_progress → delivered → invoiced → paid). `Stage` tracks the sales pipeline position (lead → qualified → proposal → closing → won/lost). A project can be "won" in the pipeline but still "in_progress" operationally.
+
+The remaining models follow the same pattern. Here's a summary:
+
+| Model               | Table                   | Purpose                                                |
+| ------------------- | ----------------------- | ------------------------------------------------------ |
+| `AtlasCourse`       | `atlas_courses`         | Courses you create and sell                            |
+| `AtlasEnrollment`   | `atlas_enrollments`     | Student enrollments with payment tracking              |
+| `AtlasAgentClient`  | `atlas_agent_clients`   | AI agent clients with MRR tracking                     |
+| `AtlasContent`      | `atlas_content`         | YouTube, LinkedIn, TikTok content pipeline             |
+| `AtlasProduct`      | `atlas_products`        | Digital products (source code, starter kits)           |
+| `AtlasRevenueEntry` | `atlas_revenue_entries` | Every dollar earned, categorized by stream             |
+| `AtlasDailyLog`     | `atlas_daily_logs`      | Daily operations tracking (emails, prospects, revenue) |
+| `AtlasWebsiteTask`  | `atlas_website_tasks`   | Website maintenance tasks for client sites             |
+
+**Register the models for auto-migration** in your `Models()` function:
+
+```go
+func Models() []interface{} {
+    return []interface{}{
+        // ... existing models ...
+        &AtlasContact{},
+        &AtlasInteraction{},
+        &AtlasProject{},
+        &AtlasCourse{},
+        &AtlasEnrollment{},
+        &AtlasAgentClient{},
+        &AtlasContent{},
+        &AtlasProduct{},
+        &AtlasRevenueEntry{},
+        &AtlasDailyLog{},
+        &AtlasWebsiteTask{},
+    }
+}
+```
+
+GORM will create all the tables automatically on startup.
+
+---
+
+### Step 2: Build the REST API Handlers {#step-2-handlers}
+
+Create `handlers/atlas.go`. The handler struct holds a `*gorm.DB` reference:
+
+```go
+package handlers
+
+import (
+    "math"
+    "net/http"
+    "strconv"
+    "time"
+
+    "github.com/gin-gonic/gin"
+    "gorm.io/gorm"
+
+    "yourapp/internal/models"
+)
+
+type AtlasHandler struct {
+    db *gorm.DB
+}
+
+func NewAtlasHandler(db *gorm.DB) *AtlasHandler {
+    return &AtlasHandler{db: db}
+}
+```
+
+**Dashboard endpoint** — aggregates KPIs from all modules:
+
+```go
+func (h *AtlasHandler) GetDashboard(c *gin.Context) {
+    var contactCount, projectCount, agentCount, contentCount, productCount int64
+    h.db.Model(&models.AtlasContact{}).Count(&contactCount)
+    h.db.Model(&models.AtlasProject{}).Count(&projectCount)
+    h.db.Model(&models.AtlasAgentClient{}).Count(&agentCount)
+    h.db.Model(&models.AtlasContent{}).Count(&contentCount)
+    h.db.Model(&models.AtlasProduct{}).Count(&productCount)
+
+    // Pipeline counts
+    var newLeads, contacted, proposalSent, won, lost int64
+    h.db.Model(&models.AtlasContact{}).Where("status = ?", "new").Count(&newLeads)
+    h.db.Model(&models.AtlasContact{}).Where("status = ?", "contacted").Count(&contacted)
+    h.db.Model(&models.AtlasContact{}).Where("status = ?", "proposal_sent").Count(&proposalSent)
+    h.db.Model(&models.AtlasContact{}).Where("status = ?", "won").Count(&won)
+    h.db.Model(&models.AtlasContact{}).Where("status = ?", "lost").Count(&lost)
+
+    // Revenue this month
+    now := time.Now()
+    monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+    var monthlyRevenue float64
+    h.db.Model(&models.AtlasRevenueEntry{}).
+        Where("payment_date >= ?", monthStart).
+        Select("COALESCE(SUM(amount), 0)").Scan(&monthlyRevenue)
+
+    // MRR from active agent clients
+    var mrr float64
+    h.db.Model(&models.AtlasAgentClient{}).
+        Where("status = ?", "active").
+        Select("COALESCE(SUM(monthly_fee), 0)").Scan(&mrr)
+
+    // Followups due today
+    today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+    tomorrow := today.AddDate(0, 0, 1)
+    var followupsDue int64
+    h.db.Model(&models.AtlasContact{}).
+        Where("next_followup_at >= ? AND next_followup_at < ?", today, tomorrow).
+        Count(&followupsDue)
+
+    c.JSON(http.StatusOK, gin.H{"data": gin.H{
+        "contacts":        contactCount,
+        "projects":        projectCount,
+        "agent_clients":   agentCount,
+        "content_pieces":  contentCount,
+        "products":        productCount,
+        "monthly_revenue": monthlyRevenue,
+        "mrr":             mrr,
+        "followups_due":   followupsDue,
+        "pipeline": gin.H{
+            "new":           newLeads,
+            "contacted":     contacted,
+            "proposal_sent": proposalSent,
+            "won":           won,
+            "lost":          lost,
+        },
+    }})
+}
+```
+
+**Contacts CRUD with filtering and pagination:**
+
+```go
+func (h *AtlasHandler) ListContacts(c *gin.Context) {
+    page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+    pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+    contactType := c.Query("type")
+    status := c.Query("status")
+    search := c.Query("search")
+    source := c.Query("source")
+
+    if page < 1 {
+        page = 1
+    }
+    offset := (page - 1) * pageSize
+
+    q := h.db.Model(&models.AtlasContact{})
+    if contactType != "" {
+        q = q.Where("type = ?", contactType)
+    }
+    if status != "" {
+        q = q.Where("status = ?", status)
+    }
+    if source != "" {
+        q = q.Where("source = ?", source)
+    }
+    if search != "" {
+        q = q.Where(
+            "name ILIKE ? OR email ILIKE ? OR company ILIKE ?",
+            "%"+search+"%", "%"+search+"%", "%"+search+"%",
+        )
+    }
+
+    var total int64
+    q.Count(&total)
+
+    var contacts []models.AtlasContact
+    q.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&contacts)
+
+    // Enrich with counts
+    for i := range contacts {
+        h.db.Model(&models.AtlasInteraction{}).
+            Where("contact_id = ?", contacts[i].ID).Count(&contacts[i].InteractionCount)
+        h.db.Model(&models.AtlasProject{}).
+            Where("contact_id = ?", contacts[i].ID).Count(&contacts[i].ProjectCount)
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "data": contacts,
+        "meta": gin.H{
+            "total":     total,
+            "page":      page,
+            "page_size": pageSize,
+            "pages":     int(math.Ceil(float64(total) / float64(pageSize))),
+        },
+    })
+}
+
+func (h *AtlasHandler) CreateContact(c *gin.Context) {
+    var contact models.AtlasContact
+    if err := c.ShouldBindJSON(&contact); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+    contact.TenantID = 1
+    if contact.Status == "" {
+        contact.Status = models.AtlasContactStatusNew
+    }
+    if err := h.db.Create(&contact).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create contact"})
+        return
+    }
+    c.JSON(http.StatusCreated, gin.H{"data": contact})
+}
+
+func (h *AtlasHandler) UpdateContact(c *gin.Context) {
+    id := c.Param("id")
+    var contact models.AtlasContact
+    if err := h.db.First(&contact, id).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Contact not found"})
+        return
+    }
+    var input map[string]interface{}
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+    h.db.Model(&contact).Updates(input)
+    h.db.First(&contact, id)
+    c.JSON(http.StatusOK, gin.H{"data": contact})
+}
+
+func (h *AtlasHandler) DeleteContact(c *gin.Context) {
+    id := c.Param("id")
+    if err := h.db.Delete(&models.AtlasContact{}, id).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete contact"})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"message": "Contact deleted"})
+}
+```
+
+**Smart queries** — the real power of a custom CRM:
+
+```go
+// Get leads that haven't been contacted in X days
+func (h *AtlasHandler) GetColdLeads(c *gin.Context) {
+    days, _ := strconv.Atoi(c.DefaultQuery("days", "5"))
+    if days < 1 {
+        days = 5
+    }
+    cutoff := time.Now().AddDate(0, 0, -days)
+
+    var contacts []models.AtlasContact
+    h.db.Where(
+        "(last_contacted_at IS NULL OR last_contacted_at < ?) AND status NOT IN (?, ?)",
+        cutoff, "won", "lost",
+    ).Order("last_contacted_at ASC NULLS FIRST").Find(&contacts)
+
+    c.JSON(http.StatusOK, gin.H{"data": contacts})
+}
+
+// Get contacts with followups due today
+func (h *AtlasHandler) GetFollowups(c *gin.Context) {
+    now := time.Now()
+    today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+    tomorrow := today.AddDate(0, 0, 1)
+
+    var contacts []models.AtlasContact
+    h.db.Where("next_followup_at >= ? AND next_followup_at < ?", today, tomorrow).
+        Order("next_followup_at ASC").Find(&contacts)
+
+    c.JSON(http.StatusOK, gin.H{"data": contacts})
+}
+
+// Get contacts grouped by status (pipeline view)
+func (h *AtlasHandler) GetPipeline(c *gin.Context) {
+    type PipelineGroup struct {
+        Status string                `json:"status"`
+        Count  int64                 `json:"count"`
+        Items  []models.AtlasContact `json:"items"`
+    }
+    statuses := []string{"new", "contacted", "replied", "call_booked", "proposal_sent", "won", "lost"}
+    var pipeline []PipelineGroup
+    for _, s := range statuses {
+        var items []models.AtlasContact
+        h.db.Where("status = ?", s).Order("updated_at DESC").Limit(50).Find(&items)
+        pipeline = append(pipeline, PipelineGroup{
+            Status: s,
+            Count:  int64(len(items)),
+            Items:  items,
+        })
+    }
+    c.JSON(http.StatusOK, gin.H{"data": pipeline})
+}
+```
+
+---
+
+### Step 3: Register the Routes {#step-3-routes}
+
+In your `routes.go`, initialize the handler and register all endpoints under an authenticated admin group:
+
+```go
+atlasHandler := handlers.NewAtlasHandler(db)
+
+// Inside your authenticated admin group:
+admin := r.Group("/api/atlas")
+admin.Use(authMiddleware) // your JWT auth middleware
+
+// Dashboard
+admin.GET("/dashboard", atlasHandler.GetDashboard)
+
+// Contacts
+admin.GET("/contacts", atlasHandler.ListContacts)
+admin.GET("/contacts/cold-leads", atlasHandler.GetColdLeads)
+admin.GET("/contacts/pipeline", atlasHandler.GetPipeline)
+admin.GET("/contacts/followups", atlasHandler.GetFollowups)
+admin.GET("/contacts/:id", atlasHandler.GetContact)
+admin.POST("/contacts", atlasHandler.CreateContact)
+admin.PUT("/contacts/:id", atlasHandler.UpdateContact)
+admin.DELETE("/contacts/:id", atlasHandler.DeleteContact)
+
+// Interactions
+admin.GET("/interactions", atlasHandler.ListInteractions)
+admin.GET("/interactions/today", atlasHandler.GetTodayInteractions)
+admin.GET("/interactions/stats", atlasHandler.GetInteractionStats)
+admin.GET("/contacts/:id/interactions", atlasHandler.GetContactInteractions)
+admin.POST("/interactions", atlasHandler.CreateInteraction)
+
+// Projects
+admin.GET("/projects", atlasHandler.ListProjects)
+admin.GET("/projects/pipeline", atlasHandler.GetProjectPipeline)
+admin.GET("/projects/revenue", atlasHandler.GetProjectRevenue)
+admin.GET("/projects/overdue", atlasHandler.GetOverdueProjects)
+admin.GET("/projects/:id", atlasHandler.GetProject)
+admin.POST("/projects", atlasHandler.CreateProject)
+admin.PUT("/projects/:id", atlasHandler.UpdateProject)
+
+// Courses
+admin.GET("/courses", atlasHandler.ListAtlasCourses)
+admin.GET("/courses/stats", atlasHandler.GetAtlasCourseStats)
+admin.POST("/courses", atlasHandler.CreateAtlasCourse)
+admin.PUT("/courses/:id", atlasHandler.UpdateAtlasCourse)
+admin.POST("/courses/:id/enroll", atlasHandler.EnrollStudent)
+
+// Agent Clients
+admin.GET("/agent-clients", atlasHandler.ListAgentClients)
+admin.GET("/agent-clients/active", atlasHandler.GetActiveAgentClients)
+admin.GET("/agent-clients/revenue", atlasHandler.GetAgentRevenue)
+admin.POST("/agent-clients", atlasHandler.CreateAgentClient)
+admin.PUT("/agent-clients/:id", atlasHandler.UpdateAgentClient)
+
+// Content
+admin.GET("/content", atlasHandler.ListContent)
+admin.GET("/content/stats", atlasHandler.GetContentStats)
+admin.POST("/content", atlasHandler.CreateContent)
+admin.PUT("/content/:id", atlasHandler.UpdateContent)
+
+// Products
+admin.GET("/products", atlasHandler.ListAtlasProducts)
+admin.GET("/products/stats", atlasHandler.GetAtlasProductStats)
+admin.POST("/products", atlasHandler.CreateAtlasProduct)
+admin.PUT("/products/:id", atlasHandler.UpdateAtlasProduct)
+
+// Revenue
+admin.GET("/revenue", atlasHandler.ListRevenue)
+admin.GET("/revenue/summary", atlasHandler.GetRevenueSummary)
+admin.GET("/revenue/weekly", atlasHandler.GetWeeklyRevenue)
+admin.GET("/revenue/monthly", atlasHandler.GetMonthlyRevenue)
+admin.GET("/revenue/by-stream", atlasHandler.GetRevenueByStream)
+admin.GET("/revenue/mrr", atlasHandler.GetMRR)
+admin.POST("/revenue", atlasHandler.CreateRevenue)
+
+// Daily Logs
+admin.GET("/logs", atlasHandler.ListDailyLogs)
+admin.GET("/logs/today", atlasHandler.GetTodayLog)
+admin.GET("/logs/streak", atlasHandler.GetStreak)
+admin.POST("/logs", atlasHandler.CreateOrUpdateLog)
+
+// Website Tasks
+admin.GET("/websites", atlasHandler.ListWebsiteTasks)
+admin.POST("/websites", atlasHandler.CreateWebsiteTask)
+admin.PUT("/websites/:id", atlasHandler.UpdateWebsiteTask)
+```
+
+That's **64 endpoints** covering every aspect of the business.
+
+---
+
+## Part 2: The MCP Server {#part-2-mcp-server}
+
+This is where it gets interesting. We'll use the [mcp-go](https://github.com/mark3labs/mcp-go) library to create a Streamable HTTP MCP server that mounts directly on our existing Gin API.
+
+### Step 4: Set Up the MCP Server with mcp-go {#step-4-mcp-setup}
+
+First, add the dependency:
+
+```bash
+go get github.com/mark3labs/mcp-go
+```
+
+Create `routes/mcp.go`:
+
+```go
+package routes
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/http"
+    "strconv"
+    "time"
+
+    "github.com/gin-gonic/gin"
+    "github.com/mark3labs/mcp-go/mcp"
+    mcpserver "github.com/mark3labs/mcp-go/server"
+    "gorm.io/gorm"
+
+    "yourapp/internal/models"
+)
+
+type mcpContextKey string
+
+const mcpAPIKeyCtx mcpContextKey = "apiKey"
+
+func MountMCP(r *gin.Engine, db *gorm.DB, apiKey string) {
+    // Create the MCP server
+    s := mcpserver.NewMCPServer("atlas-crm", "1.0.0",
+        mcpserver.WithToolCapabilities(true),
+    )
+
+    // Register all tools
+    registerMCPTools(s, db)
+
+    // Configure HTTP transport
+    opts := []mcpserver.StreamableHTTPOption{
+        mcpserver.WithEndpointPath("/mcp"),
+    }
+
+    // Add API key authentication if configured
+    if apiKey != "" {
+        opts = append(opts, mcpserver.WithHTTPContextFunc(
+            func(ctx context.Context, r *http.Request) context.Context {
+                key := r.Header.Get("Authorization")
+                if key == "" {
+                    key = r.Header.Get("X-API-Key")
+                }
+                // Strip "Bearer " prefix
+                if len(key) > 7 && key[:7] == "Bearer " {
+                    key = key[7:]
+                }
+                return context.WithValue(ctx, mcpAPIKeyCtx, key)
+            },
+        ))
+    }
+
+    // Create the HTTP server and mount on Gin
+    httpServer := mcpserver.NewStreamableHTTPServer(s, opts...)
+    r.Any("/mcp", gin.WrapH(httpServer))
+
+    if apiKey != "" {
+        log.Println("ATLAS CRM MCP server mounted at /mcp (API key secured)")
+    } else {
+        log.Println("ATLAS CRM MCP server mounted at /mcp (WARNING: no API key)")
+    }
+}
+```
+
+**Key insight:** `gin.WrapH(httpServer)` mounts the MCP's `http.Handler` directly on the Gin router. No separate port, no reverse proxy config — it lives at the same domain as your API. The MCP protocol handles its own request/response format over HTTP POST.
+
+### Step 5: Register MCP Tools {#step-5-mcp-tools}
+
+Each tool needs a name, description, parameter definitions, and a handler function:
+
+```go
+func registerMCPTools(s *mcpserver.MCPServer, db *gorm.DB) {
+    apiKey := "" // Handlers validate from context
+
+    // Dashboard
+    s.AddTool(mcp.NewTool("getDashboard",
+        mcp.WithDescription("Get ATLAS CRM dashboard with aggregated KPIs"),
+    ), mcpGetDashboard(db, apiKey))
+
+    // Contacts
+    s.AddTool(mcp.NewTool("createContact",
+        mcp.WithDescription("Create a new contact in ATLAS CRM"),
+        mcp.WithString("name", mcp.Required(), mcp.Description("Full name")),
+        mcp.WithString("email", mcp.Description("Email")),
+        mcp.WithString("type", mcp.Description("prospect, client, student, agent_client, partner")),
+        mcp.WithString("source", mcp.Description("youtube, linkedin, tiktok, referral, cold_outreach, website, gumroad")),
+        mcp.WithString("company", mcp.Description("Company")),
+        mcp.WithString("role", mcp.Description("Role")),
+        mcp.WithString("phone", mcp.Description("Phone")),
+        mcp.WithString("linkedin_url", mcp.Description("LinkedIn URL")),
+        mcp.WithString("notes", mcp.Description("Notes")),
+        mcp.WithNumber("deal_value", mcp.Description("Deal value")),
+        mcp.WithString("currency", mcp.Description("Currency (default: UGX)")),
+    ), mcpCreateContact(db, apiKey))
+
+    s.AddTool(mcp.NewTool("updateContactStatus",
+        mcp.WithDescription("Update contact status"),
+        mcp.WithNumber("id", mcp.Required(), mcp.Description("Contact ID")),
+        mcp.WithString("status", mcp.Required(),
+            mcp.Description("new, contacted, replied, call_booked, proposal_sent, won, lost, churned")),
+    ), mcpUpdateContactStatus(db, apiKey))
+
+    s.AddTool(mcp.NewTool("getContactsPipeline",
+        mcp.WithDescription("Get contacts grouped by status"),
+    ), mcpGetContactsPipeline(db, apiKey))
+
+    s.AddTool(mcp.NewTool("getColdLeads",
+        mcp.WithDescription("Get leads not contacted in X days"),
+        mcp.WithNumber("days", mcp.Description("Days since last contact (default: 5)")),
+    ), mcpGetColdLeads(db, apiKey))
+
+    s.AddTool(mcp.NewTool("getFollowupsDueToday",
+        mcp.WithDescription("Get contacts with followups due today"),
+    ), mcpGetFollowupsDueToday(db, apiKey))
+
+    // Interactions
+    s.AddTool(mcp.NewTool("logInteraction",
+        mcp.WithDescription("Log an interaction with a contact"),
+        mcp.WithNumber("contact_id", mcp.Required(), mcp.Description("Contact ID")),
+        mcp.WithString("type", mcp.Required(),
+            mcp.Description("email_sent, email_received, call, meeting, linkedin_dm, whatsapp, note")),
+        mcp.WithString("channel", mcp.Description("gmail, linkedin, whatsapp, zoom, in_person")),
+        mcp.WithString("subject", mcp.Description("Subject")),
+        mcp.WithString("body", mcp.Description("Body")),
+        mcp.WithString("direction", mcp.Description("inbound, outbound")),
+    ), mcpLogInteraction(db, apiKey))
+
+    // Projects
+    s.AddTool(mcp.NewTool("createProject",
+        mcp.WithDescription("Create a new project/deal"),
+        mcp.WithString("name", mcp.Required(), mcp.Description("Project name")),
+        mcp.WithNumber("contact_id", mcp.Description("Contact ID")),
+        mcp.WithNumber("deal_value", mcp.Description("Deal value")),
+        mcp.WithString("currency", mcp.Description("Currency (default: UGX)")),
+    ), mcpCreateProject(db, apiKey))
+
+    s.AddTool(mcp.NewTool("getProjectPipeline",
+        mcp.WithDescription("Get projects grouped by stage"),
+    ), mcpGetProjectPipeline(db, apiKey))
+
+    // Revenue
+    s.AddTool(mcp.NewTool("recordRevenue",
+        mcp.WithDescription("Record a revenue entry"),
+        mcp.WithString("stream", mcp.Required(),
+            mcp.Description("project, course, source_code, starter_kit, agent_setup, agent_monthly, training, consulting")),
+        mcp.WithNumber("amount", mcp.Required(), mcp.Description("Amount")),
+        mcp.WithString("currency", mcp.Description("Currency (default: UGX)")),
+        mcp.WithString("description", mcp.Description("Description")),
+        mcp.WithString("payment_method", mcp.Description("mobile_money, bank_transfer, stripe, gumroad, cash")),
+        mcp.WithNumber("contact_id", mcp.Description("Contact ID")),
+    ), mcpRecordRevenue(db, apiKey))
+
+    s.AddTool(mcp.NewTool("getWeeklyRevenue",
+        mcp.WithDescription("Get revenue for this week"),
+    ), mcpGetWeeklyRevenue(db, apiKey))
+
+    s.AddTool(mcp.NewTool("getMonthlyRevenue",
+        mcp.WithDescription("Get revenue for this month"),
+    ), mcpGetMonthlyRevenue(db, apiKey))
+
+    s.AddTool(mcp.NewTool("getRevenueByStream",
+        mcp.WithDescription("Get revenue breakdown by stream"),
+    ), mcpGetRevenueByStream(db, apiKey))
+
+    s.AddTool(mcp.NewTool("getMRR",
+        mcp.WithDescription("Get monthly recurring revenue from agent clients"),
+    ), mcpGetMRR(db, apiKey))
+
+    // Daily Logs
+    s.AddTool(mcp.NewTool("logDailyActivity",
+        mcp.WithDescription("Create or update today's daily log"),
+        mcp.WithNumber("emails_sent", mcp.Description("Emails sent")),
+        mcp.WithNumber("prospects_found", mcp.Description("Prospects found")),
+        mcp.WithNumber("revenue_today", mcp.Description("Revenue today")),
+        mcp.WithString("notes", mcp.Description("Notes")),
+    ), mcpLogDailyActivity(db, apiKey))
+
+    s.AddTool(mcp.NewTool("getStreak",
+        mcp.WithDescription("Get consecutive days with activity"),
+    ), mcpGetStreak(db, apiKey))
+}
+```
+
+### Step 6: Implement Tool Handlers {#step-6-tool-handlers}
+
+Each tool handler follows the same pattern: validate API key → extract args → query/mutate database → return JSON result.
+
+```go
+// --- Auth helper ---
+func mcpValidateKey(ctx context.Context, apiKey string) error {
+    if apiKey == "" {
+        return nil // no auth required
+    }
+    key, _ := ctx.Value(mcpAPIKeyCtx).(string)
+    if key != apiKey {
+        return fmt.Errorf("unauthorized: invalid API key")
+    }
+    return nil
+}
+
+// --- Result helpers ---
+func mcpJSON(v interface{}) *mcp.CallToolResult {
+    b, _ := json.MarshalIndent(v, "", "  ")
+    return mcp.NewToolResultText(string(b))
+}
+
+func mcpErr(msg string) *mcp.CallToolResult {
+    return mcp.NewToolResultError(msg)
+}
+
+func mcpArgs(req mcp.CallToolRequest) map[string]interface{} {
+    if req.Params.Arguments == nil {
+        return map[string]interface{}{}
+    }
+    if m, ok := req.Params.Arguments.(map[string]interface{}); ok {
+        return m
+    }
+    b, _ := json.Marshal(req.Params.Arguments)
+    var m map[string]interface{}
+    json.Unmarshal(b, &m)
+    return m
+}
+
+func mcpStr(args map[string]interface{}, key string) string {
+    if v, ok := args[key]; ok {
+        return fmt.Sprintf("%v", v)
+    }
+    return ""
+}
+
+func mcpFloat(args map[string]interface{}, key string) float64 {
+    if v, ok := args[key]; ok {
+        switch n := v.(type) {
+        case float64:
+            return n
+        case string:
+            f, _ := strconv.ParseFloat(n, 64)
+            return f
+        }
+    }
+    return 0
+}
+
+func mcpUint(args map[string]interface{}, key string) uint {
+    return uint(mcpFloat(args, key))
+}
+```
+
+Now the actual tool handlers:
+
+```go
+func mcpGetDashboard(db *gorm.DB, apiKey string) mcpserver.ToolHandlerFunc {
+    return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+        if err := mcpValidateKey(ctx, apiKey); err != nil {
+            return mcpErr(err.Error()), nil
+        }
+        var contacts, projects, agents int64
+        db.Model(&models.AtlasContact{}).Count(&contacts)
+        db.Model(&models.AtlasProject{}).Count(&projects)
+        db.Model(&models.AtlasAgentClient{}).Count(&agents)
+
+        now := time.Now()
+        monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+        var monthlyRev, mrr float64
+        db.Model(&models.AtlasRevenueEntry{}).
+            Where("payment_date >= ?", monthStart).
+            Select("COALESCE(SUM(amount), 0)").Scan(&monthlyRev)
+        db.Model(&models.AtlasAgentClient{}).
+            Where("status = ?", "active").
+            Select("COALESCE(SUM(monthly_fee), 0)").Scan(&mrr)
+
+        today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+        var followups int64
+        db.Model(&models.AtlasContact{}).
+            Where("next_followup_at >= ? AND next_followup_at < ?", today, today.AddDate(0, 0, 1)).
+            Count(&followups)
+
+        return mcpJSON(map[string]interface{}{
+            "contacts": contacts, "projects": projects, "agent_clients": agents,
+            "monthly_revenue": monthlyRev, "mrr": mrr, "followups_due": followups,
+        }), nil
+    }
+}
+
+func mcpCreateContact(db *gorm.DB, apiKey string) mcpserver.ToolHandlerFunc {
+    return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+        if err := mcpValidateKey(ctx, apiKey); err != nil {
+            return mcpErr(err.Error()), nil
+        }
+        args := mcpArgs(req)
+        c := models.AtlasContact{
+            TenantID: 1, Name: mcpStr(args, "name"), Email: mcpStr(args, "email"),
+            Phone: mcpStr(args, "phone"), LinkedinURL: mcpStr(args, "linkedin_url"),
+            Company: mcpStr(args, "company"), Role: mcpStr(args, "role"),
+            Type: mcpStr(args, "type"), Source: mcpStr(args, "source"),
+            Notes: mcpStr(args, "notes"), DealValue: mcpFloat(args, "deal_value"),
+            Currency: mcpStr(args, "currency"), Status: "new",
+        }
+        if c.Currency == "" { c.Currency = "UGX" }
+        if c.Type == "" { c.Type = "prospect" }
+        if err := db.Create(&c).Error; err != nil {
+            return mcpErr("Failed: " + err.Error()), nil
+        }
+        return mcpJSON(c), nil
+    }
+}
+
+func mcpRecordRevenue(db *gorm.DB, apiKey string) mcpserver.ToolHandlerFunc {
+    return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+        if err := mcpValidateKey(ctx, apiKey); err != nil {
+            return mcpErr(err.Error()), nil
+        }
+        args := mcpArgs(req)
+        now := time.Now()
+        e := models.AtlasRevenueEntry{
+            TenantID: 1, Stream: mcpStr(args, "stream"),
+            Amount: mcpFloat(args, "amount"), Currency: mcpStr(args, "currency"),
+            Description: mcpStr(args, "description"),
+            PaymentMethod: mcpStr(args, "payment_method"), PaymentDate: &now,
+        }
+        if cid := mcpUint(args, "contact_id"); cid > 0 {
+            e.ContactID = &cid
+        }
+        if e.Currency == "" { e.Currency = "UGX" }
+        if err := db.Create(&e).Error; err != nil {
+            return mcpErr("Failed: " + err.Error()), nil
+        }
+        return mcpJSON(e), nil
+    }
+}
+
+func mcpGetStreak(db *gorm.DB, apiKey string) mcpserver.ToolHandlerFunc {
+    return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+        if err := mcpValidateKey(ctx, apiKey); err != nil {
+            return mcpErr(err.Error()), nil
+        }
+        var logs []models.AtlasDailyLog
+        db.Order("date DESC").Limit(365).Find(&logs)
+        streak := 0
+        today := time.Now()
+        today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
+        for i, log := range logs {
+            expected := today.AddDate(0, 0, -i)
+            logDate := time.Date(log.Date.Year(), log.Date.Month(), log.Date.Day(), 0, 0, 0, 0, log.Date.Location())
+            if logDate.Equal(expected) {
+                streak++
+            } else {
+                break
+            }
+        }
+        return mcpJSON(map[string]interface{}{"streak": streak}), nil
+    }
+}
+```
+
+### Step 7: Mount on Your Existing API {#step-7-mount}
+
+In your main `routes.go` setup function, call `MountMCP`:
+
+```go
+func SetupRoutes(r *gin.Engine, db *gorm.DB, cfg *config.Config) {
+    // ... existing route setup ...
+
+    // Mount MCP server at /mcp
+    MountMCP(r, db, cfg.AtlasAPIKey)
+}
+```
+
+Add the `ATLAS_API_KEY` to your config/env:
+
+```bash
+ATLAS_API_KEY=atlas_sk_a7f3e9b2c1d4f8e6a0b5c3d7e9f1a2b4c6d8e0f2
+```
+
+That's it. Your MCP server is now live at `https://api.yoursite.com/mcp` — no separate port, no extra process, no firewall changes.
+
+---
+
+## Part 3: Frontend — Next.js (App Router) {#part-3-frontend}
+
+### Step 8: Define TypeScript Types {#step-8-types}
+
+Create `packages/shared/types/atlas.ts`:
+
+```typescript
+// --- Contacts ---
+
+export type AtlasContactType =
+  | "prospect"
+  | "client"
+  | "student"
+  | "agent_client"
+  | "partner";
+export type AtlasContactStatus =
+  | "new"
+  | "contacted"
+  | "replied"
+  | "call_booked"
+  | "proposal_sent"
+  | "won"
+  | "lost"
+  | "churned";
+export type AtlasSource =
+  | "youtube"
+  | "linkedin"
+  | "tiktok"
+  | "referral"
+  | "cold_outreach"
+  | "website"
+  | "gumroad";
+
+export interface AtlasContact {
+  id: number;
+  tenant_id: number;
+  name: string;
+  email: string;
+  phone: string;
+  linkedin_url: string;
+  company: string;
+  role: string;
+  location: string;
+  source: AtlasSource;
+  type: AtlasContactType;
+  status: AtlasContactStatus;
+  icp_profile: string;
+  notes: string;
+  tags: string[] | null;
+  last_contacted_at: string | null;
+  next_followup_at: string | null;
+  deal_value: number;
+  currency: string;
+  created_at: string;
+  updated_at: string;
+  interactions?: AtlasInteraction[];
+  projects?: AtlasProject[];
+  interaction_count?: number;
+  project_count?: number;
+}
+
+// --- Interactions ---
+
+export type AtlasInteractionType =
+  | "email_sent"
+  | "email_received"
+  | "call"
+  | "meeting"
+  | "linkedin_dm"
+  | "whatsapp"
+  | "note";
+export type AtlasChannel =
+  | "gmail"
+  | "linkedin"
+  | "whatsapp"
+  | "zoom"
+  | "in_person";
+export type AtlasDirection = "inbound" | "outbound";
+
+export interface AtlasInteraction {
+  id: number;
+  contact_id: number;
+  type: AtlasInteractionType;
+  channel: AtlasChannel;
+  subject: string;
+  body: string;
+  direction: AtlasDirection;
+  status: string;
+  created_at: string;
+  contact?: AtlasContact;
+}
+
+// --- Projects ---
+
+export type AtlasProjectStatus =
+  | "discovery"
+  | "proposal_sent"
+  | "negotiation"
+  | "won"
+  | "in_progress"
+  | "delivered"
+  | "invoiced"
+  | "paid"
+  | "lost";
+export type AtlasProjectStage =
+  | "lead"
+  | "qualified"
+  | "proposal"
+  | "closing"
+  | "won"
+  | "lost";
+
+export interface AtlasProject {
+  id: number;
+  contact_id: number | null;
+  name: string;
+  description: string;
+  status: AtlasProjectStatus;
+  stage: AtlasProjectStage;
+  deal_value: number;
+  currency: string;
+  upfront_percentage: number;
+  upfront_paid: boolean;
+  final_paid: boolean;
+  tech_stack: string[] | null;
+  start_date: string | null;
+  deadline: string | null;
+  contract_signed: boolean;
+  repo_url: string;
+  created_at: string;
+  updated_at: string;
+  contact?: AtlasContact;
+}
+
+// --- Revenue ---
+
+export type AtlasRevenueStream =
+  | "project"
+  | "course"
+  | "source_code"
+  | "starter_kit"
+  | "agent_setup"
+  | "agent_monthly"
+  | "training"
+  | "consulting";
+
+export interface AtlasRevenueEntry {
+  id: number;
+  stream: AtlasRevenueStream;
+  amount: number;
+  currency: string;
+  description: string;
+  payment_method: string;
+  payment_date: string | null;
+  contact_id: number | null;
+  created_at: string;
+  contact?: AtlasContact;
+}
+
+// --- Daily Log ---
+
+export interface AtlasDailyLog {
+  id: number;
+  date: string;
+  emails_sent: number;
+  emails_received: number;
+  prospects_found: number;
+  students_enrolled: number;
+  revenue_today: number;
+  notes: string;
+  created_at: string;
+}
+```
+
+Export from your shared types index:
+
+```typescript
+// packages/shared/types/index.ts
+export * from "./atlas";
+```
+
+### Step 9: Build React Query Hooks {#step-9-hooks}
+
+Create `hooks/use-atlas.ts`. This uses TanStack Query (React Query) with an API client and Sonner toasts:
+
+```typescript
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/lib/api-client";
+import { toast } from "sonner";
+import type {
+  AtlasContact,
+  AtlasInteraction,
+  AtlasProject,
+  AtlasRevenueEntry,
+  AtlasDailyLog,
+} from "@repo/shared/types";
+
+// --- Dashboard ---
+
+export function useAtlasDashboard() {
+  return useQuery({
+    queryKey: ["atlas", "dashboard"],
+    queryFn: () => apiClient.get("/atlas/dashboard").then((r) => r.data.data),
+  });
+}
+
+// --- Contacts ---
+
+export function useAtlasContacts(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ["atlas", "contacts", params],
+    queryFn: () =>
+      apiClient.get("/atlas/contacts", { params }).then((r) => r.data),
+  });
+}
+
+export function useAtlasContact(id: number | string) {
+  return useQuery({
+    queryKey: ["atlas", "contacts", id],
+    queryFn: () =>
+      apiClient
+        .get(`/atlas/contacts/${id}`)
+        .then((r) => r.data.data as AtlasContact),
+    enabled: !!id,
+  });
+}
+
+export function useCreateAtlasContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<AtlasContact>) =>
+      apiClient.post("/atlas/contacts", data).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["atlas"] });
+      toast.success("Contact created");
+    },
+    onError: () => toast.error("Failed to create contact"),
+  });
+}
+
+export function useUpdateAtlasContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: Partial<AtlasContact> & { id: number }) =>
+      apiClient.put(`/atlas/contacts/${id}`, data).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["atlas"] });
+      toast.success("Contact updated");
+    },
+    onError: () => toast.error("Failed to update contact"),
+  });
+}
+
+export function useDeleteAtlasContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiClient.delete(`/atlas/contacts/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["atlas"] });
+      toast.success("Contact deleted");
+    },
+    onError: () => toast.error("Failed to delete contact"),
+  });
+}
+
+// --- Interactions ---
+
+export function useAtlasContactInteractions(contactId: number | string) {
+  return useQuery({
+    queryKey: ["atlas", "interactions", contactId],
+    queryFn: () =>
+      apiClient
+        .get(`/atlas/contacts/${contactId}/interactions`)
+        .then((r) => r.data.data as AtlasInteraction[]),
+    enabled: !!contactId,
+  });
+}
+
+export function useCreateAtlasInteraction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<AtlasInteraction>) =>
+      apiClient.post("/atlas/interactions", data).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["atlas"] });
+      toast.success("Interaction logged");
+    },
+    onError: () => toast.error("Failed to log interaction"),
+  });
+}
+
+// --- Projects ---
+
+export function useAtlasProjects(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: ["atlas", "projects", params],
+    queryFn: () =>
+      apiClient.get("/atlas/projects", { params }).then((r) => r.data),
+  });
+}
+
+export function useCreateAtlasProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<AtlasProject>) =>
+      apiClient.post("/atlas/projects", data).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["atlas"] });
+      toast.success("Project created");
+    },
+    onError: () => toast.error("Failed to create project"),
+  });
+}
+
+// --- Revenue ---
+
+export function useCreateAtlasRevenue() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<AtlasRevenueEntry>) =>
+      apiClient.post("/atlas/revenue", data).then((r) => r.data.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["atlas"] });
+      toast.success("Revenue recorded");
+    },
+    onError: () => toast.error("Failed to record revenue"),
+  });
+}
+```
+
+**Pattern:** Every hook follows `useQuery` for reads, `useMutation` for writes. On success, invalidate `["atlas"]` queries so the dashboard refreshes automatically. Sonner toasts give instant feedback.
+
+### Step 10: Build the Admin UI {#step-10-ui}
+
+The ATLAS admin page uses a tabbed layout with 10 tabs. Here's the structure:
+
+```typescript
+"use client";
+
+import { useState } from "react";
+import {
+  Users, DollarSign, TrendingUp, Briefcase, BookOpen,
+  FileText, Package, BarChart3, CalendarCheck, Globe, Search,
+} from "lucide-react"; // or your icon library
+import {
+  useAtlasDashboard,
+  useAtlasContacts,
+  useCreateAtlasContact,
+  useDeleteAtlasContact,
+  // ... other hooks
+} from "@/hooks/use-atlas";
+
+const TABS = [
+  { key: "dashboard", label: "Dashboard", icon: BarChart3 },
+  { key: "contacts",  label: "Contacts",  icon: Users },
+  { key: "projects",  label: "Projects",  icon: Briefcase },
+  { key: "courses",   label: "Courses",   icon: BookOpen },
+  { key: "agents",    label: "AI Agents",  icon: Users },
+  { key: "content",   label: "Content",   icon: FileText },
+  { key: "products",  label: "Products",  icon: Package },
+  { key: "revenue",   label: "Revenue",   icon: DollarSign },
+  { key: "daily",     label: "Daily Ops", icon: CalendarCheck },
+  { key: "websites",  label: "Websites",  icon: Globe },
+];
+
+export default function AtlasPage() {
+  const [tab, setTab] = useState("dashboard");
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">ATLAS CRM</h1>
+
+      {/* Tab navigation */}
+      <div className="flex gap-1 overflow-x-auto border-b border-border pb-1">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm rounded-t-lg transition-colors ${
+              tab === t.key
+                ? "bg-accent/10 text-accent border-b-2 border-accent"
+                : "text-text-secondary hover:text-foreground"
+            }`}
+          >
+            <t.icon className="h-4 w-4" />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {tab === "dashboard" && <DashboardTab />}
+      {tab === "contacts" && <ContactsTab />}
+      {tab === "projects" && <ProjectsTab />}
+      {/* ... other tabs */}
+    </div>
+  );
+}
+```
+
+**Dashboard tab** with KPI cards and pipeline:
+
+```typescript
+function DashboardTab() {
+  const { data, isLoading } = useAtlasDashboard();
+
+  if (isLoading) return <div>Loading...</div>;
+
+  return (
+    <div className="space-y-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KPICard title="Contacts" value={data?.contacts || 0} icon={Users} />
+        <KPICard title="Monthly Revenue" value={`$${data?.monthly_revenue || 0}`} icon={DollarSign} />
+        <KPICard title="MRR" value={`$${data?.mrr || 0}`} icon={TrendingUp} />
+        <KPICard title="Followups Due" value={data?.followups_due || 0} icon={CalendarCheck} />
+      </div>
+
+      {/* Pipeline */}
+      <div className="grid grid-cols-5 gap-3">
+        {["new", "contacted", "proposal_sent", "won", "lost"].map((status) => (
+          <div key={status} className="rounded-lg border border-border p-4 text-center">
+            <div className="text-2xl font-bold">{data?.pipeline?.[status] || 0}</div>
+            <div className="text-sm text-text-secondary">{status.replace(/_/g, " ")}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function KPICard({ title, value, icon: Icon }) {
+  return (
+    <div className="rounded-xl border border-border p-5">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm text-text-secondary">{title}</span>
+        <Icon className="h-5 w-5 text-accent" />
+      </div>
+      <div className="text-2xl font-bold">{value}</div>
+    </div>
+  );
+}
+```
+
+**Contacts tab** with search, filter, create modal, and table:
+
+```typescript
+function ContactsTab() {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+
+  const { data } = useAtlasContacts({
+    search, type: typeFilter, page: "1", page_size: "20",
+  });
+  const createContact = useCreateAtlasContact();
+  const deleteContact = useDeleteAtlasContact();
+
+  const contacts = data?.data || [];
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
+          <input
+            type="text"
+            placeholder="Search contacts..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-bg-secondary text-sm"
+          />
+        </div>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="rounded-lg border border-border px-3 py-2 text-sm"
+        >
+          <option value="">All Types</option>
+          <option value="prospect">Prospect</option>
+          <option value="client">Client</option>
+          <option value="student">Student</option>
+        </select>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm text-white"
+        >
+          <Plus className="h-4 w-4" /> Add Contact
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-xl border border-border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-bg-secondary">
+            <tr>
+              <th className="text-left px-4 py-3">Name</th>
+              <th className="text-left px-4 py-3">Company</th>
+              <th className="text-left px-4 py-3">Status</th>
+              <th className="text-left px-4 py-3">Source</th>
+              <th className="text-left px-4 py-3">Deal Value</th>
+              <th className="text-right px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {contacts.map((c: AtlasContact) => (
+              <tr key={c.id} className="border-t border-border hover:bg-bg-secondary/50">
+                <td className="px-4 py-3">
+                  <Link href={`/atlas/contacts/${c.id}`} className="text-accent hover:underline">
+                    {c.name}
+                  </Link>
+                  <div className="text-xs text-text-muted">{c.email}</div>
+                </td>
+                <td className="px-4 py-3">{c.company}</td>
+                <td className="px-4 py-3">
+                  <span className="px-2 py-0.5 rounded-full text-xs bg-accent/10 text-accent">
+                    {c.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3">{c.source}</td>
+                <td className="px-4 py-3">
+                  {c.deal_value > 0 ? `${c.currency} ${c.deal_value.toLocaleString()}` : "—"}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => deleteContact.mutate(c.id)}
+                    className="text-red-400 hover:text-red-300"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## Deployment & Configuration {#deployment}
+
+### Environment Variables
+
+Add these to your `.env` or deployment config:
+
+```bash
+# ATLAS CRM MCP Server
+ATLAS_API_KEY=atlas_sk_a7f3e9b2c1d4f8e6a0b5c3d7e9f1a2b4c6d8e0f2
+```
+
+Generate a secure key:
+
+```bash
+openssl rand -hex 32
+# → atlas_sk_a7f3e9b2c1d4f8e6a0b5c3d7e9f1a2b4c6d8e0f2
+```
+
+### Docker
+
+No changes to your Dockerfile needed — the MCP server is mounted on the same Gin router, same port, same process. GORM auto-migrates the `atlas_*` tables on startup.
+
+### Verify the MCP Server is Running
+
+```bash
+curl -X POST https://api.yoursite.com/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer atlas_sk_a7f3e9b2c1d4f8e6a0b5c3d7e9f1a2b4c6d8e0f2" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+You should get back a JSON response listing all 30+ tools.
+
+---
+
+## Connecting Claude Code to Your MCP Server {#connecting-claude}
+
+Add this to your Claude Code settings (`.claude/settings.json` or per-project):
+
+```json
+{
+  "mcpServers": {
+    "atlas-crm": {
+      "type": "http",
+      "url": "https://api.yoursite.com/mcp",
+      "headers": {
+        "Authorization": "Bearer atlas_sk_a7f3e9b2c1d4f8e6a0b5c3d7e9f1a2b4c6d8e0f2"
+      }
+    }
+  }
+}
+```
+
+Now you can talk to your CRM from the terminal:
+
+```
+You: "Show me my dashboard"
+Claude: [calls getDashboard] "You have 29 contacts, 5 active projects,
+        monthly revenue: UGX 3.2M, MRR from agents: UGX 800K, 3 followups due today."
+
+You: "Add a new prospect — Sarah from TechCorp, found on LinkedIn, deal value $5000"
+Claude: [calls createContact] "Created contact #43 — Sarah, TechCorp,
+        source: linkedin, deal value: $5,000, status: new."
+
+You: "Log that I sent her a cold email"
+Claude: [calls logInteraction] "Logged email_sent interaction for Sarah (contact #43).
+        Updated last_contacted_at."
+
+You: "Record $2000 revenue from the Acme project via bank transfer"
+Claude: [calls recordRevenue] "Recorded UGX 2,000 revenue — stream: project,
+        payment method: bank_transfer."
+
+You: "What's my streak?"
+Claude: [calls getStreak] "You've logged activity for 12 consecutive days!"
+```
+
+---
+
+## The Result {#the-result}
+
+ATLAS CRM gave me:
+
+- **12 database models** covering every aspect of my business
+- **64 REST API endpoints** for the admin dashboard
+- **30+ MCP tools** accessible from Claude Code
+- **10-tab admin UI** built with Next.js, React Query, and TypeScript
+- **Zero additional infrastructure** — runs on the same server, same port, same process
+
+The time savings: those 3-4 hours of daily admin work dropped to about 30 minutes. I tell Claude to check my pipeline, log interactions, record revenue, and track content — all from the terminal while I'm coding.
+
+**The MCP server is the key.** Without it, the CRM is just another web dashboard I have to open and click through. With it, every piece of business data is one natural language command away.
+
+---
+
+## Build Your Own
+
+The patterns in this guide apply to any domain:
+
+1. **Define your models** in Go with GORM tags
+2. **Build REST handlers** for your admin UI
+3. **Create MCP tools** for the operations you do most often
+4. **Mount on your existing API** with `gin.WrapH()`
+5. **Connect Claude Code** with a single JSON config
+
+The full source code is available at [github.com/desishub/gritcms](https://github.com/MUKE-coder/gritcms) — the ATLAS module is in `models/atlas.go`, `handlers/atlas.go`, `handlers/atlas_extended.go`, `routes/mcp.go`, and `apps/admin/app/(dashboard)/atlas/`.
+
+---
+
+_Built by JB at Desishub Technologies, Kampala. Powered by GritCMS, Go, Next.js, and Claude Code._
