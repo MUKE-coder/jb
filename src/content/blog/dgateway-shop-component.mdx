@@ -1,0 +1,272 @@
+---
+title: "DGateway Shop: Add E-Commerce with Mobile Money & Card Payments to Next.js"
+description: Learn how to install and use the DGateway Shop component to add a complete e-commerce experience with product catalog, shopping cart, and checkout supporting Mobile Money and Stripe card payments.
+image: https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=1200&h=630&fit=crop
+category: component
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+---
+
+Need to accept payments in your Next.js app? The **DGateway Shop** component gives you a complete e-commerce flow — product catalog, shopping cart, and checkout with **Mobile Money** and **Stripe card payments** — powered by [DGateway](https://dgateway.desispay.com).
+
+## What You Get
+
+- **Product catalog** at `/shop` with 6 sample products
+- **Shopping cart** — Zustand-powered with localStorage persistence
+- **Floating cart drawer** — Slide-out panel with quantity controls
+- **Checkout page** at `/checkout` with:
+  - Order summary with item details
+  - Mobile Money payment via DGateway/Iotec (UGX)
+  - Card payment via Stripe (USD)
+  - Real-time payment status polling
+  - Success and failure screens
+- **Server-side API routes** — Secure payment initiation (API key never exposed)
+- **Auto-installed packages** — `zustand`, `@stripe/react-stripe-js`, `@stripe/stripe-js`
+
+## Installation
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/dgateway-shop.json
+```
+
+### Set Up Environment Variables
+
+After installation, add your DGateway credentials to `.env.local`:
+
+```env
+DGATEWAY_API_URL='https://dgatewayapi.desispay.com'
+DGATEWAY_API_KEY='dgw_test_your_api_key_here'
+```
+
+Get your API key from the [DGateway Dashboard](https://dgateway.desispay.com).
+
+## Files Created
+
+```
+app/
+├── shop/
+│   └── page.tsx              # Product catalog page
+├── checkout/
+│   └── page.tsx              # Checkout with payment methods
+├── api/
+│   └── checkout/
+│       ├── route.ts          # POST - Initiate payment
+│       └── status/
+│           └── route.ts      # POST - Check payment status
+lib/
+├── dgateway.ts               # Server-side DGateway API client
+└── cart-store.ts              # Zustand cart store
+data/
+└── shop-products.ts          # Product catalog data
+components/
+└── cart-drawer.tsx            # Floating cart drawer
+```
+
+## Usage
+
+### Browse Products
+
+Visit `/shop` to see the product catalog. Each product card has:
+
+- Product image
+- Name and description
+- Price
+- "Add to Cart" button
+
+### Shopping Cart
+
+Click the floating cart icon (bottom-right) to open the cart drawer:
+
+- View all items with quantities
+- Increment/decrement quantities
+- Remove individual items
+- See total price
+- Clear entire cart
+- Proceed to checkout
+
+The cart persists across page reloads using localStorage.
+
+### Checkout Flow
+
+The checkout page at `/checkout` supports two payment methods:
+
+#### Mobile Money (Iotec)
+
+1. Select "Mobile Money" payment method
+2. Enter phone number with country code (e.g., `256771234567`)
+3. Click "Pay with Mobile Money"
+4. A payment prompt is sent to the phone
+5. User confirms on their device
+6. Page polls for completion and shows success/failure
+
+#### Card Payment (Stripe)
+
+1. Select "Card Payment"
+2. Stripe card form loads automatically
+3. Enter card details
+4. Click "Pay Now"
+5. Payment processes and shows success/failure
+
+## Architecture
+
+The payment flow follows a secure server-side pattern:
+
+```
+Browser                    Next.js Server              DGateway API
+  │                              │                          │
+  ├─ POST /api/checkout ────────►│                          │
+  │                              ├─ POST /v1/payments/collect ►│
+  │                              │◄──── { reference, ... } ──┤
+  │◄── { reference, ... } ──────┤                          │
+  │                              │                          │
+  │  (user confirms payment)     │                          │
+  │                              │                          │
+  ├─ POST /api/checkout/status ─►│                          │
+  │                              ├─ POST /v1/webhooks/verify ─►│
+  │                              │◄──── { status } ──────────┤
+  │◄── { status } ──────────────┤                          │
+```
+
+**Key security feature:** Your DGateway API key stays on the server. The browser never sees it.
+
+### DGateway API Client
+
+The `lib/dgateway.ts` file handles all communication with DGateway:
+
+```typescript
+import { collectPayment, verifyTransaction } from "@/lib/dgateway";
+
+// Initiate a payment
+const payment = await collectPayment({
+  amount: 37500,
+  currency: "UGX",
+  phone_number: "256771234567",
+  provider: "iotec",
+  description: "Order #1234",
+});
+
+// Check payment status
+const status = await verifyTransaction(payment.data.reference);
+// status.data.status: "pending" | "completed" | "failed"
+```
+
+### Cart Store
+
+The Zustand store in `lib/cart-store.ts` provides:
+
+```typescript
+import { useCartStore } from "@/lib/cart-store";
+
+const {
+  items,
+  addItem,
+  removeItem,
+  updateQuantity,
+  clearCart,
+  getCartTotalPrice,
+} = useCartStore();
+
+// Add a product
+addItem({
+  id: "1",
+  name: "Headphones",
+  price: 199.99,
+  image: "...",
+  quantity: 1,
+});
+
+// Get total
+const total = getCartTotalPrice(); // 199.99
+```
+
+## Customizing Products
+
+Edit `data/shop-products.ts` to replace the dummy products with your own:
+
+```typescript
+export const products = [
+  {
+    id: "1",
+    name: "Your Product",
+    description: "Product description here",
+    price: 49.99,
+    image: "https://example.com/product.jpg",
+    category: "Your Category",
+  },
+  // Add more products...
+];
+```
+
+## Payment Providers
+
+### DGateway + Iotec (Mobile Money)
+
+Supports Uganda Mobile Money providers:
+
+- MTN Mobile Money
+- Airtel Money
+
+**Currency:** UGX (Ugandan Shilling)
+
+The component includes an automatic USD → UGX conversion at the checkout (configurable rate).
+
+### Stripe (Card Payments)
+
+When you use Stripe through DGateway:
+
+- DGateway creates a Stripe PaymentIntent
+- Returns `client_secret` and `stripe_publishable_key`
+- The component mounts the Stripe Elements card form
+- Payment processes through Stripe's secure infrastructure
+
+**Currency:** USD
+
+No separate Stripe account setup needed — DGateway handles the Stripe integration.
+
+## Error Handling
+
+The component handles common scenarios:
+
+- **Network errors** — Shows "Is the DGateway server running?" message
+- **Validation errors** — Phone number validation before submission
+- **Payment failures** — Dedicated failure screen with retry option
+- **Timeout** — 60 polling attempts (5 minutes) before showing timeout message
+- **Empty cart** — Redirects to shop if cart is empty
+
+## Use Cases
+
+- **SaaS products** — Accept payments for subscriptions or one-time purchases
+- **Digital products** — Sell courses, templates, ebooks
+- **E-commerce MVPs** — Launch a store quickly with real payment processing
+- **African markets** — Accept Mobile Money payments (MTN, Airtel)
+- **Multi-currency** — Support both local currency (UGX) and international (USD)
+- **Marketplaces** — Add payment processing to a marketplace platform
+- **Donations** — Accept contributions via mobile money or card
+
+## Testing
+
+Use DGateway test credentials for development:
+
+```env
+DGATEWAY_API_URL='https://dgatewayapi.desispay.com'
+DGATEWAY_API_KEY='dgw_test_your_test_key_here'
+```
+
+Test phone numbers and card numbers are available in the [DGateway documentation](https://jb.desishub.com/blog/dgateway-integration-with-nextjs-guide).
+
+## Next Steps
+
+After installation:
+
+1. Replace dummy products with your real product data
+2. Set up DGateway production API key
+3. Add a Shop link to your navbar
+4. Connect to a database for order persistence
+5. Add email notifications for successful payments
+6. Implement webhook handling for production reliability
+
+Install it now:
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/dgateway-shop.json
+```

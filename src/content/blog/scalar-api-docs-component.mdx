@@ -1,0 +1,214 @@
+---
+title: "Scalar API Docs: Add Beautiful Interactive API Documentation to Your Next.js App"
+description: Learn how to install and use the Scalar API Docs component to instantly add interactive REST API documentation with OpenAPI 3.0 spec, dummy endpoints, and the Scalar reference UI to any Next.js project.
+image: https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=630&fit=crop
+category: component
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+---
+
+Every API needs great documentation. With the **Scalar API Docs** component, you can add beautiful, interactive API docs to your Next.js project in under 30 seconds — no manual setup required.
+
+## What You Get
+
+- **3 REST API endpoints** — Products, Categories, and Users (GET all + GET by ID)
+- **Full OpenAPI 3.0.3 specification** with schemas, examples, and descriptions
+- **Scalar API Reference UI** at `/api-docs` with a modern purple theme
+- **Dummy data** for immediate testing — 6 products, 4 categories, 5 users
+- **Auto-installed packages** — `@scalar/nextjs-api-reference` and `openapi-types`
+
+## Installation
+
+Run a single command in your Next.js project:
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/scalar-api-docs.json
+```
+
+That's it. The CLI will:
+
+1. Create all API route files
+2. Generate the OpenAPI spec and dummy data
+3. Set up the Scalar docs page
+4. Install required packages
+
+## Files Created
+
+After installation, you'll have these new files:
+
+```
+app/
+├── api-docs/
+│   └── route.ts              # Scalar reference UI
+├── api/
+│   ├── openapi/
+│   │   └── route.ts          # OpenAPI JSON endpoint
+│   ├── products/
+│   │   ├── route.ts          # GET /api/products
+│   │   └── [id]/
+│   │       └── route.ts      # GET /api/products/:id
+│   ├── categories/
+│   │   ├── route.ts          # GET /api/categories
+│   │   └── [id]/
+│   │       └── route.ts      # GET /api/categories/:id
+│   └── users/
+│       ├── route.ts          # GET /api/users
+│       └── [id]/
+│           └── route.ts      # GET /api/users/:id
+data/
+├── openapi.ts                # OpenAPI 3.0.3 specification
+└── dummy.ts                  # Dummy data for all endpoints
+```
+
+## Usage
+
+Start your dev server and visit `/api-docs`:
+
+```bash
+npm run dev
+# Open http://localhost:3000/api-docs
+```
+
+You'll see the Scalar UI with all your endpoints documented, complete with request/response schemas and a built-in API client to test requests directly from the browser.
+
+### Testing Endpoints
+
+Each endpoint works out of the box:
+
+```bash
+# Get all products
+curl http://localhost:3000/api/products
+
+# Get a single product
+curl http://localhost:3000/api/products/1
+
+# Get all categories
+curl http://localhost:3000/api/categories
+
+# Get all users
+curl http://localhost:3000/api/users
+```
+
+### Customizing the OpenAPI Spec
+
+Edit `data/openapi.ts` to update your API documentation:
+
+```typescript
+export const openApiSpec = {
+  openapi: "3.0.3",
+  info: {
+    title: "Your API Name",
+    description: "Your API description",
+    version: "1.0.0",
+  },
+  // Add your own endpoints here...
+};
+```
+
+### Adding Your Own Endpoints
+
+1. Create a new route in `app/api/your-endpoint/route.ts`
+2. Add the endpoint definition to `data/openapi.ts`
+3. The Scalar UI will automatically pick up the changes
+
+### Changing the Theme
+
+Edit `app/api-docs/route.ts` to change the Scalar theme:
+
+```typescript
+import { ApiReference } from "@scalar/nextjs-api-reference";
+
+export const GET = ApiReference({
+  url: "/api/openapi",
+  theme: "purple", // Options: alternate, default, moon, purple, solarized
+});
+```
+
+## Use Cases
+
+- **API prototyping** — Quickly scaffold a documented API before building the real backend
+- **Frontend development** — Give frontend teams working endpoints while the backend is in progress
+- **Learning & teaching** — Demonstrate REST API patterns with a real, interactive example
+- **Hackathons** — Ship a documented API in minutes
+- **Client demos** — Show professional API documentation alongside your product
+- **Internal tools** — Document internal APIs for your team
+
+## API Response Examples
+
+### Products
+
+```json
+{
+  "products": [
+    {
+      "id": 1,
+      "name": "Premium Headphones",
+      "description": "Noise-cancelling wireless headphones...",
+      "price": 199.99,
+      "category": "Electronics",
+      "image": "https://images.unsplash.com/..."
+    }
+  ],
+  "total": 6
+}
+```
+
+### Categories
+
+```json
+{
+  "categories": [
+    {
+      "id": 1,
+      "name": "Electronics",
+      "description": "Gadgets, devices, and tech accessories",
+      "productCount": 3
+    }
+  ],
+  "total": 4
+}
+```
+
+### Users
+
+```json
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "role": "admin",
+      "avatar": "https://i.pravatar.cc/150?u=john"
+    }
+  ],
+  "total": 5
+}
+```
+
+## Why Scalar?
+
+[Scalar](https://scalar.com) provides a modern alternative to Swagger UI with:
+
+- Clean, responsive design
+- Built-in API client for testing
+- Dark/light theme support
+- Multiple framework integrations
+- OpenAPI 3.x support
+- No configuration needed
+
+## Next Steps
+
+Once you've installed the component, consider:
+
+1. Replacing dummy data with your real database queries
+2. Adding POST, PUT, and DELETE endpoints
+3. Connecting to a real database (Prisma, Drizzle, etc.)
+4. Adding authentication middleware
+5. Deploying and sharing your API docs with your team
+
+Install it now:
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/scalar-api-docs.json
+```

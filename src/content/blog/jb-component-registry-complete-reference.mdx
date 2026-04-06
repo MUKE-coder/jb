@@ -1,6 +1,6 @@
 ---
 title: "JB Component Registry - Complete Reference for AI and Developers"
-description: "A unified reference for all 26 shadcn/ui-compatible components by JB. Install command, usage, props, and use cases for each. Designed for LLMs and developers."
+description: "A unified reference for all 30 shadcn/ui-compatible components by JB. Install command, usage, props, and use cases for each. Designed for LLMs and developers."
 image: /blog/jb-component-registry.webp
 category: components
 createdAt: 2026-04-06
@@ -9,7 +9,7 @@ updatedAt: 2026-04-06
 
 # JB Component Registry - Complete Reference
 
-**26 production-ready components. One install command each. All built on shadcn/ui.**
+**30 production-ready components. One install command each. All built on shadcn/ui.**
 
 This is the definitive reference for every component in the JB Component Registry. Designed for LLMs (Claude, GPT, Cursor), AI coding agents, and developers.
 
@@ -561,6 +561,141 @@ Drop-in consent banner
 
 ---
 
+## Full-Stack Blocks (4 components)
+
+### Scalar API Docs
+
+Beautiful interactive API documentation powered by Scalar. Includes 3 REST API endpoints (Products, Categories, Users), full OpenAPI 3.0.3 spec, and the Scalar reference UI.
+
+**Install:**
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/scalar-api-docs.json
+```
+
+**Usage:**
+
+```tsx
+// Visit /api-docs for the Scalar UI
+// Endpoints created automatically:
+// GET /api/products, GET /api/products/:id
+// GET /api/categories, GET /api/categories/:id
+// GET /api/users, GET /api/users/:id
+// GET /api/openapi (OpenAPI JSON spec)
+```
+
+**What's included:** 10 files — API routes, OpenAPI spec, dummy data, Scalar docs page
+
+**Packages installed:** `@scalar/nextjs-api-reference`, `openapi-types`
+
+**Use cases:** API prototyping, frontend development with mock endpoints, hackathons, client demos, internal API documentation
+
+---
+
+### MDX Blog
+
+File-based MDX blog system with syntax highlighting, copy-to-clipboard code blocks, and SEO metadata. Includes 3 sample blog posts.
+
+**Install:**
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/mdx-blog.json
+```
+
+**Usage:**
+
+```tsx
+// Create .mdx files in content/blog/ with frontmatter:
+// ---
+// title: My Post
+// description: A brief description
+// image: https://example.com/cover.jpg
+// createdAt: 2026-04-06
+// ---
+// Your markdown content here...
+
+// Pages created:
+// /blog - Blog listing with card grid
+// /blog/[slug] - Blog detail with prev/next navigation
+```
+
+**What's included:** 10 files — blog pages, MDX renderer, copy button, post card, types, data utils, 3 sample posts
+
+**Packages installed:** `next-mdx-remote`, `gray-matter`, `remark-gfm`, `rehype-pretty-code`, `rehype-slug`, `rehype-external-links`, `shiki`, `unist-util-visit`
+
+**Use cases:** Developer blogs, product blogs, documentation sites, tutorials, portfolio content
+
+---
+
+### DGateway Shop
+
+Complete e-commerce shop with product catalog, Zustand-powered cart, and checkout supporting Mobile Money (via DGateway/Iotec) and Card payments (via Stripe).
+
+**Install:**
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/dgateway-shop.json
+```
+
+**Usage:**
+
+```tsx
+// Pages created:
+// /shop - Product catalog with 6 sample products
+// /checkout - Payment checkout with Mobile Money & Stripe
+
+// Cart usage:
+import { useCartStore } from "@/lib/cart-store";
+const { items, addItem, removeItem, clearCart, getCartTotalPrice } =
+  useCartStore();
+
+// Environment variables required:
+// DGATEWAY_API_URL='https://dgatewayapi.desispay.com'
+// DGATEWAY_API_KEY='your_api_key'
+```
+
+**What's included:** 8 files — shop page, checkout page, API routes, DGateway client, Zustand cart store, product data, cart drawer
+
+**Packages installed:** `zustand`, `@stripe/react-stripe-js`, `@stripe/stripe-js`
+
+**Use cases:** E-commerce stores, digital product sales, SaaS checkout, African market payments (Mobile Money), multi-currency stores
+
+---
+
+### Website UI
+
+Complete marketing website template with 10 pages, responsive navbar, footer, i18n (EN/FR), dark mode, and full SEO.
+
+**Install:**
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/website-ui.json
+```
+
+**Usage:**
+
+```tsx
+// Pages created: /, /pricing, /docs, /docs/changelog, /developers,
+// /help, /contact, /hire-expert, /not-found, /error
+
+// Customize branding in config/site.ts:
+export const siteConfig = {
+  name: "Your Product",
+  description: "Your product description",
+  url: "https://yoursite.com",
+};
+
+// Translations in messages/en.json and messages/fr.json
+```
+
+**What's included:** 23 files — 10 pages, navbar, footer, structured data, site config, utils, i18n config, EN/FR translations, globals.css, sitemap, robots.txt
+
+**Packages installed:** `next-intl`, `lucide-react`, `class-variance-authority`, `clsx`, `tailwind-merge`
+
+**Use cases:** SaaS landing pages, startup websites, portfolio sites, product documentation, side projects, agency templates
+
+---
+
 ## Quick Reference - Install All
 
 ```bash
@@ -638,6 +773,18 @@ npx shadcn@latest add https://jb.desishub.com/r/consent-manager.json
 
 # Writing Effect (Apple-inspired)
 npx shadcn@latest add https://chanhdai.com/r/apple-hello-effect.json
+
+# Scalar API Docs
+npx shadcn@latest add https://ui-components.desishub.com/r/scalar-api-docs.json
+
+# MDX Blog
+npx shadcn@latest add https://ui-components.desishub.com/r/mdx-blog.json
+
+# DGateway Shop
+npx shadcn@latest add https://ui-components.desishub.com/r/dgateway-shop.json
+
+# Website UI
+npx shadcn@latest add https://ui-components.desishub.com/r/website-ui.json
 
 ```
 

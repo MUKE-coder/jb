@@ -1,0 +1,214 @@
+---
+title: "MDX Blog Component: Add a File-Based Blog to Your Next.js App"
+description: Learn how to install and use the MDX Blog component to add a complete blog system with syntax highlighting, copy-to-clipboard code blocks, SEO metadata, and prev/next navigation to any Next.js project.
+image: https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200&h=630&fit=crop
+category: component
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+---
+
+Need a blog for your Next.js app? The **MDX Blog** component gives you a complete file-based blog system with beautiful syntax highlighting, copy-to-clipboard code blocks, and SEO optimization — all from a single install command.
+
+## What You Get
+
+- **Blog listing page** at `/blog` with a responsive card grid
+- **Blog detail page** at `/blog/[slug]` with prev/next navigation
+- **MDX renderer** with `rehype-pretty-code` for GitHub-quality syntax highlighting
+- **Copy button** on every code block
+- **SEO metadata** — OpenGraph, Twitter cards, and JSON-LD schema per post
+- **3 sample blog posts** ready to go
+- **Auto-installed packages** — `next-mdx-remote`, `gray-matter`, `shiki`, `rehype-pretty-code`, and more
+
+## Installation
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/mdx-blog.json
+```
+
+The CLI handles everything — creates files, installs 7 packages, and adds the required CSS.
+
+## Files Created
+
+```
+app/
+├── blog/
+│   ├── page.tsx              # Blog listing page
+│   └── [slug]/
+│       └── page.tsx          # Blog detail page
+components/
+├── mdx.tsx                   # MDX renderer with plugins
+├── copy-button.tsx           # Code block copy button
+└── post-item.tsx             # Blog card component
+types/
+└── blog.ts                   # TypeScript interfaces
+data/
+└── blog.ts                   # Blog data functions
+content/
+└── blog/
+    ├── getting-started-with-nextjs.mdx
+    ├── understanding-typescript-generics.mdx
+    └── building-rest-apis-with-go.mdx
+```
+
+## Usage
+
+### Writing a Blog Post
+
+Create a new `.mdx` file in `content/blog/`:
+
+```mdx
+---
+title: My First Post
+description: A brief description for SEO and social cards
+image: https://example.com/cover.jpg
+category: tutorial
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+---
+
+Your blog content here. You can use **Markdown** and JSX.
+
+## Code Blocks with Syntax Highlighting
+
+\`\`\`typescript title="example.ts"
+function greet(name: string): string {
+return \`Hello, \${name}!\`;
+}
+\`\`\`
+```
+
+The file name becomes the URL slug: `my-first-post.mdx` → `/blog/my-first-post`.
+
+### Frontmatter Fields
+
+| Field         | Required | Description                                   |
+| ------------- | -------- | --------------------------------------------- |
+| `title`       | Yes      | Post title (used in page title and cards)     |
+| `description` | Yes      | Short description for SEO and social sharing  |
+| `image`       | Yes      | Cover image URL (used in cards and OpenGraph) |
+| `category`    | No       | Post category label                           |
+| `createdAt`   | Yes      | Publish date (YYYY-MM-DD format)              |
+| `updatedAt`   | No       | Last updated date                             |
+
+### Code Block Features
+
+The MDX renderer supports:
+
+**Syntax highlighting** for 100+ languages:
+
+```javascript
+const result = await fetch("/api/data");
+const json = await result.json();
+```
+
+**File name titles** — Add `title="filename.ts"` to your code fence:
+
+```typescript title="utils.ts"
+export function cn(...classes: string[]) {
+  return classes.filter(Boolean).join(" ");
+}
+```
+
+**Copy button** — Every code block gets a copy-to-clipboard button automatically.
+
+### Customizing the Blog Layout
+
+#### Blog Listing Page
+
+Edit `app/blog/page.tsx` to customize the listing. The default shows a grid of `PostItem` cards:
+
+```tsx
+import { getAllPosts } from "@/data/blog";
+import { PostItem } from "@/components/post-item";
+
+export default async function BlogPage() {
+  const posts = getAllPosts();
+
+  return (
+    <div className="container mx-auto py-16">
+      <h1>Blog</h1>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {posts.map((post) => (
+          <PostItem key={post.slug} post={post} />
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+#### Blog Detail Page
+
+The detail page at `app/blog/[slug]/page.tsx` renders MDX content with:
+
+- Full-width article layout
+- Cover image
+- Publication date
+- Category badge
+- Previous/Next post navigation
+- SEO metadata and JSON-LD
+
+### Adding the Blog Link to Your Navbar
+
+Add a link to `/blog` in your navigation:
+
+```tsx
+<Link href="/blog">Blog</Link>
+```
+
+## How It Works Under the Hood
+
+1. **File discovery** — `data/blog.ts` scans `content/blog/` for `.mdx` files using `fs`
+2. **Frontmatter parsing** — `gray-matter` extracts metadata from the YAML header
+3. **MDX rendering** — `next-mdx-remote` compiles MDX server-side with these plugins:
+   - `remark-gfm` — GitHub Flavored Markdown (tables, strikethrough, etc.)
+   - `rehype-pretty-code` — Syntax highlighting via Shiki with dual themes
+   - `rehype-slug` — Adds IDs to headings for anchor links
+   - `rehype-external-links` — Opens external links in new tabs
+4. **Copy button injection** — A custom rehype plugin adds a copy button to every `<pre>` block
+
+## Use Cases
+
+- **Developer portfolios** — Share technical articles with syntax-highlighted code
+- **Product blogs** — Announce features, publish changelogs, share tutorials
+- **Documentation sites** — Write guides with code examples
+- **Teaching platforms** — Create programming tutorials with runnable examples
+- **Company blogs** — Content marketing with full SEO optimization
+- **Personal blogs** — Write about anything with rich Markdown
+
+## SEO Features
+
+Each blog post automatically generates:
+
+- **Page title** — `{post.title} | Your Site`
+- **Meta description** — From frontmatter `description`
+- **OpenGraph tags** — Title, description, image, type
+- **Twitter card** — Large image summary card
+- **JSON-LD** — BlogPosting structured data for Google
+- **Canonical URL** — Auto-generated from slug
+
+## Styling
+
+The component includes CSS for `rehype-pretty-code` that integrates with your existing Tailwind setup. Code blocks feature:
+
+- Rounded corners with border
+- GitHub-style light/dark theme switching
+- File name header bar
+- Proper line spacing and font sizing
+
+## Next Steps
+
+After installation:
+
+1. Delete the 3 sample posts or keep them as reference
+2. Create your own posts in `content/blog/`
+3. Add a Blog link to your navbar
+4. Customize the card design in `components/post-item.tsx`
+5. Add categories/tags filtering if needed
+6. Set up RSS feed generation
+
+Install it now:
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/mdx-blog.json
+```

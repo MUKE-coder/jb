@@ -1,0 +1,419 @@
+---
+title: How to Create and Register a Shadcn Component Registry
+description: A step-by-step guide to building your own custom shadcn/ui component registry. Learn how to package reusable components, blocks, and full-page templates that others can install with a single CLI command.
+image: https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?w=1200&h=630&fit=crop
+category: tutorial
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+---
+
+The shadcn/ui registry system lets you package and distribute React components, blocks, hooks, and even full-page templates. Anyone can install your components with a single CLI command — no npm publishing required.
+
+In this guide, you'll learn how to create your own registry from scratch.
+
+## What is a Component Registry?
+
+A component registry is a collection of JSON files served over HTTP. Each JSON file describes a component: its source code, dependencies, target file paths, CSS variables, and more.
+
+When someone runs:
+
+```bash
+npx shadcn@latest add https://yoursite.com/r/my-component.json
+```
+
+The CLI downloads the JSON, extracts the files, installs dependencies, and places everything in the right directories — automatically.
+
+## Prerequisites
+
+- A Next.js project (or any framework that serves static files)
+- Node.js 18+
+- pnpm, npm, or yarn
+
+## Step 1: Initialize Your Project
+
+Start with an existing Next.js project or create a new one:
+
+```bash
+npx create-next-app@latest my-registry
+cd my-registry
+```
+
+Install the shadcn CLI as a dev dependency:
+
+```bash
+pnpm add -D shadcn@latest
+```
+
+## Step 2: Create components.json
+
+The `components.json` file configures how shadcn resolves paths in your project:
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.ts",
+    "css": "app/globals.css",
+    "baseColor": "zinc",
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  }
+}
+```
+
+## Step 3: Create Your First Component
+
+Create a directory structure following the convention `registry/[STYLE]/[NAME]/`:
+
+```
+registry/
+└── new-york/
+    └── hello-world/
+        └── hello-world.tsx
+```
+
+Write your component:
+
+```tsx
+// registry/new-york/hello-world/hello-world.tsx
+export function HelloWorld({ name }: { name: string }) {
+  return (
+    <div className="rounded-lg border p-4">
+      <h2 className="text-lg font-semibold">Hello, {name}!</h2>
+      <p className="text-muted-foreground">
+        Welcome to the component registry.
+      </p>
+    </div>
+  );
+}
+```
+
+## Step 4: Create registry.json
+
+The `registry.json` at your project root defines all registry items:
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "my-registry",
+  "homepage": "https://my-registry.vercel.app",
+  "items": [
+    {
+      "name": "hello-world",
+      "type": "registry:block",
+      "title": "Hello World",
+      "description": "A simple greeting component with customizable name prop.",
+      "files": [
+        {
+          "path": "registry/new-york/hello-world/hello-world.tsx",
+          "type": "registry:component",
+          "target": "components/hello-world.tsx"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Key Fields Explained
+
+| Field            | Purpose                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `name`           | Unique identifier (kebab-case)                                                        |
+| `type`           | Component type: `registry:block`, `registry:ui`, `registry:hook`, `registry:lib`      |
+| `files[].path`   | Source file path in YOUR repo                                                         |
+| `files[].type`   | File category: `registry:component`, `registry:page`, `registry:lib`, `registry:file` |
+| `files[].target` | Where the file goes in the USER's project                                             |
+
+## Step 5: Build the Registry
+
+Add a build script to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "registry:build": "shadcn build"
+  }
+}
+```
+
+Run it:
+
+```bash
+pnpm registry:build
+```
+
+This generates JSON files in `public/r/`:
+
+```
+public/r/
+├── registry.json        # Index of all items
+└── hello-world.json     # Component with embedded source code
+```
+
+## Step 6: Test Locally
+
+Start your dev server:
+
+```bash
+pnpm dev
+```
+
+In another terminal, test the installation in a separate project:
+
+```bash
+npx shadcn@latest add http://localhost:3000/r/hello-world.json
+```
+
+The CLI will download the component, install any dependencies, and create the file at the target path.
+
+## Adding Dependencies
+
+Components often need npm packages. Declare them in registry.json:
+
+```json
+{
+  "name": "fancy-button",
+  "type": "registry:block",
+  "dependencies": ["class-variance-authority", "clsx"],
+  "registryDependencies": ["button"],
+  "files": [...]
+}
+```
+
+- **`dependencies`** — npm packages to install (e.g., `"zod@^3.20.0"`)
+- **`registryDependencies`** — other registry items this component needs
+- **`devDependencies`** — dev-only npm packages
+
+## Multi-File Components (Blocks)
+
+Blocks can contain multiple files — pages, components, libs, and API routes:
+
+```json
+{
+  "name": "auth-page",
+  "type": "registry:block",
+  "title": "Authentication Page",
+  "description": "Login page with form validation and social providers.",
+  "dependencies": ["zod", "react-hook-form"],
+  "registryDependencies": ["button", "input", "card"],
+  "files": [
+    {
+      "path": "registry/new-york/auth-page/login-page.tsx",
+      "type": "registry:page",
+      "target": "app/login/page.tsx"
+    },
+    {
+      "path": "registry/new-york/auth-page/login-form.tsx",
+      "type": "registry:component",
+      "target": "components/login-form.tsx"
+    },
+    {
+      "path": "registry/new-york/auth-page/auth-utils.ts",
+      "type": "registry:lib",
+      "target": "lib/auth-utils.ts"
+    }
+  ]
+}
+```
+
+## Adding CSS Variables
+
+You can inject CSS variables that merge with the user's theme:
+
+```json
+{
+  "name": "my-theme",
+  "type": "registry:style",
+  "cssVars": {
+    "light": {
+      "brand": "oklch(0.6 0.2 260)",
+      "brand-foreground": "oklch(1 0 0)"
+    },
+    "dark": {
+      "brand": "oklch(0.7 0.15 255)",
+      "brand-foreground": "oklch(0.1 0 0)"
+    }
+  }
+}
+```
+
+## Adding Environment Variables
+
+For components that need API keys or config:
+
+```json
+{
+  "name": "payment-gateway",
+  "type": "registry:block",
+  "envVars": {
+    "PAYMENT_API_URL": "http://localhost:8080",
+    "PAYMENT_API_KEY": ""
+  },
+  "files": [...]
+}
+```
+
+The CLI will add these to the user's `.env.local` file.
+
+## Component Types Reference
+
+| Type             | Use Case                      | Example                    |
+| ---------------- | ----------------------------- | -------------------------- |
+| `registry:ui`    | Single reusable UI component  | Button, Input, Card        |
+| `registry:block` | Multi-file component/template | Login form, Dashboard      |
+| `registry:hook`  | React hook                    | useDebounce, useMediaQuery |
+| `registry:lib`   | Utility/helper library        | API client, formatters     |
+| `registry:page`  | Page template                 | Landing page, settings     |
+| `registry:file`  | Generic file                  | Config, MDX content        |
+| `registry:style` | Theme/style config            | Color schemes              |
+
+## File Types Reference
+
+Each file in the `files` array needs a `type`:
+
+| File Type            | Resolves To                 |
+| -------------------- | --------------------------- |
+| `registry:component` | `components/` directory     |
+| `registry:ui`        | `components/ui/` directory  |
+| `registry:hook`      | `hooks/` directory          |
+| `registry:lib`       | `lib/` directory            |
+| `registry:page`      | Uses `target` path directly |
+| `registry:file`      | Uses `target` path directly |
+
+## Real-World Example: MDX Blog Component
+
+Here's how we register a complete MDX blog system as a single installable block:
+
+```json
+{
+  "name": "mdx-blog",
+  "type": "registry:block",
+  "title": "MDX Blog",
+  "description": "File-based MDX blog with syntax highlighting and SEO.",
+  "dependencies": ["next-mdx-remote"],
+  "devDependencies": [
+    "gray-matter",
+    "remark-gfm",
+    "rehype-pretty-code",
+    "rehype-slug",
+    "shiki"
+  ],
+  "files": [
+    {
+      "path": "registry/new-york/mdx-blog/blog-types.ts",
+      "type": "registry:lib",
+      "target": "types/blog.ts"
+    },
+    {
+      "path": "registry/new-york/mdx-blog/blog-data.ts",
+      "type": "registry:lib",
+      "target": "data/blog.ts"
+    },
+    {
+      "path": "registry/new-york/mdx-blog/mdx.tsx",
+      "type": "registry:component",
+      "target": "components/mdx.tsx"
+    },
+    {
+      "path": "registry/new-york/mdx-blog/blog-page.tsx",
+      "type": "registry:page",
+      "target": "app/blog/page.tsx"
+    },
+    {
+      "path": "registry/new-york/mdx-blog/blog-slug-page.tsx",
+      "type": "registry:page",
+      "target": "app/blog/[slug]/page.tsx"
+    },
+    {
+      "path": "registry/new-york/mdx-blog/sample-post.mdx",
+      "type": "registry:file",
+      "target": "content/blog/sample-post.mdx"
+    }
+  ]
+}
+```
+
+Users install the entire blog with:
+
+```bash
+npx shadcn@latest add https://yoursite.com/r/mdx-blog.json
+```
+
+This creates all the files, installs `next-mdx-remote`, `gray-matter`, `rehype-pretty-code`, etc., and they have a working blog immediately.
+
+## Publishing Your Registry
+
+Deploy your project to any hosting platform (Vercel, Netlify, Cloudflare Pages). The `public/r/` files will be served as static JSON.
+
+Users install components using your domain:
+
+```bash
+npx shadcn@latest add https://yoursite.com/r/hello-world.json
+```
+
+### Namespaced Registries
+
+Users can add your registry as a namespace in their `components.json`:
+
+```json
+{
+  "registries": {
+    "@myorg": "https://yoursite.com/r/{name}.json"
+  }
+}
+```
+
+Then install with:
+
+```bash
+npx shadcn@latest add @myorg/hello-world
+```
+
+## Best Practices
+
+1. **Use clear descriptions** — They help AI assistants and developers discover your components
+2. **List all dependencies** — Don't assume the user has anything installed
+3. **Use `target` paths** — Always specify where files should go in the user's project
+4. **Keep components self-contained** — Minimize cross-component dependencies
+5. **Include sample data** — For data-driven components, include dummy data so they work immediately
+6. **Add environment variables** — Use `envVars` for API keys and config
+7. **Test the install flow** — Always test `npx shadcn@latest add` in a fresh project
+8. **Version your dependencies** — Use semver: `"zod@^3.20.0"`
+
+## Automating the Build
+
+If your registry files live alongside your app (like ours), create a copy script that syncs source files into the `registry/` directory before building:
+
+```json
+{
+  "scripts": {
+    "registry:build": "node scripts/copy-sources.mjs && shadcn build"
+  }
+}
+```
+
+This ensures the registry always reflects your latest code.
+
+## Summary
+
+The shadcn registry system is a powerful way to distribute components:
+
+1. **Create** components in `registry/[style]/[name]/`
+2. **Define** them in `registry.json` with metadata, files, and dependencies
+3. **Build** with `shadcn build` to generate `public/r/` JSON files
+4. **Deploy** to any static host
+5. **Share** the URL — users install with `npx shadcn@latest add [URL]`
+
+No npm publishing, no package maintenance, no version conflicts. Just JSON over HTTP.
+
+Happy building!

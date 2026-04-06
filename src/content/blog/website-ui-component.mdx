@@ -1,0 +1,257 @@
+---
+title: "Website UI: Scaffold a Complete Marketing Website in Seconds"
+description: Learn how to install and use the Website UI component to add a full marketing website with landing page, pricing, docs, i18n, dark mode, SEO, and responsive navbar/footer to any Next.js project.
+image: https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&h=630&fit=crop
+category: component
+createdAt: 2026-04-06
+updatedAt: 2026-04-06
+---
+
+Starting a new SaaS product or portfolio site? The **Website UI** component drops a complete marketing website into your Next.js project — landing page, pricing, documentation, help center, contact form, and more — with i18n, dark mode, and SEO built in.
+
+## What You Get
+
+### Pages (10)
+
+- **Home** — Hero section, features grid, pain points, pricing preview, testimonials, CTA
+- **Pricing** — Plan comparison with feature lists and toggle
+- **Docs** — Documentation/features overview
+- **Changelog** — Version history timeline
+- **Developers** — API and developer resources
+- **Help** — FAQ accordion and support center
+- **Contact** — Contact form with validation
+- **Hire Expert** — Expert hiring page
+- **404 Not Found** — Custom styled error page
+- **Error Boundary** — Graceful error handling
+
+### Components
+
+- **Navbar** — Responsive with mobile hamburger menu, dark mode toggle, language switcher (EN/FR), CTA button
+- **Footer** — Multi-column with product, resources, and company links
+- **Structured Data** — JSON-LD for SEO (Organization + WebSite schema)
+
+### Features
+
+- **i18n** — Full English and French translations via `next-intl`
+- **Dark mode** — System-aware theme toggle
+- **SEO** — OpenGraph, Twitter cards, sitemap.xml, robots.txt
+- **Responsive** — Mobile-first design with Tailwind CSS
+- **Auto-installed packages** — `next-intl`, `lucide-react`, `class-variance-authority`, `clsx`, `tailwind-merge`
+
+## Installation
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/website-ui.json
+```
+
+This creates 23 files across your project — pages, components, config, translations, and styles.
+
+## Files Created
+
+```
+app/
+├── layout.tsx                # Root layout with i18n, fonts, theme
+├── globals.css               # Tailwind base + custom styles
+├── page.tsx                  # Home/landing page
+├── pricing/page.tsx          # Pricing page
+├── docs/page.tsx             # Documentation page
+├── docs/changelog/page.tsx   # Changelog page
+├── developers/page.tsx       # Developers page
+├── help/page.tsx             # Help center
+├── contact/page.tsx          # Contact form
+├── hire-expert/page.tsx      # Expert hiring
+├── error.tsx                 # Error boundary
+├── global-error.tsx          # Global error handler
+├── not-found.tsx             # 404 page
+├── robots.ts                 # robots.txt generator
+└── sitemap.ts                # sitemap.xml generator
+components/
+├── navbar.tsx                # Navigation bar
+├── footer.tsx                # Site footer
+└── structured-data.tsx       # JSON-LD SEO
+config/
+└── site.ts                   # Site metadata config
+lib/
+└── utils.ts                  # cn() utility
+i18n/
+└── request.ts                # next-intl config
+messages/
+├── en.json                   # English translations
+└── fr.json                   # French translations
+```
+
+## Usage
+
+### Start the Dev Server
+
+```bash
+npm run dev
+# Open http://localhost:3000
+```
+
+You'll see a fully functional marketing website immediately.
+
+### Customizing Site Metadata
+
+Edit `config/site.ts` to set your branding:
+
+```typescript
+export const siteConfig = {
+  name: "Your Product",
+  description: "Your product description",
+  url: "https://yoursite.com",
+  ogImage: "https://yoursite.com/og.png",
+  links: {
+    twitter: "https://twitter.com/yourhandle",
+    github: "https://github.com/yourorg",
+  },
+};
+```
+
+This config is used throughout the site — page titles, SEO tags, footer links, and structured data.
+
+### Customizing the Navbar
+
+The navbar in `components/navbar.tsx` includes:
+
+```tsx
+// Navigation links - edit these
+const navLinks = [
+  { label: "Docs", href: "/docs" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "Developers", href: "/developers" },
+  { label: "Help", href: "/help" },
+  { label: "Blog", href: "/blog" },
+  // Add your own links...
+];
+```
+
+Features included:
+
+- Responsive mobile menu (hamburger)
+- Dark/light theme toggle
+- Language switcher (EN ↔ FR)
+- CTA button ("Get Started Free")
+- Active link highlighting
+
+### Internationalization (i18n)
+
+The component uses `next-intl` with two languages out of the box. Translation files are in `messages/`:
+
+**English (`messages/en.json`):**
+
+```json
+{
+  "nav": {
+    "docs": "Docs",
+    "pricing": "Pricing",
+    "getStarted": "Get Started Free"
+  },
+  "hero": {
+    "title": "Build Something Amazing",
+    "description": "Your product tagline here"
+  }
+}
+```
+
+**Adding a new language:**
+
+1. Create `messages/es.json` (copy from `en.json` and translate)
+2. Add the locale option in the navbar language switcher
+3. Update `i18n/request.ts` if needed
+
+### Dark Mode
+
+The theme toggle in the navbar switches between light and dark modes. It:
+
+- Respects the user's system preference by default
+- Persists the user's choice in localStorage
+- Applies the `dark` class to the `<html>` element
+- Works with all Tailwind `dark:` utilities
+
+### SEO
+
+Every page includes:
+
+- **Page-level metadata** via Next.js `generateMetadata`
+- **OpenGraph tags** for social sharing
+- **Twitter card** meta tags
+- **Structured data** (JSON-LD) for Google rich results
+
+The sitemap at `/sitemap.xml` and robots at `/robots.txt` are auto-generated.
+
+## Customizing Pages
+
+### Home Page
+
+The home page (`app/page.tsx`) is divided into sections:
+
+1. **Hero** — Main headline, description, CTA buttons
+2. **Features** — Grid of feature cards with icons
+3. **Pain Points** — Problem/solution section
+4. **Pricing Preview** — Plan highlights
+5. **Testimonials** — Customer quotes
+6. **CTA** — Final call-to-action
+
+Each section can be edited independently. The content is mostly in the page file itself — no external CMS needed.
+
+### Pricing Page
+
+The pricing page (`app/pricing/page.tsx`) shows plan comparison cards with:
+
+- Plan name and price
+- Feature list with checkmarks
+- Highlighted "recommended" plan
+- CTA buttons per plan
+
+### Help Page
+
+The help page (`app/help/page.tsx`) includes:
+
+- Search input
+- FAQ sections with accordion
+- Contact support CTA
+
+## Use Cases
+
+- **SaaS landing pages** — Launch a professional marketing site in minutes
+- **Startup websites** — Full website scaffold with all essential pages
+- **Portfolio sites** — Personal or agency portfolio with docs and blog
+- **Product documentation** — Docs page with changelog
+- **Side projects** — Skip the boilerplate and focus on your product
+- **Client projects** — Reusable website template for agency work
+- **Open source projects** — Professional project homepage
+
+## Combining with Other Components
+
+The Website UI works great with our other registry components:
+
+```bash
+# Add API documentation
+npx shadcn@latest add https://ui-components.desishub.com/r/scalar-api-docs.json
+
+# Add a blog
+npx shadcn@latest add https://ui-components.desishub.com/r/mdx-blog.json
+
+# Add e-commerce
+npx shadcn@latest add https://ui-components.desishub.com/r/dgateway-shop.json
+```
+
+The navbar already includes links to Blog, Shop, and API Docs pages, so everything connects seamlessly.
+
+## Next Steps
+
+After installation:
+
+1. Update `config/site.ts` with your branding
+2. Replace placeholder content on each page
+3. Customize colors in `globals.css` and `tailwind.config.ts`
+4. Add/remove pages as needed
+5. Translate to additional languages
+6. Deploy to Vercel, Netlify, or your preferred host
+
+Install it now:
+
+```bash
+npx shadcn@latest add https://ui-components.desishub.com/r/website-ui.json
+```
