@@ -35,7 +35,7 @@ updatedAt: 2026-04-06
 
 ---
 
-## Why I Needed ATLAS {#why-i-needed-atlas}
+## Why I Needed ATLAS
 
 I'm a solo founder running Desishub Technologies from Kampala. I build custom web apps, mobile apps, and websites for clients. I run 6 SaaS products. I teach 300+ students. I create YouTube content. I sell source code and courses on Gumroad. I do cold outreach to find new clients.
 
@@ -65,7 +65,7 @@ I needed a CRM that understood **my** business — not a generic Salesforce or H
 
 ---
 
-## What is an MCP Server and Why It Matters {#what-is-an-mcp-server}
+## What is an MCP Server and Why It Matters
 
 **MCP (Model Context Protocol)** is an open standard from Anthropic that lets AI models interact with external systems through a standardized interface. Think of it as a universal adapter that gives any AI assistant (Claude, GPT, etc.) the ability to read from and write to your custom tools.
 
@@ -123,7 +123,7 @@ You could write custom skills or scripts that call your REST API. But MCP gives 
 
 ---
 
-## Architecture Overview {#architecture-overview}
+## Architecture Overview
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -163,9 +163,9 @@ You could write custom skills or scripts that call your REST API. But MCP gives 
 
 ---
 
-## Part 1: Backend — Go (Gin + GORM) {#part-1-backend}
+## Part 1: Backend — Go (Gin + GORM)
 
-### Step 1: Define the Database Models {#step-1-models}
+### Step 1: Define the Database Models
 
 Every CRM starts with data models. ATLAS has 10 sub-modules, each with its own model. The key design decisions:
 
@@ -349,7 +349,7 @@ GORM will create all the tables automatically on startup.
 
 ---
 
-### Step 2: Build the REST API Handlers {#step-2-handlers}
+### Step 2: Build the REST API Handlers
 
 Create `handlers/atlas.go`. The handler struct holds a `*gorm.DB` reference:
 
@@ -597,7 +597,7 @@ func (h *AtlasHandler) GetPipeline(c *gin.Context) {
 
 ---
 
-### Step 3: Register the Routes {#step-3-routes}
+### Step 3: Register the Routes
 
 In your `routes.go`, initialize the handler and register all endpoints under an authenticated admin group:
 
@@ -688,11 +688,11 @@ That's **64 endpoints** covering every aspect of the business.
 
 ---
 
-## Part 2: The MCP Server {#part-2-mcp-server}
+## Part 2: The MCP Server
 
 This is where it gets interesting. We'll use the [mcp-go](https://github.com/mark3labs/mcp-go) library to create a Streamable HTTP MCP server that mounts directly on our existing Gin API.
 
-### Step 4: Set Up the MCP Server with mcp-go {#step-4-mcp-setup}
+### Step 4: Set Up the MCP Server with mcp-go
 
 First, add the dependency:
 
@@ -771,7 +771,7 @@ func MountMCP(r *gin.Engine, db *gorm.DB, apiKey string) {
 
 **Key insight:** `gin.WrapH(httpServer)` mounts the MCP's `http.Handler` directly on the Gin router. No separate port, no reverse proxy config — it lives at the same domain as your API. The MCP protocol handles its own request/response format over HTTP POST.
 
-### Step 5: Register MCP Tools {#step-5-mcp-tools}
+### Step 5: Register MCP Tools
 
 Each tool needs a name, description, parameter definitions, and a handler function:
 
@@ -888,7 +888,7 @@ func registerMCPTools(s *mcpserver.MCPServer, db *gorm.DB) {
 }
 ```
 
-### Step 6: Implement Tool Handlers {#step-6-tool-handlers}
+### Step 6: Implement Tool Handlers
 
 Each tool handler follows the same pattern: validate API key → extract args → query/mutate database → return JSON result.
 
@@ -1060,7 +1060,7 @@ func mcpGetStreak(db *gorm.DB, apiKey string) mcpserver.ToolHandlerFunc {
 }
 ```
 
-### Step 7: Mount on Your Existing API {#step-7-mount}
+### Step 7: Mount on Your Existing API
 
 In your main `routes.go` setup function, call `MountMCP`:
 
@@ -1083,9 +1083,9 @@ That's it. Your MCP server is now live at `https://api.yoursite.com/mcp` — no 
 
 ---
 
-## Part 3: Frontend — Next.js (App Router) {#part-3-frontend}
+## Part 3: Frontend — Next.js (App Router)
 
-### Step 8: Define TypeScript Types {#step-8-types}
+### Step 8: Define TypeScript Types
 
 Create `packages/shared/types/atlas.ts`:
 
@@ -1264,7 +1264,7 @@ Export from your shared types index:
 export * from "./atlas";
 ```
 
-### Step 9: Build React Query Hooks {#step-9-hooks}
+### Step 9: Build React Query Hooks
 
 Create `hooks/use-atlas.ts`. This uses TanStack Query (React Query) with an API client and Sonner toasts:
 
@@ -1415,7 +1415,7 @@ export function useCreateAtlasRevenue() {
 
 **Pattern:** Every hook follows `useQuery` for reads, `useMutation` for writes. On success, invalidate `["atlas"]` queries so the dashboard refreshes automatically. Sonner toasts give instant feedback.
 
-### Step 10: Build the Admin UI {#step-10-ui}
+### Step 10: Build the Admin UI
 
 The ATLAS admin page uses a tabbed layout with 10 tabs. Here's the structure:
 
@@ -1627,7 +1627,7 @@ function ContactsTab() {
 
 ---
 
-## Deployment & Configuration {#deployment}
+## Deployment & Configuration
 
 ### Environment Variables
 
@@ -1662,7 +1662,7 @@ You should get back a JSON response listing all 30+ tools.
 
 ---
 
-## Connecting Claude Code to Your MCP Server {#connecting-claude}
+## Connecting Claude Code to Your MCP Server
 
 Add this to your Claude Code settings (`.claude/settings.json` or per-project):
 
@@ -1705,7 +1705,7 @@ Claude: [calls getStreak] "You've logged activity for 12 consecutive days!"
 
 ---
 
-## The Result {#the-result}
+## The Result
 
 ATLAS CRM gave me:
 
