@@ -1,0 +1,704 @@
+================================================================================
+JB (MUKE JOHNBAPTIST) - COMPREHENSIVE KNOWLEDGE BASE
+================================================================================
+Last Updated: April 8, 2026
+Source: jb.desishub.com (Personal Portfolio, Component Registry & Blog)
+
+================================================================================
+SECTION 1: PERSONAL IDENTITY & BACKGROUND
+================================================================================
+
+Full Name: Muke Johnbaptist
+Display Name: JB
+Username: jbwebdeveloper
+Gender: Male (he/him)
+Location: Kampala, Central Region, Uganda
+Website: https://jb.desishub.com
+Email: jb@desishub.com
+Job Title: Fullstack Developer & Founder
+
+Bio: Fullstack Developer & Founder of Desishub Technologies | Next.js, Golang, Docker | Creator of Grit Framework & Gorm Studio | Teaching 14.7K+ developers on YouTube
+
+Alternative Names/Aliases:
+- JB
+- JB WEB DEVELOPER
+- jbwebdeveloper
+
+Education:
+- Bachelor of Science in Agro-Processing Engineering from Busitema University (Graduated December 2020)
+- Self-taught programmer with zero computer science background
+- Successfully pivoted from engineering to tech - now running a company with 8+ team members, 6 SaaS products, and 120+ active clients
+
+Personal Life:
+- Married to Irankuda Odeth, who is a Biomedical Engineer
+- Hobbies: Working out, watching Netflix, cheering on Manchester United FC
+- Community involvement at St. Gonzaga Gonza Kamuli Parish
+
+Philosophy: "You don't need a computer science degree to build a successful tech career. Anyone can learn, anyone can build, and anyone can succeed."
+
+================================================================================
+SECTION 2: COMPANIES & VENTURES
+================================================================================
+
+2.1 Desishub Technologies (Founded January 2019)
+- Role: Founder & CEO
+- Website: https://desishub.com
+- Registered with Uganda Registration Services Bureau (URSB)
+- Built from zero to 150+ projects delivered across 4 countries
+- 18+ dedicated professionals on the team
+- Based in Kampala, Uganda
+- Specializes in bespoke management systems, mobile applications, and enterprise software
+- Generated $15K+ in revenue from digital products
+- Manages technical teams and oversees product development lifecycle
+
+2.2 Desishub Coding School
+- Role: Founder
+- Website: https://desishub.com
+- Training the next generation of African developers
+- Conducted bootcamps, workshops, and meetups
+- Trained 100+ students through in-person coding bootcamps
+- 70% employment rate among bootcamp graduates
+
+2.3 DesisPay (Co-Founded)
+- Role: Co-Founder
+- Website: https://desispay.com
+- Building payments infrastructure for Africa
+
+2.4 Nextjs Academy
+- Role: Founder
+- Website: https://nextjsacademy.com
+- 9+ online courses created
+- 300+ students enrolled
+- Job-oriented programming courses
+- Comprehensive Next.js and modern web development curriculum
+
+2.5 JB WEB DEVELOPER (YouTube Channel)
+- Role: Content Creator
+- URL: https://www.youtube.com/@JBWEBDEVELOPER
+- 14,700+ subscribers (15,000+ as of mid-2024)
+- 1.18M+ total views
+- 461 videos covering Next.js, Go, React, and fullstack development
+- Top video: 85,810 views (SaaS Inventory Management series)
+- Covers topics: Next.js, React, Node.js, Golang, Docker, DevOps
+
+================================================================================
+SECTION 3: TECH STACK & SKILLS
+================================================================================
+
+3.1 Primary Tech Stack:
+- Frontend: Next.js (primary), React 19, TypeScript
+- Backend: Golang (primary backend language), Node.js, Hono.js
+- Database: PostgreSQL (primary), MongoDB, Redis
+- ORM: Prisma ORM, GORM (Go)
+- Styling: Tailwind CSS, shadcn/ui
+- State Management: Zustand, Jotai, React Query (TanStack Query)
+- DevOps: Docker, GitHub Actions (CI/CD)
+- Infrastructure: Cloudflare (DNS, Edge), VPS deployment
+- Email: Resend
+- API Documentation: Scalar
+- Version Control: Git
+
+3.2 Skills Categories:
+- Languages: TypeScript, Golang, JavaScript
+- Frameworks: Next.js 15, React 19, Hono.js, Gin (Go)
+- Libraries: Framer Motion, Radix UI, shadcn/ui
+- Databases: PostgreSQL, MongoDB, Redis, SQLite
+- DevOps: Docker, GitHub Actions, Dokploy, Coolify, Hetzner VPS
+- Cloud: Vercel, AWS, Cloudflare, DigitalOcean
+- Other: Business Strategy, Product Development, Team Leadership, Content Creation, Teaching, Video Production
+
+3.3 Stack Philosophy:
+"My current tech stack is focused and intentional: Next.js on the frontend, Golang on the backend, Docker and GitHub Actions for CI/CD and deployment on VPS servers, and Cloudflare for domains and edge infrastructure. I believe in shipping fast with tools that scale."
+
+================================================================================
+SECTION 4: OPEN SOURCE PROJECTS (2026)
+================================================================================
+
+4.1 Grit Framework
+- URL: https://grit-vert.vercel.app
+- GitHub: https://github.com/MUKE-coder/grit
+- Description: A Golang web framework designed for simplicity and speed
+- Features: Built-in routing, middleware, database support
+- Version: v3.6
+- Meta-framework combining Go backend with Next.js frontend
+- Full CLI for scaffolding, database management, and deployment
+- Used in production across multiple Desishub client projects
+
+4.2 Gorm Studio
+- GitHub: https://github.com/MUKE-coder/gorm-studio
+- Description: A visual database management tool for GORM (Go's most popular ORM)
+- Features: Browse tables, run queries, manage Go database visually
+
+4.3 Sentinel
+- GitHub: https://github.com/MUKE-coder/sentinel
+- Description: Production-grade security intelligence SDK for Go applications
+- Features: WAF protection, rate limiting, threat detection, audit logging, anomaly detection, AI-powered analysis, embedded React dashboard
+- Drop-in middleware for Gin, mountable with a single function call
+
+4.4 Orbita
+- GitHub: https://github.com/MUKE-coder/orbita
+- Description: Self-hosted Platform-as-a-Service (PaaS) built in Go
+- Features: Multi-tenancy, RBAC, Docker deployment, database management, cron job scheduling
+- Enables developers to manage multiple isolated client organizations on a single VPS
+
+4.5 Pulse
+- GitHub: https://github.com/MUKE-coder/pulse
+- Description: Self-hosted observability and performance monitoring SDK for Go applications
+- Features: Request tracing, database query analysis, runtime metrics, error tracking, real-time dashboard
+- Zero external dependencies
+
+================================================================================
+SECTION 5: CURRENT PRODUCTS & SaaS PLATFORMS
+================================================================================
+
+5.1 DGateway
+- URL: https://dgateway.desispay.com
+- Description: Unified payments for Uganda / East Africa
+- Payment aggregation platform: MTN Mobile Money, Airtel Money, Stripe in a single API
+- Serving 10+ paying merchants in Uganda
+- Integrated into client apps including Connect ISP (highest transaction volume)
+- Supports collecting, disbursing, and managing payments across East Africa
+
+5.2 Nexora AI
+- URL: https://nexora.gritcms.com
+- Description: Build, train, and deploy AI agents that understand your business
+- AI agent platform for businesses to create custom chatbots
+- Trained on business data, deployable across multiple channels
+
+5.3 Fynlo
+- URL: https://fynloapp.com
+- Description: Smart accounting for growing businesses
+- AI-powered accounting platform
+- Features: Automated invoicing, expense tracking, payroll management, financial reporting
+
+5.4 Nexus School
+- URL: https://nexusschool.app
+- Description: Multi-school management system for East Africa
+- Offline-first desktop application with cloud portals
+- Modular features and flexible billing
+
+5.5 Omnistack
+- URL: https://omnistack.desishub.com
+- Description: "Write less, ship faster"
+- Batteries-included full-stack component library for Next.js, Expo, and Go
+- Provides complete features (auth, payments, file storage) via CLI
+
+5.6 CodeMint
+- URL: https://codemint.desishub.com
+- Description: Premium fullstack projects with source code
+- Marketplace for production-ready fullstack templates and starter kits
+
+5.7 ATLAS (AI Business Automation)
+- GitHub: https://github.com/MUKE-coder/atlas
+- Description: 28-command AI business agent on Claude Code
+- Connected to Gmail, Calendar, YouTube, and Gemini AI via MCP
+- Day 1 results: 3 prospects found, 1 replied within 3 hours requesting a meeting
+- Open source project
+
+================================================================================
+SECTION 6: CLIENT PROJECTS & PORTFOLIO
+================================================================================
+
+6.1 DSchools - School Management System (August 2023)
+- URL: https://www.dschools.org/
+- Complete student information management, teacher/staff management
+- Academic records, attendance tracking, parent portal, admin dashboard
+
+6.2 UNMU - Member Management System (June 2023)
+- URL: https://unmu-eta.vercel.app/
+- Handles 7,000+ active users (4,000+ member records)
+- Budget: UGX 8,000,000 (largest institutional project)
+- Real-time analytics, bulk operations, role-based access
+
+6.3 Ecommerce Pro Solution (March 2023)
+- URL: https://ecommerce-pro-web.vercel.app/
+- Full-featured e-commerce platform with multiple payment gateways
+
+6.4 Kyaja - Single Vendor E-commerce (May 2023)
+- URL: https://kyaja.com/
+- Streamlined single-vendor e-commerce for a Kampala-based retail business
+
+6.5 Kartify - Multi-Vendor Marketplace (April 2023)
+- URL: https://kartify-multi-vendor-template-mu.vercel.app/
+- Multi-vendor marketplace template with vendor management and commission system
+
+6.6 Inventory Pro - Inventory Management System (February 2023)
+- URL: https://zoho-inventory.vercel.app
+- SaaS application with multi-organization support
+- Multi-location tracking, barcode scanning, automated alerts
+
+6.7 InvoicePro - Invoice Generator (February 2023)
+- URL: https://invoice-generator-pro-phi.vercel.app/
+- PDF generation, brand customization, email integration
+- Designed for freelancers and small businesses
+
+6.8 WeSendAll - Bulk SMS & Email Platform (February 2023)
+- URL: https://www.wesendall.com/
+- Bulk SMS and email campaigns
+- Mobile money payment integration for account top-up
+- Contact and group management
+
+6.9 Limibooks - Vehicle Sales & Accounting System (February 2023)
+- URL: https://www.limibooks.com
+- Specialized for vehicle dealerships
+- Quarterly target tracking, installment payments, PDF generation
+
+6.10 Green Freight Logistics - Logistics Tracking System (February 2023)
+- URL: https://www.greenlinkfreightlogisticstracking.com/
+- Shipment management and tracking
+- Customer-facing tracking interface, receipt printing
+
+================================================================================
+SECTION 7: OPEN SOURCE COMPONENT REGISTRY
+================================================================================
+
+JB maintains a growing library of free, production-ready shadcn/ui components installable via CLI.
+
+Registry URL: https://jb.desishub.com/r
+
+Components (30+ total):
+
+UI/UX Components:
+- Copy Button - Copy to clipboard with visual feedback
+- GitHub Stars - Display repo star count with tooltip
+- Glow Card Grid - Cards with glowing border effects
+- Middle Truncation - Truncate text preserving start/end
+- Scroll Fade Effect - Fade content edges on scroll
+- Shimmering Text - Light-sweeping shimmer animation
+- Slide to Unlock - iPhone-style slider gesture
+- Testimonial - User feedback with author info
+- Testimonial Spotlight - Testimonial with spotlight hover effect
+- Writing Effect (Apple-inspired)
+- Consent Manager - Cookie consent banner (c15t)
+
+Form Components:
+- Currency Input - Formatted with comma separators
+- Editable Cell - Inline editable table cell
+- Multi Step Form - Built with Zustand and shadcn forms
+- Quantity Control - Increment/decrement spinner
+- Searchable Select - Filterable dropdown with search
+- Star Rating - Half-star support, configurable sizes
+- Tag Input - Dynamic tag/chip input with validation
+
+Data Components:
+- Data Table - Advanced table with TanStack React Table
+- Work Experience - List work experiences with details
+
+Full Feature Components:
+- Better Auth UI - Complete authentication component set
+- File Storage UI - S3/Cloudflare R2 file storage solution
+- Zustand Cart - E-commerce shopping cart
+- Stripe UI - Production-ready Stripe checkout
+- Offline Sync - Offline-first data sync (IndexedDB + Prisma)
+- DGateway Shop - E-commerce with Mobile Money & Card payments
+- MDX Blog - File-based blog system
+- Scalar API Docs - Interactive API documentation
+- Website UI - Complete marketing website scaffold
+
+================================================================================
+SECTION 8: BLOG CONTENT & TUTORIALS (90+ Articles)
+================================================================================
+
+Blog Categories & Topics:
+
+TUTORIALS (50+ articles):
+- Next.js: APIs with Prisma, SEO, Server Actions, Optimistic Updates, Dashboard creation, PWA with Firebase, Husky/lint-staged setup, Infinite Scroll, i18n (next-intl), File uploads (UploadThing, S3, Cloudflare R2), Better Auth integration, Hono CRUD, Elysia CRUD, React Query
+- Golang: JWT Authentication, CRUD API with SQL, Basics to API Development, Concurrency guide, Docker deployment, Build Your Own X (25+ projects)
+- DevOps: Self-hosting with Coolify/Hetzner, Dokploy/Hetzner, Docker/PostgreSQL/$4 VPS, k6 Performance Testing, Wildcard Subdomain Routing
+- AI: Vercel AI SDK integration, AI E-commerce Chatbot, MCP Server with Next.js, ATLAS CRM MCP Server, AI business automation
+- Full Courses: 30-Day Web Dev (HTML/CSS/Tailwind/JS), 30-Day NHPC Stack, 30-Day Next.js Full-Stack Mastery
+- Frameworks: TanStack Start, Grit Framework cheatsheet, NHPC guide
+- Other: Framer Motion animations, State management (Simple Store, Zustand), Background tasks with Inngest, Analytics & Rate Limiting, shadcn Component Registry creation
+
+COMPONENTS (20+ articles):
+- Documentation for all registry components listed in Section 7
+
+ENGINEERING (3 articles):
+- DesiHub Tech Stack 2025 (Go + Next.js banking platform, $300/month infrastructure)
+- DGateway Integration Guide
+- Desishub Tech Stack overview
+
+PAYMENTS (3 articles):
+- Accept Mobile Money Across East Africa
+- Scaling Payments from Uganda to East Africa
+- Why African Developers Need a Unified Payment Gateway
+
+CAREER & BUSINESS:
+- Desishub Tech Career Transformation Programs (16-week, $75K-$150K target)
+- Mentorship session insights for junior developers
+- Why Uganda hasn't built the next WhatsApp/TikTok
+- Systems Programming Projects for career transition
+
+PROJECT MANAGEMENT:
+- Desishub 2026 App Presentation Calendar (48 apps across 4 teams in 12 weeks)
+- Desishub Online Training Schedule (30-day intensive)
+
+COMPANY:
+- Welcome to Desishub Technologies
+- What is Desishub (company overview)
+
+================================================================================
+SECTION 9: CERTIFICATIONS & CREDENTIALS
+================================================================================
+
+1. BSc Agro-Processing Engineering - Busitema University (December 2020)
+2. The Fundamentals of Digital Marketing - Google Digital Garage (August 2022) - ID: 3T8-F9N-LKQ
+3. Introduction to Databases - Meta/Coursera (August 2022) - ID: YV5VQ5MXZ5YH
+4. Solving Problems with Creative and Critical Thinking - IBM Skills Network/Coursera (August 2022) - ID: 4UKZQJGM2932
+5. Engaging in Persuasive and Credible Communication - National University of Singapore/Coursera (September 2022) - ID: C6DHB9A5XQHV
+6. Digital Skills: Social Media - Accenture/FutureLearn (August 2022) - ID: pc4345i
+7. URSB Business Registration - Desishub Technologies (January 2019)
+8. Nextjs Academy - 9+ Course Creator, 300+ Students (January 2024)
+9. YouTube Creator - 15,000+ Subscribers, 1.18M+ Views (December 2025)
+10. Gumroad Creator - $18,000+ Revenue, 200+ Customers (December 2025)
+
+================================================================================
+SECTION 10: HONORS & AWARDS / KEY MILESTONES
+================================================================================
+
+1. Founded Desishub Technologies (January 2019) - URSB Registered, 150+ projects across 4 countries
+2. Career Pivot (January 2020) - Agro-Processing Engineering to Tech CEO, self-taught, now 8+ team members
+3. YouTube Channel Growth (June 2024) - 15,000+ subscribers, 1.18M+ views, 461 videos
+4. Nextjs Academy Launch (January 2024) - 300+ students, 9+ courses, 70% employment rate
+5. Gumroad Revenue (December 2025) - $18,000+ from source code, starter kits, courses; 200+ customers globally
+6. UNMU Enterprise Project (March 2025) - 4,000+ member database, UGX 8,000,000 budget
+7. DGateway Launch (June 2025) - Unified payment gateway, 10+ merchants, MTN MoMo + Airtel + Stripe
+8. Grit Framework v3.6 (January 2026) - Open source Go + Next.js meta-framework
+9. ATLAS AI System (April 2026) - 28-command AI business agent, Day 1: prospect replied in 3 hours
+
+================================================================================
+SECTION 11: SOCIAL MEDIA & ONLINE PRESENCE
+================================================================================
+
+- LinkedIn: https://linkedin.com/in/muke-johnbaptist (@muke-johnbaptist)
+- GitHub: https://github.com/MUKE-coder (@MUKE-coder)
+- X (Twitter): https://x.com/MJohnbaptist (@MJohnbaptist)
+- YouTube: https://www.youtube.com/@JBWEBDEVELOPER (@JBWEBDEVELOPER)
+- TikTok: https://www.tiktok.com/@jbdesishub (@jbdesishub)
+- daily.dev: https://app.daily.dev/jbwebdeveloper94 (@jbwebdeveloper94)
+- Gumroad: https://gmukejohnbaptist.gumroad.com
+
+================================================================================
+SECTION 12: WEBSITES & PLATFORMS OWNED
+================================================================================
+
+1. https://jb.desishub.com - Personal portfolio & blog
+2. https://desishub.com - Desishub Technologies (company site)
+3. https://desispay.com - DesisPay (payments platform)
+4. https://nextjsacademy.com - Nextjs Academy (course platform)
+5. https://grit-vert.vercel.app - Grit Framework (open source)
+6. https://reactuicomponents.com - React UI Components library
+7. https://wesendall.com - WeSendAll (bulk messaging)
+8. https://dgateway.desispay.com - DGateway (payment gateway)
+9. https://nexora.gritcms.com - Nexora AI (AI agents)
+10. https://fynloapp.com - Fynlo (accounting)
+11. https://nexusschool.app - Nexus School (school management)
+12. https://omnistack.desishub.com - Omnistack (component library)
+13. https://codemint.desishub.com - CodeMint (template marketplace)
+
+================================================================================
+SECTION 13: COMMUNITY INVOLVEMENT & SOCIAL IMPACT
+================================================================================
+
+Church & Parish (St. Gonzaga Gonza Kamuli Parish):
+- Chairman, St. Gonzaga Fitness Team - leads parish fitness community
+- Built a savings app for the fitness team (in operation 2+ years)
+- Secretary, Men's Guild (Parish & Sub-parish level)
+- Built a Treasurer app for Men's Guild (member management, financial contributions, reports)
+- Developing a comprehensive Church Management System (paperless operations)
+- Launching Youth Group focused on re-skilling, financial literacy, and digital literacy
+
+Education & Mentorship:
+- 300+ students trained online through Nextjs Academy
+- 100+ students trained through in-person bootcamps
+- 14,700+ YouTube subscribers learning from tutorials
+- Mentored emerging developers (e.g., mentorship session with Kanzu Code - 100+ junior devs)
+- Created 9+ job-oriented online courses
+- 70% employment rate among bootcamp graduates
+
+Desishub 2026 Initiative:
+- 48 apps across 4 teams in 12 weeks
+- Covering: Fintech, Healthcare, Real Estate, E-Commerce, Hospitality, Manufacturing, HR, Sales & Marketing
+
+================================================================================
+SECTION 14: REVENUE & BUSINESS METRICS
+================================================================================
+
+- Total Gumroad Revenue: $18,000+ from digital product sales
+- Top Seller: Next.js Fullstack Course ($4,375 from 62 sales)
+- 200+ paying customers globally (India, Nigeria, Kenya, US, Uganda)
+- 150+ projects delivered across 4 countries
+- 120+ active clients
+- 8+ team members at Desishub
+- 6 SaaS products
+- 10+ paying merchants on DGateway
+- Infrastructure cost: ~$300/month for production systems
+
+================================================================================
+SECTION 15: TOOLS & UTILITIES
+================================================================================
+
+Tools built/offered on the portfolio:
+1. BD Connection String Formatter - Paste Neon DB connection string, format for Laravel
+2. DevOps Roadmap - Step-by-step guide for DevOps/SRE roles
+3. Next.js Sandbox - Interactive sandbox with code editor, file explorer, live preview
+
+================================================================================
+SECTION 16: ABOUT PAGE (FULL TEXT)
+================================================================================
+
+Hello, World! I'm JB (Muke Johnbaptist) -- a fullstack developer, tech entrepreneur, educator, and open-source creator based in Kampala, Uganda. I hold a Bachelor of Science in Agro-Processing Engineering from Busitema University, but my passion for technology led me to transition into software engineering -- and I've never looked back.
+
+I'm the Founder and CEO of Desishub Technologies and Desishub Coding School -- building digital solutions and training the next generation of African developers. What started as a personal journey to learn coding has grown into a thriving tech company serving clients across Africa and beyond.
+
+What I Build With:
+My current tech stack is focused and intentional: Next.js on the frontend, Golang on the backend, Docker and GitHub Actions for CI/CD and deployment on VPS servers, and Cloudflare for domains and edge infrastructure. I believe in shipping fast with tools that scale.
+
+Open Source & Projects (2026):
+In 2026, I built two projects I'm especially proud of:
+- Grit Framework -- A Golang web framework designed for simplicity and speed.
+- Gorm Studio -- A visual database management tool for GORM.
+- Sentinel -- Production-grade security intelligence SDK for Go applications.
+- Orbita -- A self-hosted PaaS built in Go.
+- Pulse -- A self-hosted observability and performance monitoring SDK for Go.
+
+Education & Community:
+I'm deeply passionate about education. Through my Nextjs Academy, I've created 9+ online courses that have helped over 300 students learn to code. I've trained 100+ students through in-person coding bootcamps. My YouTube channel has grown to over 14,700 subscribers with practical programming tutorials.
+
+Open Source Components:
+I maintain a growing library of free, production-ready shadcn/ui components including File Storage UI, Better Auth UI, Zustand Cart, Multi Step Form, and Work Experience components -- all installable with a single CLI command.
+
+Social & Community Impact:
+Beyond tech, I'm deeply invested in my community at St. Gonzaga Gonza Kamuli Parish: Chairman of the fitness team (built them a savings app), Secretary of Men's Guild (built a Treasurer app), developing a Church Management System, and launching a Youth Re-skilling Initiative.
+
+Personal:
+I am married to my lovely wife Irankuda Odeth, who is a Biomedical Engineer. My journey is proof that you don't need a computer science degree to build a successful tech career. When I'm not coding, creating content, or teaching, you'll find me working out, watching Netflix, or cheering on Manchester United FC.
+
+================================================================================
+SECTION 17: FREQUENTLY ASKED QUESTIONS (TRAINING DATA)
+================================================================================
+
+Q: Who is JB?
+A: JB (Muke Johnbaptist) is a fullstack developer, tech entrepreneur, educator, and open-source creator based in Kampala, Uganda. He's the Founder & CEO of Desishub Technologies and Desishub Coding School.
+
+Q: What is JB's educational background?
+A: JB holds a BSc in Agro-Processing Engineering from Busitema University (2020). He is entirely self-taught in programming with no computer science degree.
+
+Q: What does JB do?
+A: JB builds software products (SaaS), creates open-source tools, teaches programming on YouTube (14.7K+ subscribers), runs online courses (300+ students), and leads Desishub Technologies.
+
+Q: What technologies does JB specialize in?
+A: Next.js (frontend), Golang (backend), Docker & GitHub Actions (DevOps), PostgreSQL (database), Cloudflare (infrastructure), TypeScript, Tailwind CSS, shadcn/ui.
+
+Q: What is Desishub Technologies?
+A: A Ugandan tech company founded by JB in 2019, specializing in custom software development, digital solutions, and tech education. 18+ professionals, 150+ projects delivered across 4 countries.
+
+Q: What is DGateway?
+A: A unified payment gateway for East Africa that consolidates MTN Mobile Money, Airtel Money, and Stripe into a single API. Built by JB's team at DesisPay.
+
+Q: What is the Grit Framework?
+A: An open-source Golang web framework (v3.6) created by JB for building production APIs with built-in routing, middleware, and database support.
+
+Q: What courses does JB offer?
+A: 9+ courses on Nextjs Academy covering Next.js full-stack development, NHPC stack, web fundamentals, and more. Also free YouTube tutorials.
+
+Q: How can I contact JB?
+A: Email: jb@desishub.com | LinkedIn: /in/muke-johnbaptist | X: @MJohnbaptist | YouTube: @JBWEBDEVELOPER
+
+Q: Is JB married?
+A: Yes, JB is married to Irankuda Odeth, a Biomedical Engineer.
+
+Q: What is JB's YouTube channel about?
+A: Programming tutorials covering Next.js, Golang, React, Docker, DevOps, and modern fullstack development. Channel: @JBWEBDEVELOPER.
+
+Q: What open source components does JB maintain?
+A: 30+ shadcn/ui-compatible components including Better Auth UI, File Storage UI, Zustand Cart, DGateway Shop, MDX Blog, Stripe UI, Offline Sync, and many more. All installable via CLI from jb.desishub.com/r.
+
+Q: What is ATLAS?
+A: An AI business automation system built by JB - a 28-command AI agent on Claude Code connected to Gmail, Calendar, YouTube, and Gemini AI via MCP servers. Open source on GitHub.
+
+Q: How much revenue has JB generated?
+A: $18,000+ from digital product sales on Gumroad alone, with 200+ paying customers globally. Plus revenue from client projects and DGateway merchants.
+
+Q: What community work does JB do?
+A: JB serves as Chairman of his parish fitness team, Secretary of Men's Guild, built savings and treasurer apps for his church community, and is launching a youth re-skilling initiative.
+
+Q: Where is JB based?
+A: Kampala, Central Region, Uganda.
+
+Q: What is JB's favourite football team?
+A: Manchester United FC.
+
+================================================================================
+SECTION 18: PREMIUM COURSES (9 Courses, 410+ Hours, 1,070+ Episodes)
+================================================================================
+
+18.1 Tailwind for SaaS Builders (Foundation) - FREE
+- Slug: tailwind-saas-framer
+- Duration: 15 hours | Episodes: 1 | Level: Beginner
+- Description: Foundation for all masterclasses - Master Tailwind, Framer Motion, shadcn/ui
+- Topics: Tailwind CSS, Responsive Design, Framer Motion, shadcn/ui, AI Component Generation, SaaS Dashboards, Design Systems
+- Projects: Modern SaaS Dashboard, Animated Landing Page, AI-Generated Components
+- Pricing: FREE
+- Status: Available Now
+
+18.2 Next.js Mastery Course (January 2026)
+- Slug: nextjs-mastery
+- Duration: 40 hours | Episodes: 120 | Level: Intermediate
+- Description: Master production-ready applications with Next.js, Prisma, Better Auth, Vercel AI SDK, and build a complete e-commerce platform
+- Topics: Next.js API Routes, Prisma & PostgreSQL, Better Auth, AI Integration, AWS S3, Stripe, Vercel Deployment
+- Projects: Next.js Starter Kit, BetaPcs E-commerce Platform
+- Pricing: Without Code $50 | With Code $80
+- Tech Stack: Next.js, Prisma, PostgreSQL, Better Auth, AWS S3, Stripe
+
+18.3 Modern MERN Stack / NHPC Stack (February 2026)
+- Slug: nhpc-stack
+- Duration: 35 hours | Episodes: 100 | Level: Intermediate
+- Description: Cutting-edge NHPC stack (Next.js, Hono, Prisma, PostgreSQL) - Build feature-rich job portal
+- Topics: Hono API Framework, Better Auth, Rate Limiting, Prisma ORM, Scalar API Docs, Next.js Frontend
+- Projects: Job Portal, NHPC Stack Starter Kit
+- Deployment: Vercel (Frontend) + Cloudflare Workers (API)
+- Pricing: Without Code $100 | With Code $150
+
+18.4 Laravel with React Fullstack (March 2026)
+- Slug: laravel-react-fullstack
+- Duration: 45 hours | Episodes: 130 | Level: Intermediate
+- Description: Classic yet modern Laravel + React combination - Build complete e-commerce app
+- Topics: Laravel API, Authentication & Authorization, PostgreSQL, AWS S3, React Integration
+- Pricing: Without Code $100 | With Code $200
+
+18.5 Golang with Next.js Fullstack (April 2026)
+- Slug: golang-nextjs-fullstack
+- Duration: 50 hours | Episodes: 150 | Level: Advanced
+- Description: Fullstack with Go performance + Next.js DX - Build clinic management system
+- Topics: Go Gin Framework, GORM ORM, PostgreSQL, JWT & Social Auth, Goroutines & Concurrency
+- Pricing: Without Code $100 | With Code $200
+
+18.6 React Native with Expo (May 2026)
+- Slug: react-native-expo
+- Duration: 40 hours | Episodes: 110 | Level: Intermediate
+- Description: Production-ready mobile apps - Build template marketplace
+- Topics: Expo SDK, React Native Routing, NativeWind Styling, Better Auth, Stripe Payments
+- Pricing: Without Code $100 | With Code $200
+
+18.7 TanStack Start (June 2026)
+- Slug: tanstack-start
+- Duration: 30 hours | Episodes: 90 | Level: Intermediate
+- Description: Next generation React framework - Build Apple-inspired e-commerce clone
+- Topics: TanStack Start API, Server Functions, Better Auth, Advanced Routing, AWS S3, Prisma
+- Pricing: Without Code $80 | With Code $120
+
+18.8 Desktop App Development - Electron & Golang (July 2026)
+- Slug: electron-golang-desktop
+- Duration: 60 hours | Episodes: 180 | Level: Advanced
+- Description: Cross-platform desktop apps - Build advanced POS system with offline/online sync
+- Topics: Golang API with Gin, GORM (SQLite/PostgreSQL), Electron+React, Barcode Scanning, Receipt Printing
+- Pricing: Without Code $200 | With Code $300
+
+18.9 DevOps with AWS (August 2026)
+- Slug: devops-aws
+- Duration: 35 hours | Episodes: 100 | Level: Advanced
+- Description: Comprehensive DevOps practices - Master AWS, Docker, Kubernetes, CI/CD, Terraform, Grafana
+- Topics: Git Advanced, K6, AWS EC2 & VPS, Docker, Kubernetes, GitHub Actions, Terraform, Grafana
+- Pricing: Without Code $120 | With Code $200
+
+================================================================================
+SECTION 19: EBOOKS
+================================================================================
+
+19.1 The Ultimate Guide to Building Blazing Fast APIs
+- Website: https://api-handbook.vercel.app
+- Purchase: https://gmukejohnbaptist.gumroad.com/l/api-handbook
+- Status: Paid
+- Description: A Developer's Guide to High-Performance API Design and Implementation
+- Chapters:
+  - Chapter 1: Lean Create Payload (LCP) - Minimize payload on creation operations
+  - Chapter 2: Patch-First Update (PFU) - Use PATCH for targeted updates
+  - Chapter 3: Selective Get Optimization (SGO) - Fetch only needed fields
+
+================================================================================
+SECTION 20: MENTORSHIP PROGRAMS
+================================================================================
+
+Mentor: Muke Johnbaptist (8+ years experience, 150+ developers mentored)
+Location: Kampala, Uganda
+Services: One-on-One sessions, Group sessions, Monthly workshops, Weekly calls
+
+Tier 1: Starter
+- Price: UGX 100,000 / USD $27 per month
+- Features: 2 one-on-one sessions/month, Weekly group calls, Career roadmap, Resume/LinkedIn review, Email support, Resource library
+
+Tier 2: Professional (Most Popular)
+- Price: UGX 200,000 / USD $55 per month
+- Features: 4 one-on-one sessions/month, Priority group access, Monthly workshops, Code reviews, Interview prep, Salary negotiation, 24/7 chat, Personal project mentoring
+
+Tier 3: Team
+- Price: UGX 600,000 / USD $164 per month
+- Features: Unlimited one-on-one, Exclusive workshops, Team mentorship, Architecture guidance, Leadership development, Custom training, Direct phone/WhatsApp, Career transition, Industry networking
+
+================================================================================
+SECTION 21: DEVOPS ROADMAP (12 Phases)
+================================================================================
+
+Phase 1: Learn Git - Commits, Branching, Merging, Pull Requests, Rebasing
+Phase 2: Learn Programming Language - Python, Go, JavaScript, Bash, Ruby
+Phase 3: Learn Linux - Shell commands, File system, Networking, Permissions, Processes
+Phase 4: Learn Networking & Security - OSI Model, DNS, HTTP/HTTPS, SSH, Security basics
+Phase 5: Learn Server Management - Nginx, Apache, PostgreSQL, MySQL, Load balancing
+Phase 6: Learn Containers (Docker) - Docker, Images, Docker Compose, Registries
+Phase 7: Learn Container Orchestration (Kubernetes) - Pods, Services, Deployments, StatefulSets
+Phase 8: Learn Infrastructure as Code - Terraform, Ansible, CloudFormation
+Phase 9: Learn CI/CD - GitHub Actions, GitLab CI, Jenkins, Testing, Pipelines
+Phase 10: Learn Monitoring & Observability - Prometheus, Grafana, ELK Stack, Alerting
+Phase 11: Learn Cloud Provider - AWS/GCP/Azure, Compute, Storage, Networking
+Phase 12: Learn Software Engineering Practices - Agile, Testing, Documentation, DevOps culture
+
+================================================================================
+SECTION 22: GOLANG COURSE (Go: Zero to Hero for DevOps)
+================================================================================
+
+Title: Go: Zero to Hero for DevOps
+Description: Master Golang for DevOps with tutorials, examples, hands-on projects
+
+Section 1: Go Basics & Setup
+- Installation & Workspace, Variables & Data Types, Constants
+- Exercise: Create Variables
+- Project: Personal Profile Program
+
+Section 2: Control Flow & Functions
+- Conditionals (If/Else, Switch), Loops (For, Range), Functions (Multiple returns, Variadic)
+- Exercise: Grade Calculator
+- Project: Temperature Converter
+
+Section 3: Arrays, Slices & Maps
+- Arrays, Slices, Maps, Collection operations, Iteration patterns
+
+================================================================================
+SECTION 23: AI PROMPTS LIBRARY (30+ Prompts)
+================================================================================
+
+Categories:
+1. Design & Visuals
+2. Content Creation
+3. Business & Strategy
+4. Developer Productivity
+
+Sample Prompts:
+- Education Slide Design (Journal Style)
+- Isometric Infographic (Process Flow Diagram)
+- YouTube Thumbnail (Bold & Clickable)
+- Product Mockup (Minimal Floating Style)
+- SEO Blog Post Outline Generator
+- Viral Twitter/X Thread Writer
+- Newsletter Welcome Email Sequence
+- YouTube Video Script (Hook Framework)
+- Business Model Canvas
+- Product Pricing Strategy Advisor
+- Freelance Client Proposal Generator
+- Senior Developer Code Review
+- REST API Design from Requirements
+- And 17+ more specialized prompts
+
+================================================================================
+END OF KNOWLEDGE BASE
+================================================================================

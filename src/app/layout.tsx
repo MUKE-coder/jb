@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import type { Organization, Person, WebSite, WithContext } from "schema-dts";
 
+import ChatBot from "@/components/ChatBot";
 import { Providers } from "@/components/providers";
 import { META_THEME_COLORS, SITE_INFO } from "@/config/site";
 import { USER } from "@/data/user";
@@ -216,7 +217,10 @@ export default function RootLayout({
       </head>
 
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <ChatBot />
+          {children}
+        </Providers>
       </body>
     </html>
   );
