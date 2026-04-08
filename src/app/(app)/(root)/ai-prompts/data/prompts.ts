@@ -489,6 +489,42 @@ Cover at least:
 
 End with a "Stack Cost Summary" — total monthly cost if using all paid tiers, and a "Budget Stack" alternative using only free tools.`,
   },
+
+  // ── Presentation Design ───────────────────────────────────────────
+  {
+    id: "vercel-inspired-slide-design",
+    title: "Vercel-Inspired Slide Redesign System",
+    category: "Design & Visuals",
+    howToUse:
+      "Use this prompt in any AI slide generator or image AI (NotebookLM, Gamma, ChatGPT, Claude). Paste it before or after your slide content to enforce a consistent Vercel/Next.js Conf aesthetic across all slides.",
+    body: `Redesign all slides using a Vercel-inspired design system. Follow these rules:
+
+FONTS
+Use Geist Sans for all text, Geist Mono for code, commands, and labels.
+Titles: 40–52pt Bold. Body: 14–16pt, color #888888. Labels: 10pt Mono, ALL CAPS, letter-spacing 0.1em.
+
+COLORS
+Light slides: White #FFFFFF background, black #000000 titles
+Dark slides: Black #000000 background, white #FFFFFF titles
+Cards: #F2F2F2 background, 1px border #E5E5E5, 8px radius
+Accent: #0070F3 (Vercel blue) — use on top border of cover slide only
+Muted text: #888888. Code background: #0A0A0A. Borders: #333333
+
+LAYOUT
+- Cover + section break slides: BLACK background
+- Content slides: WHITE background
+- Left-align everything. No centered body text.
+- Generous whitespace — never fill every inch
+- Section label (Geist Mono, ALL CAPS, #888888) above every title
+- Stats displayed as large numbers (64pt Bold) in a horizontal row with thin 1px vertical dividers between them
+- Tech tags as fully-rounded pills with 1px border, no fill
+- Code blocks styled as terminal windows with ●●● dots in the top bar
+
+AVOID
+No colorful gradients, no neon colors, no drop shadows, no emoji in body content, no fonts other than Geist Sans and Geist Mono.
+
+GOAL: Clean, minimal, premium — like Vercel.com or Next.js Conf slides. Typography does the heavy lifting. Apply to every slide.`,
+  },
 ];
 
 export function getPromptsByCategory(prompts: AIPrompt[]) {
