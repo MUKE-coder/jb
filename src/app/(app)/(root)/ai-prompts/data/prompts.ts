@@ -525,6 +525,65 @@ No colorful gradients, no neon colors, no drop shadows, no emoji in body content
 
 GOAL: Clean, minimal, premium — like Vercel.com or Next.js Conf slides. Typography does the heavy lifting. Apply to every slide.`,
   },
+
+  // ── Thumbnail Design ──────────────────────────────────────────────
+  {
+    id: "dark-tech-thumbnail-template",
+    title: "Dark Tech Thumbnail — Customizable Template",
+    category: "Design & Visuals",
+    howToUse:
+      "Use this prompt in any image AI (Midjourney, DALL-E, Ideogram, ChatGPT). Replace the bracketed placeholders [YOUR MAIN TITLE], [YOUR SUBTITLE], [DESCRIBE YOUR LOGO], and [LIST YOUR TECHNOLOGIES] with your specific content.",
+    body: `Create a professional dark-themed tech thumbnail with the following layout:
+
+**Background:** Pure black (#0a0a0f) with a faint blue grid overlay and subtle circular radar/sonar rings emanating from the center-left.
+
+**Left side (25% width):** A glowing geometric logo — [DESCRIBE YOUR LOGO OR ICON HERE] — in purple-blue (#6366f1 to #3b82f6) with soft neon glow.
+
+**Center text block:**
+- Title: "[YOUR MAIN TITLE]" in large, heavy bold white sans-serif font (Inter/Geist style), ~90px
+- Subtitle: "[YOUR SUBTITLE]" in medium gray (#9ca3af), ~36px, lighter weight
+- Tagline: "[SHORT TAGLINE]" in light gray, ~24px
+
+**Top-right corner:** Floating 3D isometric [cubes / hexagons / nodes] cluster in dark navy-blue with blue glowing edges and scattered particle dots.
+
+**Bottom-right corner:** A horizontal row of [NUMBER] rounded square icons for tech stack: [LIST YOUR TECHNOLOGIES e.g. Go, React, Docker, PostgreSQL] with dark backgrounds and colored logos.
+
+**Lighting:** Soft purple-blue radial glow behind the logo. Overall mood: futuristic, premium, dark SaaS aesthetic.
+
+**Aspect ratio:** 16:9 (1280x720 or 1920x1080)
+**Style:** Modern tech product banner, dark UI, no gradients on text, flat depth with subtle 3D accents.`,
+  },
+  {
+    id: "nextjs-payment-thumbnail",
+    title: "Next.js Payment Integration Thumbnail",
+    category: "Design & Visuals",
+    howToUse:
+      "Use this prompt in any image AI (Midjourney, DALL-E, Ideogram, ChatGPT) to generate a thumbnail for payment integration tutorials or courses. Adjust the title, subtitle, tagline, and tech stack icons to match your specific content.",
+    body: `Create a professional dark-themed tech thumbnail with the following layout:
+
+**Background:** Pure black (#0a0a0f) with a faint blue grid overlay and subtle circular radar/sonar rings emanating from the center-left. Add a very faint green glow in the background to hint at money/payments.
+
+**Left side (25% width):** A glowing geometric icon combining the Next.js logo (triangle/N mark) interlinked with a mobile phone showing a payment prompt — rendered in purple-blue (#6366f1 to #3b82f6) with soft neon glow.
+
+**Center text block:**
+- Title: "Next.js Payment Integration" in large, heavy bold white sans-serif font (Inter/Geist style), ~85px
+- Subtitle: "One-Time · Subscriptions · Withdrawals · Store" in medium gray (#9ca3af), ~32px, lighter weight
+- Tagline: "Complete Guide with TypeScript" in light green (#4ade80), ~22px
+
+**Top-right corner:** Floating 3D isometric hexagon/cube cluster in dark navy-blue with blue-green glowing edges and scattered particle dots — representing API nodes and payment flow.
+
+**Bottom-right corner:** A horizontal row of 5 rounded square icons with dark backgrounds and colored logos for:
+  1. Next.js (white N logo)
+  2. TypeScript (blue TS logo)
+  3. MTN Mobile Money (yellow)
+  4. Vercel (white triangle)
+  5. Webhooks icon (green lightning bolt)
+
+**Lighting:** Soft purple-blue radial glow behind the left icon. Subtle green accent glow near the tagline area. Overall mood: futuristic, premium, African fintech developer aesthetic.
+
+**Aspect ratio:** 16:9 (1280x720)
+**Style:** Modern tech tutorial banner, dark UI, no gradients on text, flat depth with subtle 3D accents. Professional course/blog thumbnail.`,
+  },
 ];
 
 export function getPromptsByCategory(prompts: AIPrompt[]) {
