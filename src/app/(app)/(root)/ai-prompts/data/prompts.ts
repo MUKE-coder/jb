@@ -526,11 +526,11 @@ No colorful gradients, no neon colors, no drop shadows, no emoji in body content
 GOAL: Clean, minimal, premium — like Vercel.com or Next.js Conf slides. Typography does the heavy lifting. Apply to every slide.`,
   },
 
-  // ── Thumbnail Design ──────────────────────────────────────────────
+  // ── Thumbnails & Banners ────────────────────────────────────────────
   {
     id: "dark-tech-thumbnail-template",
     title: "Dark Tech Thumbnail — Customizable Template",
-    category: "Design & Visuals",
+    category: "Thumbnails & Banners",
     howToUse:
       "Use this prompt in any image AI (Midjourney, DALL-E, Ideogram, ChatGPT). Replace the bracketed placeholders [YOUR MAIN TITLE], [YOUR SUBTITLE], [DESCRIBE YOUR LOGO], and [LIST YOUR TECHNOLOGIES] with your specific content.",
     body: `Create a professional dark-themed tech thumbnail with the following layout:
@@ -556,7 +556,7 @@ GOAL: Clean, minimal, premium — like Vercel.com or Next.js Conf slides. Typogr
   {
     id: "nextjs-payment-thumbnail",
     title: "Next.js Payment Integration Thumbnail",
-    category: "Design & Visuals",
+    category: "Thumbnails & Banners",
     howToUse:
       "Use this prompt in any image AI (Midjourney, DALL-E, Ideogram, ChatGPT) to generate a thumbnail for payment integration tutorials or courses. Adjust the title, subtitle, tagline, and tech stack icons to match your specific content.",
     body: `Create a professional dark-themed tech thumbnail with the following layout:
@@ -583,6 +583,185 @@ GOAL: Clean, minimal, premium — like Vercel.com or Next.js Conf slides. Typogr
 
 **Aspect ratio:** 16:9 (1280x720)
 **Style:** Modern tech tutorial banner, dark UI, no gradients on text, flat depth with subtle 3D accents. Professional course/blog thumbnail.`,
+  },
+
+  // ── Thumbnails & Banners ──────────────────────────────────────────
+  {
+    id: "premium-mobile-app-thumbnail",
+    title: "Premium Mobile App Template Thumbnail",
+    category: "Thumbnails & Banners",
+    howToUse:
+      "Use this prompt in any image AI (Midjourney, DALL-E, Ideogram, ChatGPT) to generate a dark product thumbnail featuring phone mockups for mobile app templates. Replace screen descriptions, title, subtitle, and tech icons to match your template.",
+    body: `Create a professional dark-themed product thumbnail for a premium mobile app template with the following layout:
+
+**Dimensions:** 1280x720px (16:9)
+
+**Background:** Deep dark navy-black (#0a0a0f) with a very subtle noise/grain texture at ~3% opacity. Clean flat surface — NO glows, NO orbs, NO blobs, NO radial gradients.
+
+**Left accent:**
+A single thin vertical stripe in red (#F04E3E), ~4px wide, full height, on the far left edge. Hard edge, no blur.
+
+**Left side (40% of image) — Phone Mockup Stack:**
+3 floating smartphone mockups (modern borderless phone frames in dark #1a1a1a) arranged in a fanned/staggered layout:
+  - Center phone (largest, front): Shows a red home screen with product grid cards, a red hero header with search bar, and a flash sale countdown timer in red boxes
+  - Left phone (slightly behind, tilted -8°): Shows a product detail screen with an image gallery and red "Add to Cart" button at the bottom
+  - Right phone (slightly behind, tilted +8°): Shows a checkout or payment success screen with a red checkmark confirmation
+
+Phones have very subtle dark drop shadows. No glows around them. Screens look like real app UI — clean white cards on dark red headers.
+
+**Center-right text block:**
+
+Top eyebrow label:
+"PREMIUM EXPO TEMPLATE" in tiny red (#F04E3E) monospace uppercase, ~12px, wide letter-spacing.
+
+Title line 1:
+"ShopEase" in ultra-heavy bold white sans-serif (Inter/Geist), ~80px, tight letter-spacing.
+
+Title line 2:
+"E-Commerce." in the same heavy font in red (#F04E3E), italic, ~80px — with a flat red underline stroke beneath (no glow, hard line only).
+
+Subtitle:
+"50+ Screens · 31 Components · Full Source Code" in medium gray (#888), ~20px, light weight.
+
+**3 pill badges below subtitle:**
+Thin border (#333), text (#aaa), monospace ~11px, no fill:
+  • "Expo SDK 55 · TypeScript"
+  • "NativeWind · React Query · Zustand"
+  • "iOS & Android Ready"
+
+**Bottom-right tech icon row:**
+5 small rounded square icons (~36px each), dark background (#111), hard edges, no glow:
+  Expo · React Native · TypeScript · Tailwind · Zustand
+
+**Top-left corner:**
+"Production Ready" in muted gray (#666), ~12px monospace.
+
+**Top-right corner:**
+"codemint.desishub.com" in muted gray (#666), ~12px monospace.
+
+**STRICT RULES:**
+- NO glowing orbs or blobs anywhere
+- NO radial gradients or light blooms
+- NO bokeh or atmospheric haze
+- Phone mockups only — no decorative shapes
+- Flat dark canvas with typography and mockups only
+
+**Color palette:**
+  Primary red: #F04E3E
+  Dark bg: #0a0a0f
+  Card white: #ffffff
+  Gray text: #888888
+  Border: #333333
+
+**Mood:** Premium mobile template marketplace listing — clean, sharp, modern. Feels like a CodeCanyon or Gumroad top-seller card. Professional and trustworthy.
+
+**Style:** Dark editorial + real app mockups. Typography-first with phone screens as visual proof.`,
+  },
+  {
+    id: "linkedin-banner-dark-editorial",
+    title: "LinkedIn Banner — Dark Editorial Personal Brand",
+    category: "Thumbnails & Banners",
+    howToUse:
+      "Use this prompt in any image AI to generate a LinkedIn banner. Replace the title lines, subtitle tech list, pill badge text, and corner labels with your own details.",
+    body: `Create a professional LinkedIn banner image with the following specifications:
+
+**Dimensions:** 1584x396px (LinkedIn banner, ultra-wide crop)
+
+**Background:** Pure deep dark (#0d0906) — clean, flat, no glows, no orbs, no blobs, no blurred shapes, no radial gradients whatsoever. Add very subtle noise/grain texture at ~3% opacity over the entire surface for depth.
+
+**Left side (35% of banner):**
+Pure clean dark background — no shapes, no glows, no effects. Just flat dark with the grain texture.
+
+**Left edge accent:**
+A single thin vertical line in warm gold (#c48a2a), ~4px wide, full height, on the very far left edge of the banner. Clean architectural stripe — no glow, no blur, hard edge only.
+
+**Center-right text block:**
+
+Top micro-label:
+"Fullstack Developer & Founder · Kampala, Uganda" in tiny warm gray (#888), monospace font, ~13px, uppercase, wide letter-spacing.
+
+Title line 1:
+"Full Stack." in bold ultra-heavy white sans-serif (Inter or Geist), ~58px, tight letter-spacing.
+
+Title line 2:
+"Full Speed." in the same ultra-heavy font but warm gold (#d4a03a), italic, ~58px — with a clean flat gold underline stroke beneath it (no glow, no blur on the underline).
+
+Subtitle:
+"Next.js · Golang · Open Source · Payments · DevOps" in medium gray (#888), ~18px, light weight, letter-spacing 0.05em.
+
+**3 pill badges below subtitle:**
+Thin border (#444), text (#aaa), monospace ~12px, no background fill:
+  • "Desishub Technologies"
+  • "DGateway · African Payments"
+  • "14.7K YouTube · jb.desishub.com"
+
+**Top-left corner:**
+"Open to collabs" in muted gray (#666), ~13px monospace.
+
+**Top-right corner:**
+"jb.desishub.com" in muted gray (#666), ~13px monospace.
+
+**Bottom-right:**
+4 small rounded tech icons in a tight row, dark square backgrounds, hard edges — no glow:
+  Next.js · Golang · Docker · TypeScript
+
+**STRICT RULES — apply to the entire image:**
+- NO glowing orbs
+- NO blurred circles or blobs
+- NO radial gradients or light blooms
+- NO bokeh or lens effects
+- NO atmospheric haze or fog
+- Typography and flat geometry ONLY
+
+**Mood:** Clean, minimal, confident, premium dark editorial. Typography-first. No decorative lighting effects of any kind.
+
+**Style:** Senior developer personal brand — flat dark canvas, bold type, gold accent stripe. Think linear, architectural, sharp.
+
+**Aspect ratio:** 4:1 (1584x396px)`,
+  },
+  {
+    id: "mobile-money-course-thumbnail",
+    title: "Mobile Money Payment Course Thumbnail",
+    category: "Thumbnails & Banners",
+    howToUse:
+      "Use this prompt in any image AI to generate a course thumbnail for mobile money / payment integration tutorials. Adjust the title, stat bar numbers, provider cards, and tech icons for your specific course.",
+    body: `Create a professional dark-themed course thumbnail with the following layout:
+
+**Background:** Pure black (#000000) with a very subtle noise/grain texture overlay (low opacity ~4%). Add a single thin horizontal blue (#0070f3) accent line across the very top edge. Faint circular radar rings emanating from the left, centered around the logo area.
+
+**Top-left eyebrow label:** Small monospace text badge reading "3-DAY INTENSIVE · 45+ LESSONS" in muted gray (#888), uppercase, ~14px — above the main title.
+
+**Left-center text block (main content):**
+- Title line 1: "Airtel & MTN" in large, ultra-heavy bold white sans-serif (Geist/Inter), ~88px, letter-spacing tight
+- Title line 2: "Mobile Money" same style, ~88px
+- Title line 3: "Payment Integration." in the same bold font but colored in electric blue (#0070f3), ~88px
+- Subtitle below: "From zero to production-ready payments in 3 days. Next.js · DGateway · Stripe" in gray (#888), ~22px, light weight
+
+**Bottom stat bar (full width, separated by a thin dark line at top):**
+Four equally spaced stat blocks side by side:
+  - "3" large bold white + label "DAYS" in gray mono
+  - "10" large bold white + label "MODULES" in gray mono
+  - "45+" large bold white + label "LESSONS" in gray mono
+  - "50K" large bold blue (#0070f3) + label "UGX" in gray mono
+
+**Right side (35% of image):**
+A vertical stack of 3 floating dark cards (#111111 background, #333 border, 8px radius), slightly overlapping, with a soft blue glow behind them:
+  - Card 1: MTN Mobile Money logo (yellow M icon) + label "MTN MoMo"
+  - Card 2: Airtel Money logo (red A icon) + label "Airtel Money"
+  - Card 3: Stripe logo (purple S) + label "Stripe Cards"
+Each card has a small green dot indicating "connected/active" status. Cards are tilted very slightly (~3°) and staggered for depth.
+
+**Corner decorations:** Thin L-shaped corner markers in #333 at all four corners of the image — minimal, architectural feel.
+
+**Bottom-right corner:** A small row of 3 rounded tech badge icons:
+  Next.js (white N), TypeScript (blue TS), DGateway (blue orbit icon)
+
+**Lighting:** Soft blue (#0070f3) radial glow behind the right-side cards. No other color accents — keep it clean and minimal.
+
+**Typography mood:** Geist Sans — ultra-bold titles, mono labels. Clean, modern, no decorative fonts.
+
+**Aspect ratio:** 16:9 (1280x720)
+**Style:** Premium dev course cover — dark minimal SaaS aesthetic, architectural corner accents, noise texture. Think Vercel meets African fintech. Professional, trustworthy, high-value.`,
   },
 ];
 
