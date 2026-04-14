@@ -67,7 +67,7 @@ My current tech stack is focused and intentional: **Next.js** on the frontend, *
 
 In 2026, I built several open source projects I'm especially proud of:
 
-- **[Grit Framework](https://grit-vert.vercel.app)** — A Golang web framework designed for simplicity and speed. Grit makes it easy to build production APIs with built-in routing, middleware, and database support. [GitHub](https://github.com/MUKE-coder/grit)
+- **[Grit Framework](https://github.com/MUKE-coder/grit)** — A Golang web framework designed for simplicity and speed. Grit makes it easy to build production APIs with built-in routing, middleware, and database support.
 - **[Gorm Studio](https://github.com/MUKE-coder/gorm-studio)** — A visual database management tool for GORM (Go's most popular ORM). Browse tables, run queries, and manage your Go database visually.
 - **[Sentinel](https://github.com/MUKE-coder/sentinel)** — Production-grade security intelligence SDK for Go applications. Drop-in middleware for Gin that provides WAF protection, rate limiting, threat detection, audit logging, anomaly detection, AI-powered analysis, and an embedded React dashboard — all mountable with a single function call.
 - **[Orbita](https://github.com/MUKE-coder/orbita)** — A self-hosted Platform-as-a-Service (PaaS) built in Go that enables developers to manage multiple isolated client organizations on a single VPS, with multi-tenancy, RBAC, Docker deployment, database management, and cron job scheduling.
