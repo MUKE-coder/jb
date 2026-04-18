@@ -38,22 +38,28 @@ function getMDXData(dir: string) {
   });
 }
 
+function getAllPostsUnfiltered() {
+  return getMDXData(path.join(process.cwd(), "src/content/blog")).sort(
+    (a, b) =>
+      new Date(b.metadata.createdAt).getTime() -
+      new Date(a.metadata.createdAt).getTime()
+  );
+}
+
 export function getAllPosts() {
-  return getMDXData(path.join(process.cwd(), "src/content/blog"))
-    .sort(
-      (a, b) =>
-        new Date(b.metadata.createdAt).getTime() -
-        new Date(a.metadata.createdAt).getTime()
-    )
-    .filter((post) => post.metadata.category !== "components");
+  return getAllPostsUnfiltered().filter(
+    (post) => post.metadata.category !== "components"
+  );
 }
 
 export function getPostBySlug(slug: string) {
-  return getAllPosts().find((post) => post.slug === slug);
+  return getAllPostsUnfiltered().find((post) => post.slug === slug);
 }
 
 export function getPostsByCategory(category: string) {
-  return getAllPosts().filter((post) => post.metadata?.category === category);
+  return getAllPostsUnfiltered().filter(
+    (post) => post.metadata?.category === category
+  );
 }
 
 export function findNeighbour(posts: Post[], slug: string) {
