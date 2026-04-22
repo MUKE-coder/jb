@@ -1,0 +1,2599 @@
+---
+title: "How to Build & Sell APIs as a Developer: Your Complete Guide to Monetising Niche APIs in the Age of AI"
+description: "We are living in the age of automation. Tools like n8n, Zapier, Make.com, and custom AI agents built on top of GPT-4, Claude, and Gemini all share one thing in common: they need data, and they access it through APIs."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfqBYMFYgnxaXK5QskFPrNjMOTW0coEGZB2h7d
+category: tutorial
+createdAt: 2026-04-22
+updatedAt: 2026-04-22
+---
+
+# How to Build & Sell APIs as a Developer: Your Complete Guide to Monetising Niche APIs in the Age of AI
+
+> _"I know how to code, but I don't know what to build."_ — Every developer, at some point.
+
+If you have ever said that, this guide is for you.
+
+---
+
+## The Problem Nobody Talks About
+
+After spending months learning React, Next.js, databases, and deployments, most developers immediately look for the **next big thing** — a global SaaS, an app that competes with Google, a platform that disrupts an industry. The result? Analysis paralysis, unfinished projects, and zero revenue.
+
+Here is the truth: **The most profitable opportunities are hiding in plain sight, in your own backyard.**
+
+While you are waiting for a "big idea," millions of AI agents, automation workflows, and developer tools are making **hundreds of API calls every single day** — and they are hungry for data that does not exist yet.
+
+---
+
+## Why AI Has Created a Massive Market for Niche APIs
+
+We are living in the age of automation. Tools like n8n, Zapier, Make.com, and custom AI agents built on top of GPT-4, Claude, and Gemini all share one thing in common: **they need data, and they access it through APIs.**
+
+Think about this:
+
+- An AI assistant helping a Ugandan student needs to know which courses are offered at Makerere University — there is no public API for that.
+- A restaurant automation tool for a Nigerian food delivery startup needs local recipes with local ingredient measurements — the existing recipe APIs are built for Western kitchens.
+- A Kenyan real estate chatbot needs property listings, neighbourhoods, and pricing data specific to Nairobi — global APIs do not have that.
+
+**You, as a local developer, are uniquely positioned to fill this gap.** You know the context, the culture, and the data. You just need the technical skills to package it as an API and the business model to sell access to it.
+
+That is exactly what this guide teaches.
+
+---
+
+## 20 Untapped Niche API Ideas You Can Build Today
+
+The following ideas are especially underserved in African and emerging markets, but the same principle applies globally — find a niche, build the data layer, sell access.
+
+### Food & Culture
+
+1. **Local Recipes API** — Traditional dishes from Uganda, Nigeria, Ghana, Ethiopia, etc. with ingredients, preparation steps, nutritional info, and regional variants. Perfect for food delivery apps, AI cooking assistants, and meal planners.
+2. **Street Food & Vendor API** — Data on popular street food spots in specific cities, their locations, opening hours, and signature items. Tourism apps and food delivery platforms would pay for this.
+3. **Local Market Prices API** — Real-time or regularly updated prices for produce, grains, and goods at major markets (e.g., Owino Market, Nakasero). AgriTech platforms and price comparison apps are hungry for this.
+
+### Education
+
+4. **University Courses API** — Programmes, entry requirements, fees, and deadlines for universities in your country. EdTech apps, student counselling tools, and AI advisors need this.
+5. **Scholarships & Bursaries API** — Locally available scholarships, eligibility criteria, and application deadlines. Millions of students search for this every year.
+6. **Primary & Secondary School API** — Schools by district, type (government/private), subjects offered, and performance rankings. School choice platforms and parent apps would use this.
+
+### Business & Commerce
+
+7. **Local Business Directory API** — Verified businesses by category and city, with contacts, hours, and services. AI assistants recommending local services would call this constantly.
+8. **Government Tenders API** — Published procurement opportunities from government portals, structured and searchable. A goldmine for procurement automation.
+9. **Company Registry API** — Registered company data from URSB (Uganda) or CAC (Nigeria), searchable by name or type. Due diligence tools and credit scoring apps need this.
+10. **Bank & SACCO API** — Banks, mobile money agents, SACCOs, and microfinance institutions with locations, services, and interest rates. Fintech apps and loan comparison tools.
+
+### Location & Geography
+
+11. **Districts & Sub-Counties API** — Full administrative hierarchy for your country (country → region → district → county → sub-county → parish). Any government or civic tech app needs this.
+12. **Public Transport Routes API** — Taxi, matatu, and boda-boda routes in major cities with fare estimates. Ride-sharing apps and navigation tools.
+13. **Hospital & Health Facility API** — Public and private health facilities by district, level of care, and services offered. Health tech and telemedicine apps.
+14. **Tourist Attractions API** — National parks, cultural sites, hotels, and lodges with descriptions, coordinates, pricing, and access info. Travel apps and AI travel planners.
+
+### Agriculture & Environment
+
+15. **Crop Calendar API** — Planting and harvesting seasons by region, crop type, and soil conditions. AgriTech platforms and farmer advisory apps.
+16. **Pest & Disease Alert API** — Known agricultural pests and crop diseases in specific regions with treatment recommendations. Smart farming and advisory apps.
+17. **Weather Patterns API (Historical)** — Historical rainfall, temperature, and drought data by district. Research tools, insurance companies, and climate apps.
+
+### Legal & Civic
+
+18. **Legislation & Acts API** — Key laws, acts, and amendments from your country's parliament, structured and searchable. Legal tech tools, chatbots, and compliance apps.
+19. **Public Holidays API** — Country-specific public holidays including regional and religious observances. Scheduling tools, HR software, and calendar apps.
+
+### Sports & Entertainment
+
+20. **Local Sports Leagues API** — Standings, match results, and fixtures for local football leagues (e.g., Uganda Premier League, Nigerian NPFL). Sports media, betting platforms, and fan apps.
+
+---
+
+## The Tech Stack We Are Using
+
+Here is what we will build with and why each piece matters:
+
+| Layer          | Tool                    | Purpose                                           |
+| -------------- | ----------------------- | ------------------------------------------------- |
+| Framework      | Next.js 15 (App Router) | API routes + dashboard frontend in one project    |
+| Database ORM   | Prisma                  | Type-safe database queries                        |
+| Database       | PostgreSQL via Neon     | Managed, serverless Postgres (easy to start with) |
+| Authentication | Better Auth (JB UI)     | User sign-up, sign-in, sessions                   |
+| API Security   | API Keys                | Protect endpoints, track usage per user           |
+| API Docs       | Scalar                  | Beautiful interactive documentation               |
+| Billing        | Stripe                  | Charge users for API access                       |
+| Marketing      | Website UI Component    | Landing page, pricing page, docs                  |
+| Deployment     | Vercel                  | Zero-config deployment                            |
+
+> **Note on the Database:** Neon is excellent for getting started — it is free, serverless, and easy to connect. However, as your API grows and you accumulate paying customers, consider migrating to a **self-hosted PostgreSQL instance** on a VPS (e.g., using DigitalOcean, Hetzner, or a local cloud provider). Self-hosting gives you full control over data residency, lower costs at scale, and better performance for read-heavy workloads. Services like Supabase (managed) or raw PostgreSQL on Docker are good intermediate steps.
+
+---
+
+## Part 1: Project Setup
+
+### Step 1: Create Your Next.js Project
+
+```bash
+npx create-next-app@latest my-local-api --typescript --tailwind --app
+cd my-local-api
+```
+
+When prompted:
+
+- Would you like to use `src/` directory? → **No**
+- Would you like to use App Router? → **Yes**
+- Would you like to customise the import alias? → **No**
+
+### Step 2: Install and Initialise shadcn/ui
+
+All the UI components we use (Better Auth UI, Stripe UI, Website UI) are built on shadcn/ui. Set it up first:
+
+```bash
+pnpm dlx shadcn@latest init
+```
+
+Choose **New York** style and **Zinc** colour when prompted. This sets up your `components/ui/` folder and `tailwind.config.ts`.
+
+### Step 3: Set Up Prisma 7 with PostgreSQL
+
+Prisma 7 introduces a new setup flow with a dedicated config file and the `@prisma/adapter-pg` driver adapter. This is different from older guides — follow this carefully.
+
+**Install Prisma 7 dependencies:**
+
+```bash
+pnpm add prisma tsx @types/pg --save-dev
+pnpm add @prisma/client @prisma/adapter-pg dotenv pg
+```
+
+**Initialise Prisma with an output directory:**
+
+```bash
+pnpm dlx prisma init --db --output ../app/generated/prisma
+```
+
+This creates:
+
+- `prisma/schema.prisma` — your schema file
+- `prisma.config.ts` — the new Prisma 7 config file
+- `app/generated/prisma/` — where the generated client goes
+- `.env` — with a `DATABASE_URL` placeholder
+
+**Create your Neon database:**
+
+1. Go to [neon.tech](https://neon.tech) and create a free account.
+2. Create a new project and copy your connection string.
+3. Paste it in your `.env` file:
+
+```env
+DATABASE_URL="postgresql://username:password@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require"
+```
+
+**Configure `prisma.config.ts`:**
+
+```typescript
+// prisma.config.ts
+import "dotenv/config";
+import { defineConfig, env } from "prisma/config";
+
+export default defineConfig({
+  schema: "prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+    seed: `tsx prisma/seed.ts`,
+  },
+  datasource: {
+    url: env("DATABASE_URL"),
+  },
+});
+```
+
+**Update `prisma/schema.prisma` — the generator block changes in Prisma 7:**
+
+```prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+```
+
+> **Key difference from Prisma 5/6:** The `provider` is now `"prisma-client"` (not `"prisma-client-js"`), and you specify an explicit output directory. All imports in your code come from `"../app/generated/prisma/client"` instead of `"@prisma/client"`.
+
+**Push schema to database:**
+
+```bash
+# ⚠️ In Prisma 7, use db push instead of migrate dev for initial setup
+pnpm dlx prisma db push
+
+# Then generate the client
+pnpm dlx prisma generate
+```
+
+> **Why `db push` and not `migrate dev`?** In Prisma 7, `migrate dev` has known issues with certain setups. Use `db push` during development to sync your schema, then use `migrate dev` only when you need a tracked migration history for production deployments.
+
+### Step 4: Create the Prisma Client Singleton
+
+Prisma 7 uses a driver adapter pattern. Create `lib/prisma.ts`:
+
+```typescript
+// lib/prisma.ts
+import { PrismaClient } from "../app/generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+
+const globalForPrisma = global as unknown as {
+  prisma: PrismaClient;
+};
+
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const db = globalForPrisma.prisma || new PrismaClient({ adapter });
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+
+export default db;
+```
+
+> **Important:** We export as the default `db` — import it as `import db from "@/lib/prisma"` throughout your project. The adapter is required in Prisma 7 when using PostgreSQL with the new driver-based approach.
+
+If you have a Turbopack issue (Next.js 15.2.0 or 15.2.1), remove `--turbopack` from your dev script in `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "next dev"
+  }
+}
+```
+
+---
+
+## Part 2: Authentication with Better Auth
+
+Your API is a product. Users need to register, log in, and manage their API keys from a dashboard. We use the **JB Better Auth UI** component to set all of this up in one command.
+
+### Install the Auth Components
+
+```bash
+pnpm dlx shadcn@latest add https://better-auth-ui.desishub.com/r/auth-components.json
+```
+
+This single command installs **everything**:
+
+- 8 ready-made auth components (SignIn, SignUp, VerifyEmail, ForgotPassword, ResetPassword, ChangePassword, Profile, LogoutButton)
+- Pre-built auth pages under `app/(auth)/auth/`
+- The API route handler at `app/api/auth/[...all]/route.ts`
+- A complete Prisma schema with User, Session, Account, and Verification models
+- Email templates for OTP verification
+- A starter dashboard page
+
+### Configure Your Environment Variables
+
+After installation, copy the generated template:
+
+```bash
+cp .env.example .env.local
+```
+
+Fill in these values:
+
+```env
+# Better Auth
+BETTER_AUTH_SECRET="run: openssl rand -base64 32"
+BETTER_AUTH_URL="http://localhost:3000"
+
+# Database
+DATABASE_URL="your-neon-connection-string"
+
+# Email (use Resend for production)
+RESEND_API_KEY="re_xxxxxxxxxxxx"
+
+# OAuth (optional but recommended)
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+GITHUB_CLIENT_ID="your-github-client-id"
+GITHUB_CLIENT_SECRET="your-github-client-secret"
+```
+
+### Run Your First Migration
+
+```bash
+npx prisma migrate dev --name init
+```
+
+### Test Authentication
+
+Start your dev server and visit:
+
+- `http://localhost:3000/auth/sign-up` → Registration page
+- `http://localhost:3000/auth/sign-in` → Login page
+- `http://localhost:3000/dashboard` → Protected dashboard
+
+You now have a fully working auth system. Users who register will receive an OTP verification email, and once verified, they can access the dashboard.
+
+---
+
+## Part 3: Building Your CRUD API with Next.js & Prisma
+
+Now for the core of the product — the actual API your customers will call.
+
+We will use a **Local Recipes API** as our example throughout this section. The same patterns apply to any of the 20 ideas listed earlier.
+
+### Define Your Prisma Schema
+
+Open `prisma/schema.prisma` and add your domain models **below** the auth models that Better Auth already added. Remember: in Prisma 7 the generator block uses `provider = "prisma-client"`:
+
+```prisma
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ... (Better Auth models above — do not remove them)
+
+model Recipe {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  country      String   // e.g. "Uganda", "Nigeria"
+  region       String?  // e.g. "Eastern Uganda"
+  category     String   // e.g. "Main Course", "Breakfast"
+  ingredients  String[] // Array of ingredient strings
+  steps        String[] // Array of step-by-step instructions
+  prepTime     Int      // in minutes
+  cookTime     Int      // in minutes
+  servings     Int
+  imageUrl     String?
+  tags         String[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  key       String   @unique
+  usageCount Int     @default(0)
+  lastUsedAt DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ApiUsageLog {
+  id        String   @id @default(cuid())
+  apiKeyId  String
+  endpoint  String
+  method    String
+  statusCode Int
+  timestamp DateTime @default(now())
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+}
+```
+
+> **Important:** The `User` model was created by the Better Auth installation. You just need to add the relation field `apiKeys ApiKey[]` to it. Open the User model and add that line.
+
+Push the schema changes to the database:
+
+```bash
+pnpm dlx prisma db push
+pnpm dlx prisma generate
+```
+
+### File Structure for Your API
+
+Organise your API routes clearly:
+
+```
+app/
+└── api/
+    └── v1/
+        └── recipes/
+            ├── route.ts          # GET all, POST new
+            └── [id]/
+                └── route.ts      # GET one, PATCH, DELETE
+```
+
+Versioning your API under `/api/v1/` from the start is a professional practice — it lets you release `/api/v2/` in the future without breaking existing customers.
+
+### GET All Recipes (with Pagination, Filtering & Search)
+
+```typescript
+// app/api/v1/recipes/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import db from "@/lib/prisma";
+import { validateApiKey } from "@/lib/api-key"; // We build this in Part 4
+
+export async function GET(request: NextRequest) {
+  // Validate the API key on every request
+  const authResult = await validateApiKey(request);
+  if (!authResult.valid) {
+    return NextResponse.json(
+      { error: "Unauthorized. Provide a valid API key." },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const { searchParams } = new URL(request.url);
+
+    // Pagination
+    const page = parseInt(searchParams.get("page") ?? "1");
+    const limit = parseInt(searchParams.get("limit") ?? "20");
+    const skip = (page - 1) * limit;
+
+    // Filters
+    const country = searchParams.get("country");
+    const category = searchParams.get("category");
+    const search = searchParams.get("search");
+
+    // Build dynamic WHERE clause
+    const where: any = {};
+    if (country) where.country = { equals: country, mode: "insensitive" };
+    if (category) where.category = { equals: category, mode: "insensitive" };
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { tags: { has: search } },
+      ];
+    }
+
+    const [recipes, total] = await Promise.all([
+      db.recipe.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      db.recipe.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      data: recipes,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: "Failed to fetch recipes" },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### POST a New Recipe
+
+The POST endpoint allows admin users (or seeding scripts) to add new recipes. In production, you would add an admin role check here.
+
+```typescript
+// Still in app/api/v1/recipes/route.ts
+
+export async function POST(request: NextRequest) {
+  const authResult = await validateApiKey(request);
+  if (!authResult.valid) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const {
+      name,
+      description,
+      country,
+      region,
+      category,
+      ingredients,
+      steps,
+      prepTime,
+      cookTime,
+      servings,
+      imageUrl,
+      tags,
+    } = body;
+
+    // Basic validation
+    if (!name || !country || !category || !ingredients || !steps) {
+      return NextResponse.json(
+        {
+          error:
+            "Missing required fields: name, country, category, ingredients, steps",
+        },
+        { status: 400 }
+      );
+    }
+
+    const recipe = await db.recipe.create({
+      data: {
+        name,
+        description,
+        country,
+        region,
+        category,
+        ingredients,
+        steps,
+        prepTime,
+        cookTime,
+        servings,
+        imageUrl,
+        tags: tags ?? [],
+      },
+    });
+
+    return NextResponse.json({ data: recipe }, { status: 201 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: "Failed to create recipe" },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### GET Single, PATCH, and DELETE by ID
+
+```typescript
+// app/api/v1/recipes/[id]/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import db from "@/lib/prisma";
+import { validateApiKey } from "@/lib/api-key";
+
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(request: NextRequest, { params }: Params) {
+  const authResult = await validateApiKey(request);
+  if (!authResult.valid) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { id } = await params;
+    const recipe = await db.recipe.findUnique({ where: { id } });
+
+    if (!recipe) {
+      return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ data: recipe });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to fetch recipe" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: Params) {
+  const authResult = await validateApiKey(request);
+  if (!authResult.valid) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { id } = await params;
+    const body = await request.json();
+
+    const recipe = await db.recipe.update({
+      where: { id },
+      data: body,
+    });
+
+    return NextResponse.json({ data: recipe });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to update recipe" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: Params) {
+  const authResult = await validateApiKey(request);
+  if (!authResult.valid) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { id } = await params;
+    await db.recipe.delete({ where: { id } });
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to delete recipe" },
+      { status: 500 }
+    );
+  }
+}
+```
+
+> **PATCH vs PUT:** Use `PATCH` for partial updates (only the fields you send are changed) and `PUT` for full replacements (you send the entire object and it replaces what is there). For most APIs, `PATCH` is friendlier for clients. Prisma's `update` works perfectly for both.
+
+---
+
+## Part 4: Protecting Your API with API Keys
+
+Every request to your API must include a valid API key. This is how you know who is calling your API, enforce usage limits, and track billing.
+
+### The API Key Flow
+
+```
+User registers → User logs in → User generates API key in dashboard
+→ User includes key in request header → Your API validates the key
+→ Request succeeds or is rejected
+```
+
+### Step 1: The API Key Generation Utility
+
+Create `lib/generate-api-key.ts`:
+
+```typescript
+// lib/generate-api-key.ts
+import crypto from "crypto";
+
+export function generateApiKey(): string {
+  // Format: lapi_<32 random hex chars>
+  // The prefix makes it easy to identify and scan for accidental leaks
+  const random = crypto.randomBytes(32).toString("hex");
+  return `lapi_${random}`;
+}
+```
+
+Using a recognisable prefix (like `lapi_` for "Local API") is a best practice. GitHub does `ghp_`, Stripe uses `sk_live_`, and so on. This helps developers immediately identify what kind of secret they are looking at and allows secret-scanning tools to flag accidental commits.
+
+### Step 2: Server Actions for API Key Management
+
+Create `actions/api-keys.ts`:
+
+```typescript
+// actions/api-keys.ts
+"use server";
+
+import { generateApiKey } from "@/lib/generate-api-key";
+import db from "@/lib/prisma";
+import { getAuthenticatedUser } from "@/lib/auth"; // from Better Auth setup
+import { revalidatePath } from "next/cache";
+
+export async function createApiKey(name: string) {
+  const user = await getAuthenticatedUser();
+  if (!user) {
+    return { success: false, data: null, error: "Not authenticated" };
+  }
+
+  const key = generateApiKey();
+
+  // Ensure uniqueness (astronomically unlikely but worth checking)
+  const existing = await db.apiKey.findUnique({ where: { key } });
+  if (existing) {
+    return {
+      success: false,
+      data: null,
+      error: "Key collision, please try again",
+    };
+  }
+
+  const apiKey = await db.apiKey.create({
+    data: { userId: user.id, name, key },
+  });
+
+  revalidatePath("/dashboard/api-keys");
+  return { success: true, data: apiKey, error: null };
+}
+
+export async function getUserApiKeys() {
+  const user = await getAuthenticatedUser();
+  if (!user) return [];
+
+  return db.apiKey.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function deleteApiKey(id: string) {
+  const user = await getAuthenticatedUser();
+  if (!user) return { success: false };
+
+  await db.apiKey.delete({
+    where: { id, userId: user.id }, // Ensures users can only delete their own keys
+  });
+
+  revalidatePath("/dashboard/api-keys");
+  return { success: true };
+}
+```
+
+### Step 3: The API Key Validation Middleware
+
+This is the function called at the top of every protected route:
+
+```typescript
+// lib/api-key.ts
+import { NextRequest } from "next/server";
+import db from "@/lib/prisma";
+
+interface ValidationResult {
+  valid: boolean;
+  apiKeyId?: string;
+  userId?: string;
+}
+
+export async function validateApiKey(
+  request: NextRequest
+): Promise<ValidationResult> {
+  // Clients should send the key in the Authorization header:
+  // Authorization: Bearer lapi_xxxxx
+  // OR as a custom header: x-api-key: lapi_xxxxx
+  const authHeader = request.headers.get("authorization");
+  const xApiKey = request.headers.get("x-api-key");
+
+  let key: string | null = null;
+
+  if (authHeader?.startsWith("Bearer ")) {
+    key = authHeader.slice(7);
+  } else if (xApiKey) {
+    key = xApiKey;
+  }
+
+  if (!key) {
+    return { valid: false };
+  }
+
+  const apiKey = await db.apiKey.findUnique({
+    where: { key },
+    select: { id: true, userId: true },
+  });
+
+  if (!apiKey) {
+    return { valid: false };
+  }
+
+  // Update usage stats asynchronously (do not await — do not slow down the response)
+  db.apiKey
+    .update({
+      where: { id: apiKey.id },
+      data: {
+        usageCount: { increment: 1 },
+        lastUsedAt: new Date(),
+      },
+    })
+    .catch(console.error);
+
+  return { valid: true, apiKeyId: apiKey.id, userId: apiKey.userId };
+}
+```
+
+### Step 4: How Clients Use the API Key
+
+Your API documentation should instruct users to include their key like this:
+
+```bash
+# Option 1: Authorization header (recommended)
+curl https://your-api.com/api/v1/recipes \
+  -H "Authorization: Bearer lapi_your_key_here"
+
+# Option 2: x-api-key header
+curl https://your-api.com/api/v1/recipes \
+  -H "x-api-key: lapi_your_key_here"
+```
+
+In JavaScript/TypeScript:
+
+```typescript
+const response = await fetch(
+  "https://your-api.com/api/v1/recipes?country=Uganda",
+  {
+    headers: {
+      Authorization: "Bearer lapi_your_key_here",
+      "Content-Type": "application/json",
+    },
+  }
+);
+
+const data = await response.json();
+console.log(data);
+```
+
+---
+
+## Part 5: Beautiful API Documentation with Scalar
+
+An API without good documentation is a product nobody can use. Scalar gives your API a beautiful, interactive documentation page — similar to what Stripe, Twilio, and other top API companies use.
+
+### Install the Scalar Component
+
+```bash
+pnpm dlx shadcn@latest add https://ui-components.desishub.com/r/scalar-api-docs.json
+```
+
+This creates:
+
+- `app/api-docs/route.ts` — The Scalar UI page
+- `app/api/openapi/route.ts` — Your OpenAPI JSON spec endpoint
+- `data/openapi.ts` — Where you define your spec
+- Sample dummy data for immediate testing
+
+### Customise Your OpenAPI Specification
+
+Edit `data/openapi.ts` to describe your actual API:
+
+```typescript
+// data/openapi.ts
+export const openApiSpec = {
+  openapi: "3.0.3",
+  info: {
+    title: "Uganda Local Recipes API",
+    description:
+      "A comprehensive API for traditional Ugandan and East African recipes. Perfect for food apps, AI assistants, and culinary platforms.",
+    version: "1.0.0",
+    contact: {
+      name: "API Support",
+      email: "support@your-api.com",
+      url: "https://your-api.com/help",
+    },
+  },
+  servers: [
+    {
+      url: "https://your-api.com",
+      description: "Production",
+    },
+    {
+      url: "http://localhost:3000",
+      description: "Development",
+    },
+  ],
+  components: {
+    securitySchemes: {
+      ApiKeyAuth: {
+        type: "apiKey",
+        in: "header",
+        name: "x-api-key",
+        description:
+          "Your API key. Get one from your dashboard at https://your-api.com/dashboard",
+      },
+    },
+    schemas: {
+      Recipe: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "clx1abc123" },
+          name: { type: "string", example: "Rolex (Ugandan Street Food)" },
+          description: {
+            type: "string",
+            example: "A popular Ugandan street snack...",
+          },
+          country: { type: "string", example: "Uganda" },
+          region: { type: "string", example: "Central Uganda" },
+          category: { type: "string", example: "Street Food" },
+          ingredients: { type: "array", items: { type: "string" } },
+          steps: { type: "array", items: { type: "string" } },
+          prepTime: { type: "integer", example: 10 },
+          cookTime: { type: "integer", example: 15 },
+          servings: { type: "integer", example: 1 },
+        },
+      },
+    },
+  },
+  security: [{ ApiKeyAuth: [] }],
+  paths: {
+    "/api/v1/recipes": {
+      get: {
+        summary: "List all recipes",
+        description:
+          "Returns a paginated list of recipes. Supports filtering by country, category, and full-text search.",
+        operationId: "getRecipes",
+        tags: ["Recipes"],
+        parameters: [
+          {
+            name: "country",
+            in: "query",
+            schema: { type: "string" },
+            example: "Uganda",
+          },
+          {
+            name: "category",
+            in: "query",
+            schema: { type: "string" },
+            example: "Main Course",
+          },
+          {
+            name: "search",
+            in: "query",
+            schema: { type: "string" },
+            example: "matooke",
+          },
+          {
+            name: "page",
+            in: "query",
+            schema: { type: "integer", default: 1 },
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", default: 20 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Successful response",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Recipe" },
+                    },
+                    pagination: { type: "object" },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Unauthorized — invalid or missing API key" },
+        },
+      },
+    },
+    "/api/v1/recipes/{id}": {
+      get: {
+        summary: "Get a single recipe",
+        operationId: "getRecipeById",
+        tags: ["Recipes"],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": { description: "Recipe found" },
+          "404": { description: "Recipe not found" },
+        },
+      },
+    },
+  },
+};
+```
+
+### View Your API Docs
+
+Start your server and go to `http://localhost:3000/api-docs`. You will see a fully interactive documentation page where developers can read your API spec and even make live test requests directly from the browser.
+
+---
+
+## Part 6: Billing with Stripe
+
+This is where your API becomes a business. We use the **JB Stripe UI Component** which is pre-built to work alongside Better Auth and Prisma.
+
+### Install the Stripe Component
+
+First ensure you have Better Auth installed (Part 2), then:
+
+```bash
+# Install zustand cart (required dependency)
+pnpm dlx shadcn@latest add https://jb.desishub.com/r/zustand-cart.json
+
+# Install the full Stripe UI component
+pnpm dlx shadcn@latest add https://stripe-ui-component.desishub.com/r/stripe-ui-component.json
+```
+
+### Add Stripe Environment Variables
+
+```env
+STRIPE_SECRET_KEY="sk_test_your_stripe_secret_key"
+STRIPE_WEBHOOK_SECRET="whsec_your_webhook_secret"
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_your_publishable_key"
+```
+
+### Design Your Pricing Tiers
+
+For an API product, usage-based pricing tiers make the most sense:
+
+| Plan        | Monthly Price | API Calls / Month | Features                                   |
+| ----------- | ------------- | ----------------- | ------------------------------------------ |
+| **Free**    | $0            | 500               | Access to all endpoints, community support |
+| **Starter** | $9            | 10,000            | All endpoints, email support               |
+| **Growth**  | $29           | 100,000           | All endpoints, priority support, webhooks  |
+| **Pro**     | $99           | Unlimited         | All endpoints, SLA, dedicated support      |
+
+Create these as Products in your Stripe Dashboard, then add their price IDs to your environment:
+
+```env
+STRIPE_FREE_PRICE_ID="price_xxx"
+STRIPE_STARTER_PRICE_ID="price_xxx"
+STRIPE_GROWTH_PRICE_ID="price_xxx"
+STRIPE_PRO_PRICE_ID="price_xxx"
+```
+
+### Track Usage and Enforce Limits
+
+Add a usage check to your API key validation:
+
+```typescript
+// lib/api-key.ts — updated validateApiKey function
+
+export async function validateApiKey(
+  request: NextRequest
+): Promise<ValidationResult> {
+  // ... (key extraction from header, same as before)
+
+  const apiKey = await db.apiKey.findUnique({
+    where: { key },
+    include: {
+      user: {
+        include: { subscription: true }, // Include their active plan
+      },
+    },
+  });
+
+  if (!apiKey) return { valid: false };
+
+  // Check if they have exceeded their plan's monthly limit
+  const plan = apiKey.user.subscription?.plan ?? "free";
+  const limits: Record<string, number> = {
+    free: 500,
+    starter: 10_000,
+    growth: 100_000,
+    pro: Infinity,
+  };
+
+  const monthlyUsage = await db.apiUsageLog.count({
+    where: {
+      apiKeyId: apiKey.id,
+      timestamp: {
+        gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+      },
+    },
+  });
+
+  if (monthlyUsage >= limits[plan]) {
+    return {
+      valid: false,
+      error: `Monthly limit of ${limits[plan]} requests reached. Upgrade your plan at https://your-api.com/pricing`,
+    };
+  }
+
+  // Log this request
+  db.apiUsageLog
+    .create({
+      data: {
+        apiKeyId: apiKey.id,
+        endpoint: request.nextUrl.pathname,
+        method: request.method,
+        statusCode: 200,
+      },
+    })
+    .catch(console.error);
+
+  return { valid: true, apiKeyId: apiKey.id, userId: apiKey.user.id };
+}
+```
+
+---
+
+## Part 7: Marketing Website
+
+Your API needs a public-facing website to attract customers. The **Website UI Component** scaffolds a complete marketing site in seconds.
+
+### Install the Website UI Component
+
+```bash
+pnpm dlx shadcn@latest add https://ui-components.desishub.com/r/website-ui.json
+```
+
+This creates **10 pages** including:
+
+- **Home** — Hero section, feature highlights, pricing preview, testimonials
+- **Pricing** — Plan comparison with toggle between monthly/annual
+- **Docs** — Documentation overview (links to your Scalar API docs)
+- **Developers** — API quickstart, SDKs, and code examples
+- **Help** — FAQ and support centre
+- **Contact** — Contact form
+
+### Customise Your Brand
+
+Edit `config/site.ts`:
+
+```typescript
+// config/site.ts
+export const siteConfig = {
+  name: "UgandaRecipes API",
+  tagline: "The World's First Comprehensive Ugandan Recipe API",
+  description:
+    "Give your app authentic Ugandan and East African recipe data. Trusted by food delivery platforms, AI assistants, and culinary apps.",
+  url: "https://ugandafoodsapi.com",
+  ogImage: "https://ugandafoodsapi.com/og.png",
+  links: {
+    twitter: "https://twitter.com/yourhandle",
+    github: "https://github.com/yourorg",
+    docs: "/api-docs",
+    pricing: "/pricing",
+  },
+};
+```
+
+### Write a Compelling Hero Section
+
+In your home page, focus on the **problem your API solves** and **who it is for**:
+
+```
+Headline: "Authentic Ugandan Recipes, Delivered by API"
+Subheadline: "Give your food app or AI assistant access to 500+ verified Ugandan
+              and East African recipes — with ingredients, steps, nutritional data,
+              and regional variants."
+CTA Button: "Get your free API key →"
+```
+
+---
+
+## Part 8: The Developer Dashboard
+
+Users who sign in need a dashboard where they can manage their API keys and monitor usage. This ties everything together.
+
+### Dashboard Structure
+
+```
+app/
+└── dashboard/
+    ├── page.tsx              # Overview: usage stats, quick links
+    ├── api-keys/
+    │   └── page.tsx          # List + create + delete API keys
+    └── billing/
+        └── page.tsx          # Current plan, upgrade options, invoices
+```
+
+### API Keys Page
+
+```typescript
+// app/dashboard/api-keys/page.tsx
+import { getUserApiKeys } from "@/actions/api-keys";
+import { ApiKeyManagement } from "@/components/dashboard/api-key-management";
+import { getAuthenticatedUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+
+export default async function ApiKeysPage() {
+  const user = await getAuthenticatedUser();
+  if (!user) redirect("/auth/sign-in");
+
+  const apiKeys = await getUserApiKeys();
+
+  return (
+    <div className="container mx-auto py-8 px-4">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">API Keys</h1>
+        <p className="text-muted-foreground">
+          Manage your API keys. Keep them secret — treat them like passwords.
+        </p>
+      </div>
+      <ApiKeyManagement orgKeys={apiKeys} />
+    </div>
+  );
+}
+```
+
+The `ApiKeyManagement` component (installed with the API key guide) handles:
+
+- Displaying all keys (masked for security, e.g., `lapi_••••••••••`)
+- A "Create new key" dialog with a name field
+- A one-time reveal of the full key on creation (with copy button)
+- Revoke/delete actions with confirmation
+- Timestamps showing when a key was created and last used
+
+---
+
+## Part 9: Deployment to Vercel
+
+### Prepare for Production
+
+1. Push your project to a GitHub repository.
+
+2. Go to [vercel.com](https://vercel.com) and import your repository.
+
+3. In the Vercel dashboard, add all your environment variables:
+
+   - `DATABASE_URL`
+   - `BETTER_AUTH_SECRET`
+   - `BETTER_AUTH_URL` (set to your production domain)
+   - `STRIPE_SECRET_KEY`
+   - `STRIPE_WEBHOOK_SECRET`
+   - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+   - `RESEND_API_KEY`
+   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (if using OAuth)
+
+4. Deploy. Vercel auto-detects Next.js and configures everything.
+
+### Set Up the Stripe Webhook
+
+Stripe needs to notify your app when payments succeed, subscriptions change, etc.
+
+1. In your Stripe Dashboard, go to **Developers → Webhooks**.
+2. Add an endpoint: `https://your-domain.vercel.app/api/webhooks/stripe`
+3. Select these events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+4. Copy the signing secret and add it as `STRIPE_WEBHOOK_SECRET` in Vercel.
+
+### Production Database Considerations
+
+Neon's free tier has connection limits. For production traffic:
+
+- **Short term:** Upgrade to Neon's paid tier (connection pooling via PgBouncer is built in)
+- **Medium term:** Consider [Supabase](https://supabase.com) — managed PostgreSQL with a generous free tier
+- **Long term (self-hosted):** Deploy PostgreSQL on a VPS with Docker:
+
+```bash
+docker run -d \
+  --name postgres \
+  -e POSTGRES_PASSWORD=strongpassword \
+  -e POSTGRES_DB=myapi \
+  -p 5432:5432 \
+  -v pgdata:/var/lib/postgresql/data \
+  postgres:16-alpine
+```
+
+Self-hosting saves significant money at scale and gives you full control. With a $10/month VPS on Hetzner or DigitalOcean, you can serve thousands of API requests per day.
+
+---
+
+## Part 10: Growing Your API Business
+
+### Seed Your Database
+
+An API is only valuable if it has data. Before you launch, write a seed script:
+
+```typescript
+// prisma/seed.ts
+import db from "../lib/prisma";
+import { Prisma } from "../app/generated/prisma/client";
+
+const recipes = [
+  {
+    name: "Rolex",
+    description:
+      "Uganda's most popular street food — a chapati rolled around a fried egg and vegetables.",
+    country: "Uganda",
+    region: "Central Uganda",
+    category: "Street Food",
+    ingredients: [
+      "2 eggs",
+      "1 chapati",
+      "1/4 cabbage shredded",
+      "1 tomato sliced",
+      "1/4 onion sliced",
+      "Salt to taste",
+      "Cooking oil",
+    ],
+    steps: [
+      "Beat the eggs with a pinch of salt.",
+      "Heat oil in a pan over medium heat.",
+      "Fry the egg like an omelette, placing the chapati on top before it fully sets.",
+      "Flip briefly, then remove from heat.",
+      "Add shredded cabbage, tomato, and onion on the egg.",
+      "Roll the chapati tightly around the filling.",
+      "Serve immediately.",
+    ],
+    prepTime: 5,
+    cookTime: 10,
+    servings: 1,
+    tags: ["street food", "breakfast", "quick", "popular"],
+  },
+  // Add 20+ more recipes before launching
+];
+
+async function main() {
+  console.log("Seeding database...");
+  for (const recipe of recipes) {
+    await db.recipe.upsert({
+      where: { name: recipe.name } as any,
+      update: recipe,
+      create: recipe,
+    });
+  }
+  console.log(`Seeded ${recipes.length} recipes.`);
+}
+
+main()
+  .catch(console.error)
+  .finally(() => db.$disconnect());
+```
+
+Run with:
+
+```bash
+npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
+```
+
+### Getting Your First Customers
+
+1. **Post in developer communities** — Share in local WhatsApp/Telegram groups, Twitter/X, and forums like Dev.to and Hashnode. Frame it as "I built an API for Ugandan recipes — here is the free tier."
+2. **Build a demo app** — Nothing sells an API like a working app. Build a simple recipe finder that uses your own API.
+3. **Reach out to no-code builders** — n8n, Zapier, and Make.com communities are full of people who would pay $9/month for a reliable local data API.
+4. **List on API marketplaces** — [RapidAPI](https://rapidapi.com) and [APILayer](https://apilayer.com) have millions of developers actively searching for APIs.
+5. **Partner with local tech companies** — Reach out to food delivery apps, EdTech startups, and AgriTech companies in your city directly.
+
+### Expanding to More Data Sets
+
+Once your first API is running and earning, the next step is clear: build more APIs using the same infrastructure. The authentication, billing, API key system, and documentation are all reusable across multiple APIs. Consider packaging them as a **multi-API platform** — one account, multiple APIs, one billing subscription.
+
+---
+
+## Summary: Your Complete Build Checklist
+
+```
+ Project Setup
+  ✅ Create Next.js 15 project
+  ✅ Install shadcn/ui
+  ✅ Set up Prisma + Neon PostgreSQL
+
+ Authentication
+  ✅ Install JB Better Auth UI components
+  ✅ Configure environment variables
+  ✅ Run database migrations
+  ✅ Test sign-up and sign-in flows
+
+ Core API
+  ✅ Define Prisma schema for your domain model
+  ✅ Build GET all with pagination, filtering, search
+  ✅ Build POST to create new records
+  ✅ Build GET single by ID
+  ✅ Build PATCH to update records
+  ✅ Build DELETE to remove records
+
+ API Key Security
+  ✅ Add ApiKey model to schema
+  ✅ Build generateApiKey utility
+  ✅ Build createApiKey / getUserApiKeys / deleteApiKey server actions
+  ✅ Build validateApiKey middleware
+  ✅ Protect all API routes with validateApiKey
+
+ API Documentation
+  ✅ Install Scalar component
+  ✅ Write OpenAPI 3.0 spec in data/openapi.ts
+  ✅ Test /api-docs page
+
+ Billing
+  ✅ Install Stripe UI component
+  ✅ Create pricing tiers in Stripe Dashboard
+  ✅ Add pricing page and upgrade flow
+  ✅ Add usage limit enforcement in validateApiKey
+  ✅ Set up Stripe webhook handler
+
+ Marketing Website
+  ✅ Install Website UI component
+  ✅ Customise site config with your branding
+  ✅ Write compelling copy for Hero and Pricing sections
+  ✅ Link API docs from the Developers page
+
+ Developer Dashboard
+  ✅ API Keys management page
+  ✅ Usage statistics overview
+  ✅ Billing / subscription page
+
+ Deployment
+  ✅ Push to GitHub
+  ✅ Import to Vercel
+  ✅ Set all environment variables
+  ✅ Configure Stripe production webhook
+  ✅ Seed production database
+
+ Go-to-Market
+  ✅ Share in developer communities
+  ✅ Build a demo app
+  ✅ List on API marketplaces
+  ✅ Reach out to potential local customers
+```
+
+---
+
+---
+
+## Part 11: Advanced Rate Limiting
+
+API key validation alone is not enough. A single user could fire 1,000 requests in one second, saturate your database connection pool, and degrade the experience for everyone else. Rate limiting solves this at the **request-rate level** (requests per second/minute), while usage limits (Part 6) solve it at the **billing level** (requests per month).
+
+### The Two Layers of Protection
+
+```
+Request comes in
+  └── Rate limit check (is this IP/key firing too fast right now?)
+        └── API key check (is this key valid and not suspended?)
+              └── Usage limit check (has this user exceeded their monthly quota?)
+                    └── Your route handler runs
+```
+
+### Option 1: In-Memory Rate Limiting (Simple, Zero Dependencies)
+
+For early-stage APIs with moderate traffic, an in-memory sliding window is perfectly adequate:
+
+```typescript
+// lib/rate-limiter.ts
+
+interface RateLimitEntry {
+  count: number;
+  windowStart: number;
+}
+
+// In-memory store: apiKeyId → { count, windowStart }
+// Note: this resets on server restart and does not work across multiple
+// server instances. For multi-instance production, use Redis (Option 2).
+const store = new Map<string, RateLimitEntry>();
+
+interface RateLimitConfig {
+  windowMs: number; // e.g. 60_000 for 1 minute
+  maxRequests: number; // e.g. 60 requests per window
+}
+
+const PLAN_LIMITS: Record<string, RateLimitConfig> = {
+  free: { windowMs: 60_000, maxRequests: 10 }, // 10 req/min
+  starter: { windowMs: 60_000, maxRequests: 60 }, // 60 req/min
+  growth: { windowMs: 60_000, maxRequests: 300 }, // 300 req/min
+  pro: { windowMs: 60_000, maxRequests: 1000 }, // 1000 req/min
+};
+
+export interface RateLimitResult {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  resetAt: number; // Unix timestamp (ms) when the window resets
+}
+
+export function checkRateLimit(
+  identifier: string,
+  plan: string
+): RateLimitResult {
+  const config = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free;
+  const now = Date.now();
+  const entry = store.get(identifier);
+
+  // If no entry or window has expired, start a fresh window
+  if (!entry || now - entry.windowStart >= config.windowMs) {
+    store.set(identifier, { count: 1, windowStart: now });
+    return {
+      allowed: true,
+      limit: config.maxRequests,
+      remaining: config.maxRequests - 1,
+      resetAt: now + config.windowMs,
+    };
+  }
+
+  // Within the current window
+  if (entry.count >= config.maxRequests) {
+    return {
+      allowed: false,
+      limit: config.maxRequests,
+      remaining: 0,
+      resetAt: entry.windowStart + config.windowMs,
+    };
+  }
+
+  entry.count += 1;
+  return {
+    allowed: true,
+    limit: config.maxRequests,
+    remaining: config.maxRequests - entry.count,
+    resetAt: entry.windowStart + config.windowMs,
+  };
+}
+```
+
+### Integrate Rate Limiting into Your Routes
+
+Update `lib/api-key.ts` to call the rate limiter and return standard rate-limit headers:
+
+```typescript
+// lib/api-key.ts — add rate limiting
+import { NextRequest, NextResponse } from "next/server";
+import db from "@/lib/prisma";
+import { checkRateLimit } from "@/lib/rate-limiter";
+
+export async function withApiKeyAuth(
+  request: NextRequest,
+  handler: (req: NextRequest, userId: string) => Promise<NextResponse>
+): Promise<NextResponse> {
+  const key =
+    request.headers.get("x-api-key") ??
+    request.headers.get("authorization")?.replace("Bearer ", "");
+
+  if (!key) {
+    return NextResponse.json(
+      {
+        error:
+          "Missing API key. Include it as x-api-key or Authorization: Bearer <key>",
+      },
+      { status: 401 }
+    );
+  }
+
+  const apiKey = await db.apiKey.findUnique({
+    where: { key },
+    include: { user: { include: { subscription: true } } },
+  });
+
+  if (!apiKey) {
+    return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+  }
+
+  const plan = apiKey.user.subscription?.plan ?? "free";
+
+  // Check rate limit
+  const rateLimit = checkRateLimit(apiKey.id, plan);
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: "Rate limit exceeded. Slow down your requests.",
+        retryAfter: Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
+      },
+      {
+        status: 429,
+        headers: {
+          "X-RateLimit-Limit": String(rateLimit.limit),
+          "X-RateLimit-Remaining": "0",
+          "X-RateLimit-Reset": String(rateLimit.resetAt),
+          "Retry-After": String(
+            Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
+          ),
+        },
+      }
+    );
+  }
+
+  // Fire-and-forget usage tracking
+  db.apiKey
+    .update({
+      where: { id: apiKey.id },
+      data: { usageCount: { increment: 1 }, lastUsedAt: new Date() },
+    })
+    .catch(console.error);
+
+  db.apiUsageLog
+    .create({
+      data: {
+        apiKeyId: apiKey.id,
+        endpoint: request.nextUrl.pathname,
+        method: request.method,
+        statusCode: 200,
+      },
+    })
+    .catch(console.error);
+
+  // Attach rate limit headers to every successful response too
+  const response = await handler(request, apiKey.userId);
+  response.headers.set("X-RateLimit-Limit", String(rateLimit.limit));
+  response.headers.set("X-RateLimit-Remaining", String(rateLimit.remaining));
+  response.headers.set("X-RateLimit-Reset", String(rateLimit.resetAt));
+  return response;
+}
+```
+
+Now update your routes to use the wrapper pattern instead of calling `validateApiKey` directly:
+
+```typescript
+// app/api/v1/recipes/route.ts — cleaner with wrapper
+import { NextRequest, NextResponse } from "next/server";
+import db from "@/lib/prisma";
+import { withApiKeyAuth } from "@/lib/api-key";
+
+export async function GET(request: NextRequest) {
+  return withApiKeyAuth(request, async (req, userId) => {
+    // Your full GET handler logic here
+    const recipes = await db.recipe.findMany({ take: 20 });
+    return NextResponse.json({ data: recipes });
+  });
+}
+```
+
+### Option 2: Redis-Based Rate Limiting (Production-Grade, Multi-Instance)
+
+Once you scale beyond a single server instance (e.g., multiple Vercel edge regions or a load-balanced Node.js cluster), in-memory rate limiting breaks down because each instance has its own memory. The solution is a shared Redis store.
+
+Install the Upstash Redis client (works great on serverless/Vercel):
+
+```bash
+pnpm add @upstash/ratelimit @upstash/redis
+```
+
+Create a Redis-backed limiter at `lib/redis-rate-limiter.ts`:
+
+```typescript
+// lib/redis-rate-limiter.ts
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
+
+// Plan-specific limiters using sliding window algorithm
+export const rateLimiters: Record<string, Ratelimit> = {
+  free: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(10, "1 m"), // 10/min
+    prefix: "rl:free",
+  }),
+  starter: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(60, "1 m"), // 60/min
+    prefix: "rl:starter",
+  }),
+  growth: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(300, "1 m"), // 300/min
+    prefix: "rl:growth",
+  }),
+  pro: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(1000, "1 m"), // 1000/min
+    prefix: "rl:pro",
+  }),
+};
+```
+
+Add these to your `.env`:
+
+```env
+UPSTASH_REDIS_REST_URL="https://xxx.upstash.io"
+UPSTASH_REDIS_REST_TOKEN="your_token"
+```
+
+Upstash has a free tier that handles up to 10,000 requests/day — more than enough to start. Replace the `checkRateLimit` call in `withApiKeyAuth` with:
+
+```typescript
+const limiter = rateLimiters[plan] ?? rateLimiters.free;
+const { success, limit, remaining, reset } = await limiter.limit(apiKey.id);
+
+if (!success) {
+  return NextResponse.json(
+    {
+      error: "Rate limit exceeded",
+      retryAfter: Math.ceil((reset - Date.now()) / 1000),
+    },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(Math.ceil((reset - Date.now()) / 1000)),
+      },
+    }
+  );
+}
+```
+
+> **When to switch to Redis:** The moment you have paying customers and deploy to more than one server instance, switch to Redis. It is also significantly more accurate under high concurrency because it uses atomic operations.
+
+---
+
+## Part 12: Building an SDK for Your API
+
+A great developer experience goes beyond documentation. When you ship an official JavaScript/TypeScript SDK (and later a Python one), you remove all friction — developers just `npm install your-sdk` and start coding. This also signals that your API is serious and well-maintained.
+
+### The JavaScript / TypeScript SDK
+
+Create a new folder at the root of your project (or better, a separate repository you publish to npm):
+
+```
+my-local-api-sdk/
+├── src/
+│   ├── client.ts         # Main SDK class
+│   ├── resources/
+│   │   └── recipes.ts    # Recipes resource
+│   └── types.ts          # Shared TypeScript types
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+**`src/types.ts` — shared types:**
+
+```typescript
+// src/types.ts
+
+export interface Recipe {
+  id: string;
+  name: string;
+  description: string | null;
+  country: string;
+  region: string | null;
+  category: string;
+  ingredients: string[];
+  steps: string[];
+  prepTime: number;
+  cookTime: number;
+  servings: number;
+  imageUrl: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+}
+
+export interface ListRecipesParams {
+  country?: string;
+  category?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ApiError {
+  error: string;
+  status: number;
+  message: string;
+}
+```
+
+**`src/resources/recipes.ts` — the Recipes resource class:**
+
+```typescript
+// src/resources/recipes.ts
+import type { Recipe, PaginatedResponse, ListRecipesParams } from "../types";
+
+export class RecipesResource {
+  constructor(
+    private readonly client: {
+      request: <T>(path: string, options?: RequestInit) => Promise<T>;
+    }
+  ) {}
+
+  async list(
+    params: ListRecipesParams = {}
+  ): Promise<PaginatedResponse<Recipe>> {
+    const qs = new URLSearchParams();
+    if (params.country) qs.set("country", params.country);
+    if (params.category) qs.set("category", params.category);
+    if (params.search) qs.set("search", params.search);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+
+    const query = qs.toString() ? `?${qs.toString()}` : "";
+    return this.client.request<PaginatedResponse<Recipe>>(
+      `/api/v1/recipes${query}`
+    );
+  }
+
+  async get(id: string): Promise<{ data: Recipe }> {
+    return this.client.request<{ data: Recipe }>(`/api/v1/recipes/${id}`);
+  }
+}
+```
+
+**`src/client.ts` — the main SDK class:**
+
+```typescript
+// src/client.ts
+import { RecipesResource } from "./resources/recipes";
+
+export interface LocalApiClientOptions {
+  apiKey: string;
+  baseUrl?: string;
+}
+
+export class LocalApiClient {
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
+
+  public readonly recipes: RecipesResource;
+
+  constructor(options: LocalApiClientOptions) {
+    if (!options.apiKey) {
+      throw new Error("LocalApiClient: apiKey is required");
+    }
+    this.apiKey = options.apiKey;
+    this.baseUrl = options.baseUrl ?? "https://your-api.com";
+    this.recipes = new RecipesResource({ request: this.request.bind(this) });
+  }
+
+  async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": this.apiKey,
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw Object.assign(
+        new Error(body.error ?? `API request failed: ${response.status}`),
+        { status: response.status, body }
+      );
+    }
+
+    return response.json() as Promise<T>;
+  }
+}
+```
+
+**`src/index.ts` — the package entry point:**
+
+```typescript
+// src/index.ts
+export { LocalApiClient } from "./client";
+export type { LocalApiClientOptions } from "./client";
+export type {
+  Recipe,
+  PaginatedResponse,
+  ListRecipesParams,
+  ApiError,
+} from "./types";
+```
+
+**`package.json`:**
+
+```json
+{
+  "name": "uganda-recipes-api",
+  "version": "1.0.0",
+  "description": "Official JavaScript/TypeScript SDK for the Uganda Recipes API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}
+```
+
+Install `tsup` for building:
+
+```bash
+pnpm add -D tsup typescript
+pnpm build
+```
+
+### Publishing to npm
+
+```bash
+# Login to npm (create account at npmjs.com if needed)
+npm login
+
+# Publish
+npm publish --access public
+```
+
+### How Developers Use Your SDK
+
+Once published, any developer can install and use it in seconds:
+
+```typescript
+// In a developer's project
+import { LocalApiClient } from "uganda-recipes-api";
+
+const client = new LocalApiClient({ apiKey: "lapi_your_key_here" });
+
+// List Ugandan street food
+const result = await client.recipes.list({
+  country: "Uganda",
+  category: "Street Food",
+  page: 1,
+  limit: 10,
+});
+
+console.log(result.data); // Array of Recipe objects
+console.log(result.pagination); // { page, total, totalPages, ... }
+
+// Get a single recipe
+const { data: recipe } = await client.recipes.get("clx1abc123");
+console.log(recipe.name); // "Rolex"
+console.log(recipe.ingredients); // ["2 eggs", "1 chapati", ...]
+```
+
+### The Python SDK
+
+Python is the primary language of AI/ML engineers and data scientists — exactly the people building automations that would consume your API. A Python SDK dramatically expands your potential user base.
+
+Create `python-sdk/uganda_recipes_api/__init__.py`:
+
+```python
+# python-sdk/uganda_recipes_api/__init__.py
+from .client import LocalApiClient
+from .types import Recipe, PaginatedResponse
+
+__all__ = ["LocalApiClient", "Recipe", "PaginatedResponse"]
+```
+
+Create `python-sdk/uganda_recipes_api/client.py`:
+
+```python
+# python-sdk/uganda_recipes_api/client.py
+from dataclasses import dataclass
+from typing import Optional, List, Any, Dict
+import urllib.request
+import urllib.parse
+import json
+
+
+@dataclass
+class Recipe:
+    id:          str
+    name:        str
+    country:     str
+    category:    str
+    ingredients: List[str]
+    steps:       List[str]
+    prep_time:   int
+    cook_time:   int
+    servings:    int
+    description: Optional[str] = None
+    region:      Optional[str] = None
+    image_url:   Optional[str] = None
+    tags:        Optional[List[str]] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Recipe":
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            country=data["country"],
+            category=data["category"],
+            ingredients=data["ingredients"],
+            steps=data["steps"],
+            prep_time=data["prepTime"],
+            cook_time=data["cookTime"],
+            servings=data["servings"],
+            description=data.get("description"),
+            region=data.get("region"),
+            image_url=data.get("imageUrl"),
+            tags=data.get("tags", []),
+        )
+
+
+class LocalApiClient:
+    def __init__(self, api_key: str, base_url: str = "https://your-api.com"):
+        if not api_key:
+            raise ValueError("api_key is required")
+        self.api_key  = api_key
+        self.base_url = base_url.rstrip("/")
+
+    def _request(self, path: str, params: Optional[Dict] = None) -> Any:
+        url = f"{self.base_url}{path}"
+        if params:
+            filtered = {k: str(v) for k, v in params.items() if v is not None}
+            url += "?" + urllib.parse.urlencode(filtered)
+
+        req = urllib.request.Request(url, headers={"x-api-key": self.api_key})
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read().decode())
+
+    def list_recipes(
+        self,
+        country:  Optional[str] = None,
+        category: Optional[str] = None,
+        search:   Optional[str] = None,
+        page:     int = 1,
+        limit:    int = 20,
+    ) -> Dict[str, Any]:
+        raw = self._request("/api/v1/recipes", {
+            "country":  country,
+            "category": category,
+            "search":   search,
+            "page":     page,
+            "limit":    limit,
+        })
+        raw["data"] = [Recipe.from_dict(r) for r in raw["data"]]
+        return raw
+
+    def get_recipe(self, recipe_id: str) -> Recipe:
+        raw = self._request(f"/api/v1/recipes/{recipe_id}")
+        return Recipe.from_dict(raw["data"])
+```
+
+**How AI engineers use your Python SDK:**
+
+```python
+from uganda_recipes_api import LocalApiClient
+
+client = LocalApiClient(api_key="lapi_your_key_here")
+
+# Use in a LangChain tool or n8n Python node
+recipes = client.list_recipes(country="Uganda", category="Main Course")
+
+for recipe in recipes["data"]:
+    print(f"{recipe.name}: {', '.join(recipe.ingredients[:3])}...")
+
+# Get a single recipe for an AI cooking assistant
+recipe = client.get_recipe("clx1abc123")
+print(f"To make {recipe.name}, you need {recipe.prep_time + recipe.cook_time} minutes total.")
+```
+
+Publish to PyPI:
+
+```bash
+cd python-sdk
+pip install build twine
+python -m build
+twine upload dist/*
+```
+
+---
+
+## Part 13: Seeding Data — Web Scraping & AI-Assisted Collection
+
+Your API is only as valuable as the data inside it. This is usually the hardest part for developers to think about. Here are three concrete strategies you can use to populate your database quickly and accurately.
+
+### Strategy 1: Manual Structured Entry (Start Here)
+
+Before building any automation, **manually enter 20–50 high-quality records.** This forces you to think deeply about your schema, catch edge cases, and produce a reference set of clean data that you can use to validate everything else.
+
+Use Prisma Studio to do this visually:
+
+```bash
+pnpm dlx prisma studio
+```
+
+This opens a beautiful table editor in your browser at `http://localhost:5555` where you can insert rows directly — no SQL required.
+
+### Strategy 2: AI-Assisted Data Generation
+
+Large language models are excellent at generating structured, plausible data in bulk — especially for knowledge-based content like recipes, course descriptions, or business listings. The key is to prompt them to output JSON that maps directly to your Prisma schema.
+
+Here is a reusable script that calls the Claude API to generate batches of recipes:
+
+```typescript
+// scripts/generate-recipes-with-ai.ts
+import Anthropic from "@anthropic-ai/sdk";
+import db from "../lib/prisma";
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+async function generateRecipes(country: string, count: number = 10) {
+  console.log(`Generating ${count} recipes for ${country}...`);
+
+  const message = await anthropic.messages.create({
+    model: "claude-opus-4-6",
+    max_tokens: 4096,
+    messages: [
+      {
+        role: "user",
+        content: `Generate ${count} authentic traditional ${country} recipes.
+
+Return ONLY a valid JSON array. No explanation, no markdown, just the raw JSON array.
+
+Each recipe must follow this exact structure:
+{
+  "name": "Recipe Name",
+  "description": "One sentence description",
+  "country": "${country}",
+  "region": "Specific region or null",
+  "category": "One of: Breakfast, Main Course, Side Dish, Snack, Street Food, Dessert, Drink",
+  "ingredients": ["quantity + ingredient", ...],
+  "steps": ["Step instruction", ...],
+  "prepTime": <integer minutes>,
+  "cookTime": <integer minutes>,
+  "servings": <integer>,
+  "tags": ["tag1", "tag2", ...]
+}
+
+Make sure:
+- Ingredients include realistic quantities (e.g. "2 cups maize flour", "1 medium onion")
+- Steps are clear and numbered in order
+- Recipes are genuinely traditional and authentic to ${country}
+- Include a variety of categories`,
+      },
+    ],
+  });
+
+  const text =
+    message.content[0].type === "text" ? message.content[0].text : "";
+
+  let recipes: any[];
+  try {
+    recipes = JSON.parse(text);
+  } catch {
+    // Sometimes the model adds a small preamble — strip it
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error("Could not parse AI response as JSON");
+    recipes = JSON.parse(jsonMatch[0]);
+  }
+
+  console.log(`  Parsed ${recipes.length} recipes. Inserting into database...`);
+
+  let inserted = 0;
+  for (const recipe of recipes) {
+    try {
+      await db.recipe.create({ data: recipe });
+      inserted++;
+    } catch (err: any) {
+      // Skip duplicates silently
+      if (!err.message?.includes("Unique constraint")) {
+        console.warn(`  Skipped "${recipe.name}":`, err.message);
+      }
+    }
+  }
+
+  console.log(`  Inserted ${inserted} new recipes for ${country}.`);
+}
+
+async function main() {
+  const countries = ["Uganda", "Kenya", "Nigeria", "Ghana", "Ethiopia"];
+
+  for (const country of countries) {
+    await generateRecipes(country, 20);
+    // Small delay to avoid hitting API rate limits
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+
+  const total = await db.recipe.count();
+  console.log(`\nDone! Total recipes in database: ${total}`);
+}
+
+main()
+  .catch(console.error)
+  .finally(() => db.$disconnect());
+```
+
+Run it:
+
+```bash
+pnpm add @anthropic-ai/sdk
+ANTHROPIC_API_KEY=sk-ant-xxx npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/generate-recipes-with-ai.ts
+```
+
+With 5 countries × 20 recipes each, you will have 100 clean, structured recipes in your database in under two minutes. **Always review a sample of the AI-generated data** before publishing — models occasionally hallucinate ingredient quantities or regional attributions.
+
+### Strategy 3: Web Scraping into Your Schema
+
+For data that already exists on the web (government websites, university course catalogues, business directories), scraping is often the fastest path. Use `cheerio` for HTML-based scraping and `playwright` for JavaScript-rendered pages.
+
+Install dependencies:
+
+```bash
+pnpm add cheerio axios
+pnpm add -D @types/cheerio
+# For JS-rendered pages:
+pnpm add playwright
+```
+
+Here is a generic scraping template for a university courses page:
+
+```typescript
+// scripts/scrape-university-courses.ts
+import axios from "axios";
+import * as cheerio from "cheerio";
+import db from "../lib/prisma";
+
+interface CourseData {
+  name: string;
+  code: string;
+  faculty: string;
+  level: string; // "Diploma", "Degree", "Masters", "PhD"
+  duration: string; // e.g. "3 years"
+  entryRequirements: string;
+  university: string;
+  country: string;
+}
+
+async function scrapeMakerereCoursesPage(url: string): Promise<CourseData[]> {
+  const { data: html } = await axios.get(url, {
+    headers: {
+      // Mimic a real browser to avoid simple bot blocks
+      "User-Agent": "Mozilla/5.0 (compatible; DataCollectionBot/1.0)",
+    },
+    timeout: 15_000,
+  });
+
+  const $ = cheerio.load(html);
+  const courses: CourseData[] = [];
+
+  // This selector will differ per site — inspect the HTML structure first
+  $(".course-item, .programme-row, tr.course").each((_, element) => {
+    const name = $(element).find(".course-name, td:nth-child(1)").text().trim();
+    const code = $(element).find(".course-code, td:nth-child(2)").text().trim();
+    const faculty = $(element).find(".faculty, td:nth-child(3)").text().trim();
+    const level = $(element).find(".level, td:nth-child(4)").text().trim();
+
+    if (name && faculty) {
+      courses.push({
+        name,
+        code: code || "N/A",
+        faculty,
+        level: level || "Degree",
+        duration: "3 years",
+        entryRequirements: "A-Level passes or equivalent",
+        university: "Makerere University",
+        country: "Uganda",
+      });
+    }
+  });
+
+  return courses;
+}
+
+async function main() {
+  console.log("Scraping university courses...");
+
+  const courses = await scrapeMakerereCoursesPage(
+    "https://www.mak.ac.ug/programmes"
+  );
+
+  console.log(`Found ${courses.length} courses. Inserting...`);
+
+  for (const course of courses) {
+    await db.course.upsert({
+      where: {
+        code_university: { code: course.code, university: course.university },
+      },
+      update: course,
+      create: course,
+    });
+  }
+
+  console.log("Done.");
+}
+
+main()
+  .catch(console.error)
+  .finally(() => db.$disconnect());
+```
+
+> **Ethical scraping guidelines:** Always check a website's `robots.txt` before scraping. Respect `Disallow` rules. Add delays between requests (`await new Promise(r => setTimeout(r, 500))`). Do not scrape personal data. For government and public-interest data, scraping is generally acceptable as long as you are not overloading the server.
+
+### Strategy 4: Community Contributions via Admin Panel
+
+Once you have initial data, let the community help grow it. Build a simple admin panel in your dashboard where verified contributors can submit new records for review:
+
+```
+app/
+└── dashboard/
+    └── contribute/
+        └── page.tsx   # Submission form
+└── admin/
+    └── review/
+        └── page.tsx   # Admin review queue — approve or reject
+```
+
+Add a `status` field to your models:
+
+```prisma
+model Recipe {
+  // ... existing fields
+  status     String  @default("pending")   // "pending" | "approved" | "rejected"
+  submittedBy String?
+}
+```
+
+Your public API only returns `approved` records:
+
+```typescript
+const where: any = { status: "approved" };
+```
+
+This is how Wikipedia, OpenStreetMap, and many data APIs scaled their data — community contributions reviewed by a small core team.
+
+---
+
+## Part 14: Monetisation Strategy — Pricing Psychology & African Payment Methods
+
+Building a great API is only half the job. Getting developers to actually pay for it requires clear positioning, smart pricing, and payment methods that work for your market.
+
+### Pricing Psychology for API Products
+
+**The three-tier trap:** Most developers copy the "Free / Pro / Enterprise" structure they see everywhere. This is a mistake unless you understand _why_ it works.
+
+The real purpose of your pricing tiers is not to describe what people get — it is to make your middle tier look like the obvious, sensible choice. This is called **price anchoring.**
+
+Here is how to think about your three tiers:
+
+The **Free tier** exists for two reasons only: to let developers try your API without friction, and to make paying users feel they got more. If your free tier is too generous, no one will upgrade. Cap it aggressively (500 requests/month is plenty to test, not enough to build anything real with).
+
+The **Middle tier (your real product)** is where the value lives. Price it at a point where it feels like a no-brainer compared to the developer's hourly rate. If a developer earns $15/hour and your API saves them 2 hours of manual data work, $9/month is not a question — it is a trivial investment.
+
+The **Top tier** exists to make the middle tier look affordable. When someone sees $99/month next to $29/month, the $29/month tier suddenly feels like the smart choice, even if they never considered the $99 option.
+
+**Usage-based vs flat-rate:** Flat monthly rates are easier to sell but harder to scale with. Usage-based billing (charging per 1,000 API calls) is fairer and scales naturally, but adds friction at signup because developers cannot predict their costs. A hybrid model works well for niche APIs: offer flat-rate tiers with defined call limits, and charge overage fees beyond the tier limit.
+
+```typescript
+// lib/billing.ts — overage calculation example
+
+const PLAN_MONTHLY_LIMITS: Record<string, number> = {
+  free: 500,
+  starter: 10_000,
+  growth: 100_000,
+};
+
+const OVERAGE_RATE_PER_1000 = 0.5; // $0.50 per 1,000 extra calls
+
+export function calculateOverageCharge(
+  plan: string,
+  totalCalls: number
+): number {
+  const limit = PLAN_MONTHLY_LIMITS[plan];
+  if (!limit || totalCalls <= limit) return 0;
+
+  const extraCalls = totalCalls - limit;
+  return Math.ceil(extraCalls / 1000) * OVERAGE_RATE_PER_1000;
+}
+```
+
+**Annual discounts:** Offer a 20% discount for annual billing. This is not just about revenue — it is about converting monthly uncertainty into committed, predictable income. Annual subscribers also churn far less than monthly ones.
+
+### Handling African Payment Methods Alongside Stripe
+
+Stripe is excellent, but it is not the primary payment method for most developers in Uganda, Kenya, or Nigeria. If you want to capture the African developer market, you must support local payment methods. Here is the layered approach:
+
+**Tier 1 — Stripe (International cards & Apple/Google Pay)**
+
+Keep Stripe as your primary payment processor for international customers and African developers who have Visa/Mastercard. Most corporate developers and those with international bank accounts will use this.
+
+**Tier 2 — Flutterwave (African cards, Mobile Money, Bank Transfers)**
+
+Flutterwave supports M-Pesa (Kenya), MTN Mobile Money (Uganda, Ghana, Rwanda), Airtel Money, and local bank transfers across 30+ African countries. It is the most comprehensive single integration for African payments.
+
+```bash
+pnpm add flutterwave-node-v3
+```
+
+Create `lib/flutterwave.ts`:
+
+```typescript
+// lib/flutterwave.ts
+const Flutterwave = require("flutterwave-node-v3");
+
+const flw = new Flutterwave(
+  process.env.FLW_PUBLIC_KEY,
+  process.env.FLW_SECRET_KEY
+);
+
+export interface MobileMoneyPaymentParams {
+  amount: number;
+  currency: "UGX" | "KES" | "GHS" | "NGN";
+  email: string;
+  phoneNumber: string;
+  network: "MTN" | "AIRTEL" | "MPESA" | "VODAFONE";
+  userId: string;
+  planId: string;
+}
+
+export async function initiateMobileMoneyPayment(
+  params: MobileMoneyPaymentParams
+) {
+  const txRef = `api_sub_${params.userId}_${Date.now()}`;
+
+  // Network-to-endpoint mapping
+  const networkPayload: any = {
+    amount: params.amount,
+    currency: params.currency,
+    email: params.email,
+    tx_ref: txRef,
+    phone_number: params.phoneNumber,
+    network: params.network,
+    meta: {
+      userId: params.userId,
+      planId: params.planId,
+    },
+  };
+
+  let response;
+  if (params.network === "MPESA") {
+    // M-Pesa (Kenya) uses a different endpoint
+    response = await flw.MobileMoney.mpesa(networkPayload);
+  } else {
+    response = await flw.MobileMoney.uganda(networkPayload);
+  }
+
+  return { txRef, response };
+}
+```
+
+Add the Flutterwave webhook handler to process confirmed payments:
+
+```typescript
+// app/api/webhooks/flutterwave/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import db from "@/lib/prisma";
+import crypto from "crypto";
+
+export async function POST(request: NextRequest) {
+  const secretHash = process.env.FLW_WEBHOOK_SECRET!;
+  const signature = request.headers.get("verif-hash");
+
+  // Verify the webhook is genuinely from Flutterwave
+  if (signature !== secretHash) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
+
+  const payload = await request.json();
+
+  if (
+    payload.event === "charge.completed" &&
+    payload.data.status === "successful"
+  ) {
+    const { userId, planId } = payload.data.meta;
+
+    // Activate the subscription
+    await db.subscription.upsert({
+      where: { userId },
+      update: { plan: planId, status: "active", updatedAt: new Date() },
+      create: { userId, plan: planId, status: "active" },
+    });
+
+    console.log(`Activated ${planId} plan for user ${userId} via Flutterwave`);
+  }
+
+  return NextResponse.json({ received: true });
+}
+```
+
+**Tier 3 — Manual Bank Transfer / Prepaid Credits (Last Resort)**
+
+Some of your customers will not have mobile money or cards at all. Build a simple **credit system** where you accept bank transfers manually and credit their account:
+
+Add a `credits` field to your User model:
+
+```prisma
+model User {
+  // ... existing fields
+  apiCredits Int @default(0)  // Prepaid request credits
+}
+```
+
+In your API key validation, check credits as an alternative to a subscription:
+
+```typescript
+// In validateApiKey — check credits if no active subscription
+if (!activeSubscription) {
+  if (apiKey.user.apiCredits <= 0) {
+    return {
+      valid: false,
+      error: "No credits remaining. Top up at /dashboard/billing",
+    };
+  }
+  // Deduct one credit
+  db.user
+    .update({
+      where: { id: apiKey.userId },
+      data: { apiCredits: { decrement: 1 } },
+    })
+    .catch(console.error);
+}
+```
+
+Sell credit bundles (e.g., 5,000 credits for UGX 50,000 / KES 500 / NGN 3,000) via bank transfer and activate manually through an admin panel.
+
+### Add Environment Variables for All Payment Providers
+
+```env
+# Stripe
+STRIPE_SECRET_KEY="sk_live_xxx"
+STRIPE_WEBHOOK_SECRET="whsec_xxx"
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_live_xxx"
+
+# Flutterwave
+FLW_PUBLIC_KEY="FLWPUBK_TEST-xxx"
+FLW_SECRET_KEY="FLWSECK_TEST-xxx"
+FLW_WEBHOOK_SECRET="your_custom_hash_secret"
+
+# Currency conversion (for consistent pricing)
+# Show USD to international users, local currency to African users
+NEXT_PUBLIC_DEFAULT_CURRENCY="USD"
+```
+
+### Displaying Local Currency Prices on Your Pricing Page
+
+```typescript
+// lib/currency.ts
+const EXCHANGE_RATES: Record<string, number> = {
+  USD: 1,
+  UGX: 3700, // Update periodically or use a live rates API
+  KES: 130,
+  NGN: 1500,
+  GHS: 15,
+};
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  UGX: "UGX ",
+  KES: "KES ",
+  NGN: "₦",
+  GHS: "₵",
+};
+
+export function formatPrice(usdAmount: number, currency: string): string {
+  const rate = EXCHANGE_RATES[currency] ?? 1;
+  const symbol = CURRENCY_SYMBOLS[currency] ?? "$";
+  const local = Math.round(usdAmount * rate);
+  return `${symbol}${local.toLocaleString()}`;
+}
+
+// Usage in your pricing page:
+// formatPrice(9, "UGX")  → "UGX 33,300"
+// formatPrice(9, "KES")  → "KES 1,170"
+// formatPrice(9, "NGN")  → "₦13,500"
+```
+
+### A Note on Pricing for African Markets
+
+Charging $9/month is reasonable for a developer in the US. For a developer in Uganda or Nigeria, $9 is a significant amount relative to local purchasing power. Consider:
+
+- Offering **PPP (Purchasing Power Parity) pricing** — charge different prices in different currencies that reflect local economics rather than just exchange rates. $9 USD → UGX 20,000 (not UGX 33,300).
+- Running **early adopter discounts** specifically for developers in your country — this builds community loyalty and social proof.
+- Keeping the **free tier genuinely useful** for local developers who cannot yet afford a subscription. A developer in Kampala building their first app should be able to use your API for free until they are earning revenue.
+
+---
+
+## Key Resources
+
+| Resource                       | URL                                                                |
+| ------------------------------ | ------------------------------------------------------------------ |
+| Next.js API Guide              | https://nextjs.org/blog/building-apis-with-nextjs                  |
+| Next.js + Prisma 7 Setup       | https://jb.desishub.com/blog/nextjs-with-prisma-7-and-postgres     |
+| Next.js + Prisma Cheatsheet    | https://codemint-gamma.vercel.app/guide/nextjs-api-cheatsheet      |
+| API Key Protection Guide       | https://codemint-gamma.vercel.app/blog/protecting-api-using-apiKey |
+| Better Auth UI Components      | https://jb.desishub.com/components/jb-better-auth-ui-components    |
+| Scalar API Docs Component      | https://jb.desishub.com/components/scalar-api-docs-component       |
+| Stripe UI Component            | https://jb.desishub.com/components/stripe-ui-component             |
+| Website UI Component           | https://jb.desishub.com/components/website-ui-component            |
+| Neon (Postgres hosting)        | https://neon.tech                                                  |
+| Upstash Redis (rate limiting)  | https://upstash.com                                                |
+| Flutterwave (African payments) | https://flutterwave.com                                            |
+| Better Auth                    | https://better-auth.com                                            |
+| Scalar                         | https://scalar.com                                                 |
+| Anthropic SDK                  | https://github.com/anthropics/anthropic-sdk-typescript             |
+
+---
+
+## Final Words
+
+The developers who will win in the AI era are not necessarily the ones who build the most complex systems. They are the ones who **understand their local context**, package that knowledge into reliable, well-documented APIs, and sell access to it.
+
+You know your country. You know your city. You know the foods, the schools, the roads, the businesses — data that no Western developer will ever take the time to collect and structure. That knowledge is worth money.
+
+You now have the complete technical blueprint:
+
+- A production-grade API built on Next.js 15 and Prisma 7
+- Authentication, API keys, and multi-tier rate limiting
+- Beautiful interactive documentation with Scalar
+- Stripe billing + African payment methods via Flutterwave
+- A JavaScript and Python SDK so developers can integrate in minutes
+- AI-assisted and scraping-based data collection strategies
+- A marketing website that converts visitors to paying customers
+
+Pick one idea from the list. Collect 50 records of data. Build it this weekend. Ship it next week. Charge for it next month.
+
+---
+
+_Built with ❤️ using Next.js 15, Prisma 7, Better Auth, Scalar, Stripe, and Flutterwave._
