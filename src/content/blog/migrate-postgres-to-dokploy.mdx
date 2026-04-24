@@ -1,0 +1,287 @@
+---
+title: Migrating PostgreSQL from Neon to self-hosted (Dokploy)
+description: A field-tested walkthrough for moving a live Postgres database from Neon (or any managed Postgres) into a self-hosted Postgres running under Dokploy.
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfUewb9hHlbxM69AvE1HPOaYKR4rqd8ygiztfm
+category: tutorials
+createdAt: 2026-04-24
+updatedAt: 2026-04-24
+---
+
+# Migrating PostgreSQL from Neon to self-hosted (Dokploy)
+
+_A field-tested walkthrough for moving a live Postgres database from Neon (or any managed Postgres) into a self-hosted Postgres running under Dokploy. Nothing here is Dokploy-specific except a few UI directions — the `pg_dump` / `pg_restore` pattern works for any Postgres → Postgres move._
+
+---
+
+## Contents
+
+- [Why do this](#why-do-this)
+- [What you need](#what-you-need)
+- [The plan in one paragraph](#the-plan-in-one-paragraph)
+- [Step 1 — Provision the target Postgres in Dokploy](#step-1--provision-the-target-postgres-in-dokploy)
+- [Step 2 — Dump the source database](#step-2--dump-the-source-database)
+- [Step 3 — Restore into the target](#step-3--restore-into-the-target)
+- [Step 4 — Point the app at the new database](#step-4--point-the-app-at-the-new-database)
+- [Step 5 — Verify](#step-5--verify)
+- [Rollback plan](#rollback-plan)
+- [Cleanup](#cleanup)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Why do this
+
+Common reasons teams move off a managed provider like Neon:
+
+- **Cost**: free tier gets tight fast once the compute stops auto-suspending.
+- **Cold starts**: Neon free compute auto-suspends. First request after inactivity fails with `P1001 — Can't reach database server` until the compute wakes (can take seconds to minutes).
+- **Latency**: co-locating the DB with the app on the same VPS cuts network round-trips to ~0ms.
+- **Control**: install any Postgres extensions you want, run your own backups, set your own retention.
+- **Single-provider consolidation**: if the rest of the stack is on Dokploy/your VPS, having the DB there too simplifies ops.
+
+## What you need
+
+- **SSH access** to the VPS where Dokploy runs.
+- **The source database's connection string** with a role that can read all objects you care about (usually the owner role).
+- **Docker available somewhere** — either on the VPS or on your laptop. The VPS is usually easier because Docker is already there.
+- **An hour of downtime tolerance** — or less, if your writes are pausable while you run the dump/restore.
+- **Matching Postgres versions** between source and target. Check the source with `SELECT version();`. Provision the target to the same major version (15→15, 16→16, 17→17). Forward migrations (15→17) usually work; backwards (17→15) does not.
+
+## The plan in one paragraph
+
+Run `pg_dump` against the source and save the output to a file. Copy that file into the target Postgres container. Run `pg_restore` against the target. Update your application's `DATABASE_URL` to point at the new Postgres. Verify. Keep the source alive for a few days as a rollback option, then decommission.
+
+---
+
+## Step 1 — Provision the target Postgres in Dokploy
+
+In the Dokploy UI: **Create → Database → PostgreSQL**. Set:
+
+- **Database Name** — logical DB name, e.g. `myapp`.
+- **Database User** — e.g. `myapp_user`.
+- **Database Password** — **use only alphanumerics**. `@`, `:`, `/`, `?`, `#`, `%` are URL delimiters and will either silently break the connection string or force you to URL-encode them everywhere (`@` → `%40`, etc.). Save yourself the pain.
+- **Docker image** — `postgres:17` (or whatever matches the source).
+
+Click **Create**. Dokploy shows you two connection strings:
+
+- **Internal** — uses the Docker service name as hostname (e.g. `myapp-myapp-postgres-service-abc123`). Only reachable from other containers on the same Docker network. This is what your app will use.
+- **External** — reachable from the public internet. Dokploy disables this by default. Enable it _temporarily_ if you need to restore from outside the VPS; turn it back off immediately after.
+
+Note the **service name** — you'll need it in Step 3 and Step 4.
+
+## Step 2 — Dump the source database
+
+**Run this on the VPS** (the simplest option — Docker is already there, and the dump file lands right next to where you'll restore it):
+
+```bash
+ssh root@your-vps
+
+docker run --rm -v /tmp:/out postgres:17 \
+  pg_dump \
+  "postgresql://SOURCE_USER:SOURCE_PASSWORD@SOURCE_HOST/SOURCE_DB?sslmode=require" \
+  --no-owner \
+  --no-privileges \
+  --no-acl \
+  --format=custom \
+  --file=/out/source.dump
+```
+
+Substitute the real source URL. After a Neon dump you should see `source.dump` under `/tmp/` on the VPS, a few hundred KB to tens of MB depending on data volume.
+
+### Flags, explained
+
+| Flag                           | Why                                                                                                                                                                                                        |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--no-owner`                   | Strips `OWNER TO source_role` clauses. The target doesn't have that role, so restore would otherwise error.                                                                                                |
+| `--no-privileges` / `--no-acl` | Skips `GRANT`/`REVOKE` statements targeting source-only roles.                                                                                                                                             |
+| `--format=custom`              | Binary, compressed, restorable with `pg_restore`. More flexible than plain SQL: can restore selectively, parallelize, etc. Use `--format=plain` if you want human-readable SQL you can `psql -f` directly. |
+| `--file=/out/source.dump`      | Write to the mounted volume so the file survives after the container exits.                                                                                                                                |
+
+### Running the dump on your laptop instead
+
+Works fine if your laptop has Docker running and can reach the source. Identical command — just remember to `scp` the file to the VPS before the restore step. Windows users: if `docker run` errors with `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified`, Docker Desktop isn't running — start it from the system tray.
+
+---
+
+## Step 3 — Restore into the target
+
+SSH'd to the VPS. This block finds the target container automatically, copies the dump in, restores, and verifies — paste it as-is:
+
+```bash
+# Find the Postgres container (adjust the filter to match your service name)
+PG_CTR=$(docker ps --filter "name=myapp-myapp-postgres-service-abc123" \
+  --format "{{.Names}}" | head -n1)
+echo "Target container: $PG_CTR"
+
+# Copy the dump into the container
+docker cp /tmp/source.dump "$PG_CTR":/tmp/source.dump
+
+# Restore. --clean --if-exists drops any existing tables first so you
+# can rerun if something errors midway. Remove those flags if you have
+# data in the target you want to keep.
+docker exec -i -e PGPASSWORD='YOUR_TARGET_PASSWORD' "$PG_CTR" \
+  pg_restore \
+  -U myapp_user \
+  -d myapp \
+  --no-owner \
+  --no-privileges \
+  --clean --if-exists \
+  /tmp/source.dump
+
+# Verify tables are there
+docker exec -i -e PGPASSWORD='YOUR_TARGET_PASSWORD' "$PG_CTR" \
+  psql -U myapp_user -d myapp -c "\dt"
+```
+
+### What "success" looks like
+
+- A pile of `NOTICE:  table "foo" does not exist, skipping` during the `--clean` phase. Harmless; the target was empty.
+- Final `pg_restore` exit code is `0` (no explicit success message).
+- `\dt` output lists every table you expected, including `_prisma_migrations` if you use Prisma.
+
+> **Gotcha — partial restores.** If `pg_restore` prints any `ERROR:` lines (as opposed to `NOTICE:`), read them. Common culprits: missing extensions (install them in Dokploy by exec'ing into the container and running `CREATE EXTENSION xxx`), incompatible Postgres versions (see [Troubleshooting](#troubleshooting)), or a connection-closed mid-restore (rerun with `--clean --if-exists`).
+
+---
+
+## Step 4 — Point the app at the new database
+
+In Dokploy → the application's **Environment Variables** tab, set:
+
+```
+DATABASE_URL=postgresql://myapp_user:myapp_password@myapp-myapp-postgres-service-abc123:5432/myapp?schema=public
+```
+
+Key details:
+
+- Use the **internal** hostname (the service name), not an IP.
+- **No `sslmode=require`** on the internal URL. The internal Docker network doesn't present a TLS cert — requiring SSL will fail with `FATAL: no pg_hba.conf entry` or similar. Only use `sslmode=require` with the public URL.
+- The `?schema=public` suffix is Prisma-specific but harmless elsewhere.
+
+Redeploy the app. Build should pass; first request should connect to the new DB.
+
+### If you're also setting this as a build-time arg
+
+Build-time secrets can be placeholders — the app uses the runtime env at request time. Example for a Dockerfile with `ARG DATABASE_URL`:
+
+```
+DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public
+```
+
+This is enough to satisfy any `new PrismaClient()` calls that run during `next build`. Only the runtime value needs to be real.
+
+## Step 5 — Verify
+
+From Dokploy → the application service → **Terminal** (or exec into the running container):
+
+```bash
+# Prisma projects
+npx prisma migrate status
+# Expected: "Database schema is up to date!"
+
+# Any Postgres app
+psql "$DATABASE_URL" -c "SELECT count(*) FROM \"User\";"
+```
+
+Then poke the app in a browser: load a page that reads the DB, load one that writes (e.g. submit a form), reload the read page and confirm the write shows up.
+
+## Rollback plan
+
+Don't delete the source yet. For the first 48 hours after cutover, keep the Neon compute alive (or the source server up). If something's wrong:
+
+1. Revert `DATABASE_URL` in Dokploy to the source connection string.
+2. Redeploy.
+
+If there have been writes to the new DB that you want to preserve, rolling back is more work (you'd need another dump/restore back to Neon). Plan downtime windows accordingly and pause writes during cutover when possible.
+
+## Cleanup
+
+Once the app has been happy on the new DB for a few days:
+
+1. **Stop/delete the source** — pause Neon's compute, delete the DB, revoke any API keys that referenced it.
+2. **Delete the dump file** on the VPS and any local copies:
+   ```bash
+   rm /tmp/source.dump
+   ```
+   A dump is a full, unencrypted copy of your DB. Don't leave it sitting in `/tmp` long-term.
+3. **Remove temporary public access** on the target Dokploy Postgres if you enabled it during restore.
+4. **Configure backups** on the new Postgres. Dokploy supports S3/minio backups per-database — set up a daily job now so you don't end up with this same migration problem in reverse.
+
+---
+
+## Troubleshooting
+
+### `P1001 — Can't reach database server`
+
+**During dump**: Neon compute is suspended. Open the Neon console, find the compute endpoint, click Resume. Free-tier computes auto-sleep after inactivity and the wake-up can take 5–30 seconds.
+
+**After cutover**: the app's `DATABASE_URL` points at an unreachable host. Causes:
+
+- Internal hostname only works from containers on the same Docker network. Make sure the app and the Postgres are in the same Dokploy project.
+- Typo in the hostname (the service name changes if you rename/recreate).
+- Postgres container crashed — check its logs.
+
+### `password authentication failed for user "..."`
+
+The `DATABASE_URL` password doesn't match what Postgres was created with, **or** the password contains URL-special characters and they weren't encoded.
+
+URL-encoding map for passwords:
+
+| Char | Encoded |
+| ---- | ------- |
+| `@`  | `%40`   |
+| `:`  | `%3A`   |
+| `/`  | `%2F`   |
+| `?`  | `%3F`   |
+| `#`  | `%23`   |
+| `%`  | `%25`   |
+
+Or just change the password to alphanumerics. Do this _now_, before you have a dozen services referencing it.
+
+### `ERROR: permission denied to create extension`
+
+The dumped schema uses a Postgres extension (e.g. `pgcrypto`, `citext`, `uuid-ossp`) that isn't installed on the target. Install it as a superuser in the target before restoring:
+
+```bash
+docker exec -it "$PG_CTR" psql -U postgres -d your_db \
+  -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
+```
+
+Some extensions require the `postgres` superuser, not the app user.
+
+### `pg_restore: error: unsupported version (X.Y) in file header`
+
+The dump was made with a newer `pg_dump` than the target Postgres supports. Check versions:
+
+```bash
+docker run --rm postgres:17 pg_dump --version
+docker exec "$PG_CTR" psql -V
+```
+
+Fix by matching the image version used in Step 2 to the target's major version.
+
+### The dump file is empty / 0 bytes
+
+`pg_dump` wrote nothing. Look at its stderr — most likely an authentication failure that was swallowed. Re-run without `--file=` to print to stdout and watch the error, or check the container's exit code.
+
+### `next build` errors with `DATABASE_URL resolved to an empty string`
+
+The build doesn't have the env var. Two options:
+
+1. Pass `DATABASE_URL` as a build arg (Dokploy's build-args section). A placeholder string like `postgresql://placeholder:placeholder@localhost:5432/placeholder` is enough — the real value comes from runtime env.
+2. Make the Prisma client lazy so it doesn't construct at module import. Wrap `new PrismaClient()` behind a getter/Proxy so it's only instantiated when a query actually runs.
+
+### `ERR_TOO_MANY_REDIRECTS` after cutover (next-auth apps)
+
+`NEXTAUTH_URL` doesn't match the host the browser is hitting. Cookies are scoped to the wrong domain → session never sticks → the dashboard bounces to `/login` forever. Update `NEXTAUTH_URL` to the exact public URL (protocol + host + port) of your deployed app.
+
+---
+
+## Appendix — doing this for any two Postgres databases
+
+The only things specific to Neon/Dokploy in this guide are the hostnames and the UI clicks in Step 1 and Step 4. The core workflow — `pg_dump --format=custom --no-owner --no-privileges --no-acl` → file → `pg_restore --no-owner --no-privileges --clean --if-exists` — works between any two Postgres instances, cloud or self-hosted, as long as you:
+
+- Match major versions.
+- Handle any required extensions on the target side.
+- Test the restore before pointing production at it.
+
+Swap `pg_dump` for `pg_dumpall` if you need roles and cluster-level objects too; swap `--format=custom` for `--format=directory` + `--jobs=N` for parallel dump/restore on large datasets.
