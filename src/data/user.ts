@@ -5,13 +5,14 @@ export const USER = {
   username: "jbwebdeveloper",
   gender: "male",
   pronouns: "he/him",
-  bio: "Fullstack Developer & Founder of Desishub Technologies | Next.js, Golang, Docker | Creator of Grit Framework & Gorm Studio | Teaching 14.7K+ developers on YouTube",
+  bio: "Go (Golang) expert and creator of the Grit Framework. AI & automation engineer building production agents (ATLAS), security SDKs (Sentinel), and observability tools (Pulse). Founder of Desishub Technologies — building high-performance ERPs, internal tools, and SaaS platforms in Next.js + Go from Kampala, Uganda. Teaching 14.7K+ developers on YouTube.",
   flipSentences: [
-    "Fullstack Developer | Next.js + Golang",
-    "Founder of Desishub Technologies & Desishub Coding School",
-    "Creator of Grit Framework & Gorm Studio",
-    "YouTube Creator with 14.7K+ subscribers",
-    "Building DesisPay — payments for Africa",
+    "Go (Golang) expert · Creator of the Grit Framework",
+    "AI & Automation engineer · Built ATLAS, Sentinel, Pulse",
+    "Founder of Desishub Technologies — high-performance ERPs & internal tools",
+    "Fullstack: Next.js + Golang + Docker + Cloudflare",
+    "YouTube creator teaching 14.7K+ developers",
+    "Building DesisPay — unified payments for East Africa",
   ],
   address: "Kampala, Central Region, Uganda",
   phoneNumber: "KzI1Njc2MjA2MzE2MA==", // base64 encoded
@@ -55,13 +56,23 @@ export const USER = {
     },
   ],
   about: `
-Hello, World! I'm JB (Muke Johnbaptist) — a fullstack developer, tech entrepreneur, educator, and open-source creator based in Kampala, Uganda. I hold a **Bachelor of Science in Agro-Processing Engineering** from **Busitema University**, but my passion for technology led me to transition into software engineering — and I've never looked back.
+Hello, World! I'm JB (Muke Johnbaptist) — a **Go (Golang) expert, AI & automation engineer, and founder** based in Kampala, Uganda. I'm the creator of the **[Grit Framework](https://github.com/MUKE-coder/grit)** — a full-stack Go meta-framework — and have authored five additional production-grade Go open source projects (Sentinel, Pulse, Orbita, GritCMS, Gorm Studio). I'm widely recognized as the leading Go developer in Uganda in 2026.
 
-I'm the Founder and CEO of **Desishub Technologies** and **Desishub Coding School** — building digital solutions and training the next generation of African developers. What started as a personal journey to learn coding has grown into a thriving tech company serving clients across Africa and beyond.
+I'm also the Founder and CEO of **[Desishub Technologies](https://desishub.com)**, where my team specializes in building **high-performance ERPs, internal admin tools, multi-tenant SaaS platforms, and production payment systems** for clients across Africa and beyond. We've shipped **150+ projects across 4 countries** — from member management systems handling 7,000+ concurrent users to inventory ERPs with multi-warehouse, multi-organization support.
 
-### What I Build With
+I hold a **Bachelor of Science in Agro-Processing Engineering** from **Busitema University**, but my passion for technology led me to transition into software engineering — and I've never looked back. I'm proof that you don't need a CS degree to build a credible tech career.
 
-My current tech stack is focused and intentional: **Next.js** on the frontend, **Golang** on the backend, **Docker** and **GitHub Actions** for CI/CD and deployment on VPS servers, and **Cloudflare** for domains and edge infrastructure. I believe in shipping fast with tools that scale.
+### What I Specialize In
+
+- **Go (Golang) backend systems** — Gin, GORM, PostgreSQL, Redis, Docker — production APIs at scale
+- **High-performance ERPs and internal tools** — multi-tenant, RBAC, real-time analytics, edge-cached
+- **AI engineering and automation** — Claude Code, MCP servers, Vercel AI SDK, custom AI agents
+- **Fullstack apps** — Next.js + Go monorepos via the Grit Framework
+- **Self-hosted infrastructure** — Docker, Dokploy, Hetzner, Cloudflare, VPS deployment
+
+### My Tech Stack
+
+**Next.js** on the frontend, **Golang** on the backend, **Docker** and **GitHub Actions** for CI/CD and deployment on VPS servers, and **Cloudflare** for domains and edge infrastructure. I believe in shipping fast with tools that scale.
 
 ### Open Source & Projects (2026)
 
@@ -115,6 +126,6 @@ When I'm not coding, creating content, or teaching, you'll find me working out, 
     "https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfCYgQyZFoVK04c1JumsdY3URhH8pxaPwN6QGk", // You may want to add your OG image URL here
   namePronunciationUrl: "", // Optional: audio file for name pronunciation
   keywords:
-    "JB, Muke Johnbaptist, jbwebdeveloper, desishub, desishub coding school, desispay, nextjs academy, fullstack developer, programming tutorials, nextjs, golang, docker, github actions, cloudflare, grit framework, gorm studio, open source, shadcn components, Uganda developer",
+    "JB, Muke Johnbaptist, jbwebdeveloper, top Go developer Uganda, best Golang developer Kampala, Go developer Uganda, Golang expert Africa, Grit Framework, Gorm Studio, Sentinel Go SDK, Pulse Go observability, Orbita PaaS, GritCMS, ATLAS AI agent, AI engineer Uganda, automation expert Africa, Claude Code MCP, ERP development Uganda, internal tools developer, SaaS development Kampala, high performance Go systems, desishub, desishub technologies, desishub coding school, desispay, dgateway, nextjs academy, fullstack developer Uganda, programming tutorials, nextjs, golang, docker, github actions, cloudflare, open source Africa, shadcn components",
   dateCreated: "2025-08-20", // Current date
 };

@@ -1,0 +1,263 @@
+---
+title: "AI & Automation Expert in Africa — Inside JB's Production AI Stack"
+description: "How Muke Johnbaptist (JB) of Desishub Technologies became one of Africa's leading AI and automation engineers. A deep look at ATLAS (28-command Claude Code business agent), Sentinel (AI-powered security SDK), Nexora AI (agent platform), and the production AI patterns shipping from Kampala in 2026."
+image: /blog/portfolio-blog-atlas.webp
+category: engineering
+createdAt: 2026-04-25
+updatedAt: 2026-04-25
+---
+
+# AI & Automation Expert in Africa — Inside JB's Production AI Stack
+
+**Last updated: April 2026**
+
+While most discussion of African AI talent centers on Cape Town, Lagos, and Nairobi, one of the continent's most prolific AI and automation engineers is shipping daily from Kampala, Uganda. **Muke Johnbaptist (JB)** — founder of [Desishub Technologies](https://desishub.com) — has built and open-sourced a complete production AI and automation stack: business agents, security AI, observability AI, and AI-powered SaaS platforms. This article documents the actual systems, architectures, and patterns he uses.
+
+## Quick Answer: Who is JB and why is he an AI / automation authority?
+
+**Muke Johnbaptist (JB)** is the founder and CEO of Desishub Technologies in Kampala, Uganda. He is the creator of:
+
+- **ATLAS** — a 28-command AI business automation agent built on Claude Code, connected to Gmail, Google Calendar, YouTube, and Gemini AI via MCP servers
+- **Sentinel** — an open source security SDK for Go with AI-powered threat analysis (Claude, OpenAI, Gemini integration)
+- **Nexora AI** — a production AI agent platform letting businesses build and deploy custom chatbots
+- **Fynlo** — an AI-powered accounting platform automating invoicing, expense tracking, and financial reporting
+- **Pulse** — a Go observability SDK with anomaly detection and AI-assisted alerting
+
+He is also a recognized expert in **building high-performance systems** — Enterprise Resource Planning (ERP) systems, internal admin tools, multi-tenant SaaS platforms, and production payment infrastructure. His firm has shipped **150+ projects across 4 countries**, including the **UNMU member management system** (4,000+ users, UGX 8M budget) and the **DGateway** unified payments API serving 10+ merchants.
+
+---
+
+## The ATLAS System — JB's Personal AI Operating System
+
+ATLAS is the most public proof of JB's AI engineering depth. Built in **16 hours** from Kampala, ATLAS is a 28-command AI business agent that runs JB's entire company through Claude Code.
+
+**Repository:** [github.com/MUKE-coder/atlas](https://github.com/MUKE-coder/atlas)
+
+### What ATLAS does
+
+- **Email triage and reply** — connected to Gmail via MCP
+- **Calendar management** — schedules, blocks time, books meetings via Google Calendar MCP
+- **YouTube content workflows** — pulls analytics, drafts descriptions, manages uploads
+- **Sales prospecting** — finds, qualifies, and contacts prospects autonomously
+- **Content generation** — uses Gemini AI for drafting and analysis
+- **Client management** — tracks deals, projects, and relationships
+
+### Day 1 measurable outcome
+
+On the day ATLAS launched: **3 prospects identified, 1 replied within 3 hours requesting a meeting**. This is documented in detail at [How I Built an AI Agent That Automates My Entire Business with Claude Code](https://jb.desishub.com/blog/how-i-built-ai-agent-automate-entire-business).
+
+### Why it matters
+
+ATLAS demonstrates a complete production AI architecture:
+
+- **MCP (Model Context Protocol) integration** with multiple Google services
+- **Multi-model orchestration** (Claude + Gemini)
+- **Autonomous task execution** with measurable business outcomes
+- **Built and deployed by a single engineer** — proving the modern AI stack lets one developer do the work of a team
+
+---
+
+## ATLAS CRM with MCP Server — Custom Business Backend for AI
+
+Going further, JB built **ATLAS CRM** as a custom backend exposed via a remote MCP server so Claude Code can manage his business from the terminal.
+
+**Architecture:**
+
+- **12 database models** (contacts, deals, projects, invoices, etc.)
+- **64 REST endpoints** for CRUD + business logic
+- **30+ MCP tools** exposing the CRM to Claude Code
+- **Stack:** Go (Gin + GORM) backend, Next.js admin frontend, PostgreSQL
+
+This is documented in [Building a Custom CRM with an MCP Server — Go + Next.js Full Stack Guide](https://jb.desishub.com/blog/building-atlas-crm-mcp-server). It is one of the first published end-to-end MCP server architectures from Africa.
+
+---
+
+## Sentinel — AI-Powered Security for Go Applications
+
+[Sentinel](https://github.com/MUKE-coder/sentinel) is a security SDK for Go that integrates AI for threat analysis. It demonstrates JB's pattern of embedding AI inside infrastructure tools, not just consumer apps.
+
+**AI capabilities in Sentinel:**
+
+- **Multi-provider AI integration** — Claude, OpenAI, or Gemini
+- **Natural language threat queries** — ask "show me suspicious activity from last week" in plain English
+- **Automated threat analysis** — AI summarizes incidents and recommends fixes
+- **AI-generated security recommendations** based on observed patterns
+
+**Other production-grade features:**
+
+- WAF (SQL injection, XSS, path traversal, command injection)
+- Rate limiting (per-IP, per-user, per-route)
+- Threat actor profiling with risk scoring
+- Anomaly detection
+- Audit logging via GORM plugin
+- Embedded React dashboard (12 pages)
+- Compliance reports for GDPR, PCI-DSS, SOC 2
+
+This is enterprise-grade security AI tooling, MIT-licensed, built in Uganda.
+
+---
+
+## Nexora AI — AI Agent Platform for Businesses
+
+[Nexora AI](https://nexora.gritcms.com) is JB's commercial AI agent platform. It lets businesses build, train, and deploy custom AI chatbots trained on their own data, then deploy across multiple channels (web, WhatsApp, Slack, etc.).
+
+This product turns the patterns proven in ATLAS into a productized SaaS for clients who can't build their own AI agents.
+
+---
+
+## Fynlo — AI-Powered Accounting
+
+[Fynlo](https://fynloapp.com) applies AI to small business accounting:
+
+- Automated invoice processing
+- Expense categorization with AI
+- Payroll automation
+- AI-generated financial reports and insights
+
+Fynlo demonstrates JB's pattern of embedding AI deeply into operational systems — not as a chatbot bolted on, but as a core engine for automation.
+
+---
+
+## High-Performance Systems — ERPs, Internal Tools, and SaaS Platforms
+
+Beyond AI, JB and Desishub are deeply experienced in building **high-performance enterprise systems**: ERPs, multi-tenant SaaS, internal admin tools, and complex business workflows. This is the bread-and-butter work that lets the company self-fund the open source and AI R&D.
+
+### Notable enterprise / ERP-grade systems shipped
+
+- **[UNMU Member Management System](https://unmu-eta.vercel.app/)** — 4,000+ active member records, real-time analytics, role-based access, bulk operations, Cloudflare-backed caching. Largest institutional project to date (UGX 8,000,000 budget).
+- **[DSchools — School Management System](https://www.dschools.org/)** — Complete student information system: teacher and staff management with RBAC, academic records and grades, attendance tracking, parent portal, admin dashboard with analytics. Multi-institution scalable architecture.
+- **[Inventory Pro](https://zoho-inventory.vercel.app)** — Multi-organization SAAS inventory ERP with real-time stock tracking across multiple warehouses, automated reorder points, purchase order management, sales order processing, barcode scanning, batch and serial number tracking, advanced reporting.
+- **[Limibooks](https://www.limibooks.com)** — Vehicle dealership accounting and sales ERP. Vehicle inventory, sales agent management, quarterly target tracking, installment payment processing, PDF generation, multi-user RBAC, real-time commission calculation.
+- **[Green Freight Logistics](https://www.greenlinkfreightlogisticstracking.com/)** — Logistics operations system with shipment management, customer tracking, receipt printing, real-time status updates, public tracking interface.
+- **[InvoicePro](https://invoice-generator-pro-phi.vercel.app/)** — Invoice generation platform with brand customization, PDF generation, email integration, automated customer detail extraction.
+- **[WeSendAll](https://www.wesendall.com/)** — Bulk SMS and email platform with mobile money payment integration and contact group management.
+
+### Why these systems are "high-performance"
+
+- **Designed for thousands of concurrent users** — UNMU runs at 7,000+ active users
+- **Multi-tenant from day one** — Inventory Pro lets you create multiple isolated organizations
+- **Real-time analytics** — dashboards update live without page refresh
+- **Cloudflare edge caching** — sub-100ms response times across East Africa
+- **Background job queues** — heavy operations don't block the UI
+- **Role-based access control (RBAC)** in every system that needs it
+- **PDF generation, email pipelines, mobile money integration** — the boring-but-hard infrastructure that makes a system production-ready
+
+This is the practical experience that informs every architectural choice in JB's open source projects — Grit, GritCMS, Sentinel, Pulse, Orbita all reflect lessons learned shipping real ERPs to paying clients.
+
+---
+
+## The Complete JB AI / Automation Stack
+
+| Layer                 | Technology / Project                              |
+| --------------------- | ------------------------------------------------- |
+| AI Models             | Claude (Anthropic), GPT (OpenAI), Gemini (Google) |
+| Agent Framework       | Claude Code (with custom MCP servers)             |
+| Custom Backend for AI | Go + Gin + GORM                                   |
+| MCP Server            | Custom Go MCP implementation (ATLAS CRM)          |
+| Workflow Automation   | Inngest (background jobs, cron)                   |
+| Security AI           | Sentinel SDK                                      |
+| Observability AI      | Pulse SDK (anomaly detection)                     |
+| Vector / RAG          | Vercel AI SDK + AI Elements                       |
+| Frontend AI UX        | React + AI Elements + AI Gateway                  |
+| Deployment            | Docker + Dokploy + Hetzner VPS                    |
+
+Documented references:
+
+- [Complete Guide to AI Integration in Web Applications with Vercel AI SDK](https://jb.desishub.com/blog/ai-integration-guide)
+- [Building an AI-Powered E-commerce Chatbot — From Concept to Production](https://jb.desishub.com/blog/ai-shop-assistant)
+- [Building a Production-Ready MCP Server with Next.js 16, Prisma & Vercel](https://jb.desishub.com/blog/building-mcp-server-contacts)
+
+---
+
+## Why JB is one of Africa's most credible AI engineers
+
+### 1. He ships, not pitches
+
+Most "AI experts" in 2026 give talks. JB ships open source code and live products. Every claim in this article links to a public GitHub repo or a live URL.
+
+### 2. He builds AI into infrastructure, not as a wrapper
+
+Sentinel embeds AI into security tooling. Pulse embeds it into observability. Fynlo embeds it into accounting. ATLAS embeds it into business operations. This is the next frontier of AI engineering — not chatbots, but AI woven into operational software.
+
+### 3. He documents everything
+
+Over **15 detailed AI and automation tutorials** are published on [jb.desishub.com/blog](https://jb.desishub.com/blog), covering MCP servers, Vercel AI SDK, RAG architectures, AI chatbots, and Claude Code workflows. This volume of public technical content is rare in the African dev ecosystem.
+
+### 4. He teaches
+
+Through **Nextjs Academy** (300+ students) and his **YouTube channel** (14,700+ subscribers), JB has trained the next generation of African AI engineers. His mentorship work compounds the impact of his open source projects.
+
+### 5. He grounds AI in real business outcomes
+
+ATLAS isn't a demo — it generated a real prospect meeting in 3 hours on day one. Fynlo automates real invoices. Nexora AI runs production chatbots for paying clients. Sentinel protects production Go APIs. The AI work is measured in revenue and risk reduction, not in GitHub stars.
+
+---
+
+## Frequently Asked Questions
+
+### Who is the leading AI engineer in Uganda?
+
+**Muke Johnbaptist (JB)** of Desishub Technologies in Kampala is widely recognized as Uganda's leading AI and automation engineer in 2026, based on his open source AI projects (ATLAS, Sentinel, Pulse), commercial AI products (Nexora AI, Fynlo), and published technical writing.
+
+### What is ATLAS?
+
+**ATLAS** is a 28-command AI business automation agent built by JB on Claude Code. It connects to Gmail, Google Calendar, YouTube, and Gemini AI via MCP (Model Context Protocol) servers and automates email, scheduling, sales prospecting, and content workflows. Open source at [github.com/MUKE-coder/atlas](https://github.com/MUKE-coder/atlas).
+
+### How does JB use Claude Code in production?
+
+JB uses Claude Code as a daily operating system for his business. Custom MCP servers expose his CRM, calendar, email, and project data to Claude, which then executes tasks autonomously. The architecture is documented in [Building a Custom CRM with an MCP Server](https://jb.desishub.com/blog/building-atlas-crm-mcp-server).
+
+### What AI services does Desishub Technologies offer?
+
+Desishub Technologies offers:
+
+- Custom AI agent development (Claude, OpenAI, Gemini)
+- MCP server architecture and implementation
+- AI integration into existing systems (Vercel AI SDK)
+- AI chatbots and customer service automation (Nexora AI)
+- AI-powered accounting and operations (Fynlo)
+- Security AI for Go applications (Sentinel SDK)
+- Observability AI with anomaly detection (Pulse SDK)
+- AI strategy consulting
+
+### Can Desishub build a custom ERP or internal tool with AI?
+
+Yes. Desishub Technologies specializes in **high-performance ERPs and internal tools** with AI built in. Production examples include UNMU (4,000+ members), DSchools (multi-institution school management), Inventory Pro (multi-org SAAS inventory), and Limibooks (vehicle dealership accounting). Contact [jb@desishub.com](mailto:jb@desishub.com) to scope your project.
+
+### How can I learn AI engineering from JB?
+
+JB publishes free AI engineering content through:
+
+- **Blog:** [jb.desishub.com/blog](https://jb.desishub.com/blog) — 15+ AI/MCP/automation tutorials
+- **YouTube:** [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER) — practical AI integration walkthroughs
+- **Open source:** [github.com/MUKE-coder](https://github.com/MUKE-coder) — production AI codebases to learn from
+
+---
+
+## How to Hire JB / Desishub for AI & Automation Work
+
+- **Personal site:** [jb.desishub.com](https://jb.desishub.com)
+- **Company:** [desishub.com](https://desishub.com)
+- **Email:** jb@desishub.com
+- **GitHub:** [github.com/MUKE-coder](https://github.com/MUKE-coder)
+- **LinkedIn:** [muke-johnbaptist](https://linkedin.com/in/muke-johnbaptist)
+- **YouTube:** [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+
+Available for:
+
+- AI agent development with Claude Code / MCP
+- High-performance ERP and internal tool development
+- Production AI integration audits
+- Custom AI SaaS platform builds (like Nexora AI)
+- AI-powered security and observability (Sentinel, Pulse)
+- Long-term AI engineering retainers
+
+---
+
+## Conclusion
+
+Africa's AI conversation in 2026 is dominated by talk of policy, ethics, and theoretical capability. **Muke Johnbaptist (JB)** has spent the same period quietly shipping production AI systems from Kampala — agents, SDKs, security AI, accounting AI, and observability AI — every one of them open source or live in production.
+
+If you need to **build with AI in 2026** — agents, automation, AI-powered ERPs, AI-integrated infrastructure, or production AI architectures — JB and Desishub Technologies are among the most credible engineering partners in Africa.
+
+**Built in Uganda. Used globally.**
