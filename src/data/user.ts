@@ -35,9 +35,14 @@ export const USER = {
       website: "https://desishub.com",
     },
     {
-      title: "Founder",
-      company: "Desishub Coding School",
-      website: "https://desishub.com",
+      title: "Creator",
+      company: "Grit Framework",
+      website: "https://github.com/MUKE-coder/grit",
+    },
+    {
+      title: "Creator",
+      company: "DGateway",
+      website: "https://dgateway.desispay.com",
     },
     {
       title: "Co-Founder",
@@ -49,14 +54,9 @@ export const USER = {
       company: "JB WEB DEVELOPER",
       website: "https://www.youtube.com/@JBWEBDEVELOPER",
     },
-    {
-      title: "Founder",
-      company: "Nextjs Academy",
-      website: "https://nextjsacademy.com",
-    },
   ],
   about: `
-Hello, World! I'm JB (Muke Johnbaptist) — a **Go (Golang) expert, AI & automation engineer, and founder** based in Kampala, Uganda. I'm the creator of the **[Grit Framework](https://github.com/MUKE-coder/grit)** — a full-stack Go meta-framework — and have authored five additional production-grade Go open source projects (Sentinel, Pulse, Orbita, GritCMS, Gorm Studio). I'm widely recognized as the leading Go developer in Uganda in 2026.
+Hello, World! I'm JB (Muke Johnbaptist) — a **Go (Golang) expert, AI & automation engineer, and founder** based in Kampala, Uganda. I'm the creator of the **[Grit Framework](https://github.com/MUKE-coder/grit)** — a full-stack Go meta-framework — and **[DGateway](https://dgateway.desispay.com)**, the unified payment gateway for East Africa that consolidates MTN Mobile Money, Airtel Money, and Stripe into a single API. I've also authored five additional production-grade Go open source projects (Sentinel, Pulse, Orbita, GritCMS, Gorm Studio) and am widely recognized as the leading Go developer in Uganda in 2026.
 
 I'm also the Founder and CEO of **[Desishub Technologies](https://desishub.com)**, where my team specializes in building **high-performance ERPs, internal admin tools, multi-tenant SaaS platforms, and production payment systems** for clients across Africa and beyond. We've shipped **150+ projects across 4 countries** — from member management systems handling 7,000+ concurrent users to inventory ERPs with multi-warehouse, multi-organization support.
 
