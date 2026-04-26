@@ -1,0 +1,553 @@
+---
+title: "The Developer's Environment Variables Cheatsheet — How to Get Every API Key You'll Ever Need"
+description: "A step-by-step reference for collecting every environment variable used in modern Next.js + Go projects: Better Auth, Neon Postgres, Resend, Google OAuth, GitHub OAuth, Stripe, AWS S3, Cloudflare R2, UploadThing, DGateway, GitHub PAT, Upstash Redis, Inngest, Anthropic API and more. Bookmark this — it covers every .env value referenced in JB's tutorials and YouTube videos."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwft3OfWI2iVG7KkMc0Z9LTeyBRuPQlIEYzv36N
+category: reference
+createdAt: 2026-04-26
+updatedAt: 2026-04-26
+---
+
+# The Developer's Environment Variables Cheatsheet
+
+Every time I drop a new tutorial — Better Auth, Stripe, file uploads, payments, Claude — I always say the same thing: **"Set up the env file yourself, you know how to get the values."** This post is the answer to that. One bookmarkable reference for every API key, secret, and connection string that shows up in my YouTube videos and blog tutorials. Click the section you need, follow the steps, paste the value into `.env.local`, and move on.
+
+> 💡 **Conventions:** values starting with `NEXT_PUBLIC_` are exposed to the browser — never put secrets there. Everything else is server-only and must stay out of client code. Restart your dev server after editing `.env.local`.
+
+---
+
+## 1. Better Auth
+
+Better Auth needs two values: a random secret used to sign sessions, and the base URL the app runs on.
+
+```env
+BETTER_AUTH_SECRET="<run the openssl command below>"
+BETTER_AUTH_URL="http://localhost:3000"
+```
+
+### Steps
+
+1. **Generate the secret** — open a terminal and run:
+   ```bash
+   openssl rand -base64 32
+   ```
+   On Windows without OpenSSL, use Node: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+2. Paste the output into `BETTER_AUTH_SECRET`.
+3. Set `BETTER_AUTH_URL` to your local dev URL (`http://localhost:3000`) for development. In production, set it to the deployed domain (e.g. `https://yourapp.com`).
+
+> Generate a **different secret per environment** (dev, staging, prod). Never reuse.
+
+---
+
+## 2. Database — Neon PostgreSQL (`DATABASE_URL`)
+
+Neon is my default Postgres for getting started — generous free tier, instant provisioning, and serverless-friendly.
+
+```env
+DATABASE_URL="postgresql://user:password@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require"
+```
+
+### Steps
+
+1. Go to **[neon.tech](https://neon.tech)** and sign in (GitHub login is fastest).
+2. Click **New Project** → pick a region close to your users → name it.
+3. On the project dashboard, click **Connection Details**.
+4. Copy the **connection string** (make sure "Pooled connection" is selected for serverless deploys).
+5. Paste into `DATABASE_URL`.
+
+### Local PostgreSQL alternative
+
+If you'd rather run Postgres locally with Docker:
+
+```env
+DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
+```
+
+```bash
+docker run -d --name postgres \
+  -e POSTGRES_USER=user \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=dbname \
+  -p 5432:5432 \
+  postgres:16-alpine
+```
+
+---
+
+## 3. Resend (`RESEND_API_KEY`)
+
+Resend is the email API I use for transactional mail (auth OTPs, receipts, notifications).
+
+```env
+RESEND_API_KEY="re_xxxxxxxxxxxx"
+```
+
+### Steps
+
+1. Go to **[resend.com](https://resend.com)** and sign up.
+2. Verify the email you signed up with.
+3. In the dashboard, go to **API Keys** → **Create API Key**.
+4. Give it a name (e.g. "myapp-dev"), pick **Sending access**, click **Create**.
+5. Copy the value (starts with `re_`) and paste into `RESEND_API_KEY`.
+6. **Add and verify your sending domain** under **Domains** before sending in production.
+
+> Resend gives you 100 emails/day free, 3,000/month — enough for early-stage SaaS.
+
+---
+
+## 4. Google OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
+
+For "Sign in with Google" via Better Auth, NextAuth, or any other auth library.
+
+```env
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+```
+
+### Steps
+
+1. Go to **[console.cloud.google.com](https://console.cloud.google.com)**.
+2. Create a new project (or select an existing one).
+3. In the left sidebar: **APIs & Services → OAuth consent screen**.
+4. Pick **External**, fill in the app name, support email, and developer email. Save.
+5. Go to **Credentials → Create Credentials → OAuth client ID**.
+6. Application type: **Web application**.
+7. **Authorized JavaScript origins**: `http://localhost:3000` (and your production URL).
+8. **Authorized redirect URIs**: `http://localhost:3000/api/auth/callback/google` (Better Auth) or `http://localhost:3000/api/auth/callback/google` (NextAuth) — match what your auth library expects.
+9. Click **Create**. Copy the **Client ID** and **Client secret**.
+
+> When you go live, add the production redirect URI too — forgetting this is the #1 cause of "redirect_uri_mismatch" errors.
+
+---
+
+## 5. GitHub OAuth (`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`)
+
+For "Sign in with GitHub" — the most common second auth provider after Google.
+
+```env
+GITHUB_CLIENT_ID="your-github-client-id"
+GITHUB_CLIENT_SECRET="your-github-client-secret"
+```
+
+### Steps
+
+1. Go to **[github.com/settings/developers](https://github.com/settings/developers)**.
+2. Click **OAuth Apps → New OAuth App**.
+3. Fill in:
+   - **Application name**: your app name
+   - **Homepage URL**: `http://localhost:3000`
+   - **Authorization callback URL**: `http://localhost:3000/api/auth/callback/github`
+4. Click **Register application**.
+5. Copy the **Client ID** shown on the next page.
+6. Click **Generate a new client secret** → copy the value immediately (you only see it once).
+
+> For production, register a **separate OAuth App** with your real domain rather than editing the dev one — keeps prod credentials clean.
+
+---
+
+## 6. GitHub Personal Access Token (`GITHUB_API_TOKEN`)
+
+For server-to-server calls to the GitHub API (fetching star counts, repo metadata, contribution graphs, etc.).
+
+```env
+GITHUB_API_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxxxxxx"
+```
+
+### Steps
+
+1. Go to **[github.com/settings/tokens](https://github.com/settings/tokens)**.
+2. Click **Generate new token → Generate new token (classic)**.
+3. Note: name it (e.g. "myapp-prod-readonly").
+4. Expiration: 90 days for dev, "No expiration" for production-only tokens you rotate manually.
+5. Scopes: for read-only public data, only `public_repo` is needed. For private repos, add `repo`. For star/fork counts, no scopes are required at all.
+6. Click **Generate token** → copy immediately (`ghp_…`).
+
+> Use a **fine-grained token** instead of classic if you only need access to specific repos — better security.
+
+---
+
+## 7. Stripe (`STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`)
+
+For accepting card payments anywhere in the world.
+
+```env
+STRIPE_SECRET_KEY="sk_test_..."
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+```
+
+### Steps to get the API keys
+
+1. Go to **[dashboard.stripe.com](https://dashboard.stripe.com)**, sign up, complete the basic onboarding.
+2. Make sure you're in **Test mode** (toggle in the top-right).
+3. Sidebar: **Developers → API keys**.
+4. Copy the **Publishable key** (starts with `pk_test_`) → `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+5. Click **Reveal test key** for the **Secret key** (starts with `sk_test_`) → `STRIPE_SECRET_KEY`.
+
+### Steps to get the webhook secret (for local dev)
+
+1. Install the Stripe CLI: **[stripe.com/docs/stripe-cli](https://stripe.com/docs/stripe-cli)**.
+2. Run `stripe login`.
+3. Run:
+   ```bash
+   stripe listen --forward-to localhost:3000/api/webhooks/stripe
+   ```
+4. The CLI prints a `whsec_…` secret. Copy it into `STRIPE_WEBHOOK_SECRET`.
+
+### Steps to get the webhook secret (for production)
+
+1. Sidebar: **Developers → Webhooks → Add endpoint**.
+2. URL: `https://yourapp.com/api/webhooks/stripe`.
+3. Select the events you care about (`checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`).
+4. After creating, copy the **Signing secret** (`whsec_…`) → `STRIPE_WEBHOOK_SECRET` in your production env.
+
+> Switch to **Live mode** for production — keys then start with `sk_live_` and `pk_live_`. Test mode and Live mode keys are completely separate.
+
+---
+
+## 8. AWS S3 (`AWS_S3_REGION`, `AWS_S3_BUCKET_NAME`, `AWS_S3_ACCESS_KEY_ID`, `AWS_S3_SECRET_ACCESS_KEY`)
+
+For file uploads when you want the AWS ecosystem.
+
+```env
+AWS_S3_REGION="us-east-1"
+AWS_S3_BUCKET_NAME="your-bucket-name"
+AWS_S3_ACCESS_KEY_ID=""
+AWS_S3_SECRET_ACCESS_KEY=""
+```
+
+### Steps
+
+1. Go to **[aws.amazon.com](https://aws.amazon.com)** and sign in (or create an account — needs a card, even on free tier).
+2. **Create the bucket:**
+   - Open the **S3** service in the console.
+   - Click **Create bucket** → choose a globally unique name → pick a region (note it for `AWS_S3_REGION`, e.g. `us-east-1`, `eu-west-1`, `af-south-1`).
+   - For public uploads, uncheck **Block all public access** and acknowledge the warning. For private + presigned URLs, leave it blocked.
+3. **Create an IAM user with S3 access:**
+   - Open the **IAM** service.
+   - **Users → Create user** → give a name (e.g. `myapp-s3`).
+   - Attach permissions: select **Attach policies directly** → search and attach `AmazonS3FullAccess` (or a tighter custom policy in production).
+   - Create user.
+4. **Create an access key for that user:**
+   - Open the user → **Security credentials → Create access key**.
+   - Use case: **Application running outside AWS**.
+   - Copy the **Access key ID** → `AWS_S3_ACCESS_KEY_ID`.
+   - Copy the **Secret access key** (only shown once) → `AWS_S3_SECRET_ACCESS_KEY`.
+5. **Configure CORS on the bucket** (Permissions → CORS) so browsers can upload directly:
+   ```json
+   [
+     {
+       "AllowedHeaders": ["*"],
+       "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
+       "AllowedOrigins": ["http://localhost:3000", "https://yourapp.com"],
+       "ExposeHeaders": ["ETag"]
+     }
+   ]
+   ```
+
+---
+
+## 9. Cloudflare R2 (`CLOUDFLARE_R2_*`)
+
+R2 is S3-compatible but with **zero egress fees** — my preferred file storage for African projects where bandwidth costs matter.
+
+```env
+CLOUDFLARE_R2_ACCESS_KEY_ID=""
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=""
+CLOUDFLARE_R2_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
+CLOUDFLARE_R2_BUCKET_NAME="your-bucket-name"
+CLOUDFLARE_R2_PUBLIC_DEV_URL="https://pub-xxx.r2.dev"
+```
+
+### Steps
+
+1. Sign in to **[dash.cloudflare.com](https://dash.cloudflare.com)**.
+2. Sidebar: **R2 → Overview**. Subscribe to R2 if it's your first time (no card required for the free tier — 10 GB storage, 1M Class A ops/month).
+3. Click **Create bucket** → name it → pick a location hint (e.g. EEUR for Europe, ENAM for North America).
+4. **Get the endpoint and account ID:**
+   - In R2 Overview, copy your **Account ID** from the right sidebar.
+   - The endpoint is: `https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com` → `CLOUDFLARE_R2_ENDPOINT`.
+   - Bucket name → `CLOUDFLARE_R2_BUCKET_NAME`.
+5. **Create API tokens:**
+   - On the R2 Overview page, click **Manage R2 API Tokens** (top right).
+   - **Create API Token** → permissions: **Object Read & Write** → scope to the bucket you just made.
+   - Copy the **Access Key ID** → `CLOUDFLARE_R2_ACCESS_KEY_ID`.
+   - Copy the **Secret Access Key** (shown once) → `CLOUDFLARE_R2_SECRET_ACCESS_KEY`.
+6. **Enable the public dev URL** (for serving uploaded files publicly):
+   - Open the bucket → **Settings → Public access → Allow Access**.
+   - Copy the **Public R2.dev Bucket URL** (`https://pub-xxx.r2.dev`) → `CLOUDFLARE_R2_PUBLIC_DEV_URL`.
+7. **Configure CORS** (Bucket → Settings → CORS Policy) — same JSON shape as the S3 example above.
+
+> For production-grade public delivery, attach a custom domain via Cloudflare DNS instead of the `pub-xxx.r2.dev` URL.
+
+---
+
+## 10. UploadThing (`UPLOADTHING_TOKEN`, `UPLOADTHING_SECRET`)
+
+UploadThing is the friendliest file-upload service for Next.js when you don't want to wire up S3 or R2 yourself.
+
+```env
+UPLOADTHING_TOKEN="eyJhcGlLZXkiOiJza19saXZlXyJ9..."
+UPLOADTHING_SECRET="sk_live_xxxxxxxxxxxx"
+```
+
+### Steps
+
+1. Go to **[uploadthing.com](https://uploadthing.com)** and sign in with GitHub.
+2. **Create a new app** → pick a name → choose a region close to your users.
+3. In the app dashboard, sidebar: **API Keys**.
+4. Copy the **`UPLOADTHING_TOKEN`** (a long base64 string that bundles app ID + secret).
+5. If your stack still uses the legacy split format, copy `UPLOADTHING_SECRET` and `UPLOADTHING_APP_ID` separately from the same page.
+
+> The single `UPLOADTHING_TOKEN` format is the new default in v7+. If a tutorial uses the older split keys, both still work.
+
+---
+
+## 11. DGateway (`DGATEWAY_API_KEY`, `DGATEWAY_WEBHOOK_SECRET`)
+
+[DGateway](https://dgateway.desispay.com) is my unified payments API for East Africa — one integration for MTN Mobile Money, Airtel Money, and Stripe.
+
+```env
+DGATEWAY_API_KEY="dgw_test_xxxxxxxxxxxx"
+DGATEWAY_WEBHOOK_SECRET="whsec_dgw_xxxxxxxxxxxx"
+DGATEWAY_BASE_URL="https://dgateway.desispay.com/api/v1"
+```
+
+### Steps
+
+1. Go to **[dgateway.desispay.com](https://dgateway.desispay.com)** and sign up as a merchant.
+2. Verify your business email and complete the onboarding (business name, contact, payout details).
+3. In the merchant dashboard, sidebar: **Developers → API Keys**.
+4. Make sure **Test mode** is on while you're building.
+5. Copy the **Test Secret Key** (starts with `dgw_test_`) → `DGATEWAY_API_KEY`.
+6. **Webhook secret:** sidebar **Developers → Webhooks → Add endpoint** → URL: `https://yourapp.com/api/webhooks/dgateway` → select events (`payment.succeeded`, `payment.failed`, `payout.completed`) → copy the signing secret → `DGATEWAY_WEBHOOK_SECRET`.
+7. When you're ready to go live, switch the dashboard to **Live mode** and replace the keys with the `dgw_live_` versions.
+
+> See the full integration guide: **[Integrating DGateway Payments into a Next.js App](https://jb.desishub.com/blog/dgateway-integration-with-nextjs-guide)**.
+
+---
+
+## 12. Upstash Redis (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`)
+
+For rate limiting, session caching, and queues — the serverless-friendliest Redis.
+
+```env
+UPSTASH_REDIS_REST_URL="https://xxx.upstash.io"
+UPSTASH_REDIS_REST_TOKEN="AYx..."
+```
+
+### Steps
+
+1. Go to **[upstash.com](https://upstash.com)** and sign up.
+2. **Redis → Create Database** → name it → choose a region close to your serverless deployment region (e.g. `us-east-1` if you're on Vercel default).
+3. Pick **Eviction: enabled** for cache use cases, **disabled** for queues/rate-limit counters.
+4. On the database details page, scroll to **REST API**.
+5. Copy **`UPSTASH_REDIS_REST_URL`** and **`UPSTASH_REDIS_REST_TOKEN`**.
+
+> Free tier: 10,000 commands/day, 256 MB max — fine for early-stage rate limiting.
+
+---
+
+## 13. Inngest (`INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY`)
+
+For background jobs, scheduled tasks, and durable workflows — covered in detail in [my Inngest tutorial](https://jb.desishub.com/blog/background-task-and-queing-using-ingest).
+
+```env
+INNGEST_EVENT_KEY="xxxxxxxxxxxx"
+INNGEST_SIGNING_KEY="signkey-prod-xxxxxxxxxxxx"
+```
+
+### Steps
+
+1. Go to **[inngest.com](https://inngest.com)** and sign in with GitHub.
+2. Create a new app → name it after your project.
+3. Sidebar: **Manage → Event Keys** → **Create Key** → copy → `INNGEST_EVENT_KEY`.
+4. Sidebar: **Manage → Webhooks → Signing Key** → copy → `INNGEST_SIGNING_KEY`.
+
+> In dev, you can run the Inngest CLI locally without keys — it auto-generates a dev signing key.
+
+---
+
+## 14. Anthropic API Key (`ANTHROPIC_API_KEY`)
+
+For Claude-powered features (chatbots, agents, the AI integrations covered in [my AI guide](https://jb.desishub.com/blog/ai-integration-guide)).
+
+```env
+ANTHROPIC_API_KEY="sk-ant-api03-xxxxxxxxxxxx"
+```
+
+### Steps
+
+1. Go to **[console.anthropic.com](https://console.anthropic.com)** and sign in.
+2. Add a payment method (required even for the free credits) under **Settings → Billing**.
+3. Sidebar: **API Keys → Create Key**.
+4. Name it (e.g. "myapp-prod") → pick a workspace → click **Create**.
+5. Copy the key (starts with `sk-ant-…`) — only shown once.
+6. (Optional) Set a monthly spend limit under **Limits** to avoid surprises.
+
+---
+
+## 15. OpenAI API Key (`OPENAI_API_KEY`)
+
+For GPT-powered features and embeddings.
+
+```env
+OPENAI_API_KEY="sk-proj-xxxxxxxxxxxx"
+```
+
+### Steps
+
+1. Go to **[platform.openai.com](https://platform.openai.com)** and sign in.
+2. Add a payment method under **Settings → Billing → Payment methods**.
+3. Sidebar: **API keys → Create new secret key**.
+4. Name it, set permissions (most apps want **All**), pick a project, click **Create**.
+5. Copy the value immediately (starts with `sk-proj-…` for new project keys).
+
+---
+
+## 16. Google Gemini API Key (`GEMINI_API_KEY`)
+
+For Gemini AI integrations — the cheapest large-context model on the market in 2026.
+
+```env
+GEMINI_API_KEY="AIzaSy..."
+```
+
+### Steps
+
+1. Go to **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**.
+2. Sign in with the Google account you want billed.
+3. Click **Create API Key → Create API Key in new project** (or pick an existing GCP project).
+4. Copy the value (starts with `AIzaSy…`).
+
+> Gemini's free tier is generous: ~15 requests/minute on `gemini-2.0-flash` for most regions. Enough to prototype an agent.
+
+---
+
+## 17. App URL (`APP_URL`, `NEXT_PUBLIC_APP_URL`)
+
+The base URL the app runs on — used for OG images, email links, OAuth callbacks, and SEO canonical URLs.
+
+```env
+APP_URL="http://localhost:3000"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+```
+
+### Steps
+
+- **Local dev:** `http://localhost:3000`.
+- **Vercel preview:** Vercel auto-injects `VERCEL_URL` — you can derive `APP_URL` from it.
+- **Production:** your real domain, e.g. `https://yourapp.com` (no trailing slash).
+
+> Anything visible to the browser must use `NEXT_PUBLIC_APP_URL`. Anything server-only can use the unprefixed `APP_URL`.
+
+---
+
+## Putting it all together — a complete `.env.local` example
+
+```env
+# ──────────────────────────────
+# App
+# ──────────────────────────────
+APP_URL="http://localhost:3000"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+
+# ──────────────────────────────
+# Database
+# ──────────────────────────────
+DATABASE_URL="postgresql://user:password@host:5432/dbname?sslmode=require"
+
+# ──────────────────────────────
+# Auth
+# ──────────────────────────────
+BETTER_AUTH_SECRET="<openssl rand -base64 32>"
+BETTER_AUTH_URL="http://localhost:3000"
+
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+GITHUB_CLIENT_ID=""
+GITHUB_CLIENT_SECRET=""
+
+# ──────────────────────────────
+# Email
+# ──────────────────────────────
+RESEND_API_KEY="re_xxxxxxxxxxxx"
+
+# ──────────────────────────────
+# Payments — Stripe
+# ──────────────────────────────
+STRIPE_SECRET_KEY="sk_test_..."
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+
+# ──────────────────────────────
+# Payments — DGateway (East Africa)
+# ──────────────────────────────
+DGATEWAY_API_KEY="dgw_test_..."
+DGATEWAY_WEBHOOK_SECRET="whsec_dgw_..."
+DGATEWAY_BASE_URL="https://dgateway.desispay.com/api/v1"
+
+# ──────────────────────────────
+# File Storage — pick one
+# ──────────────────────────────
+# AWS S3
+AWS_S3_REGION="us-east-1"
+AWS_S3_BUCKET_NAME=""
+AWS_S3_ACCESS_KEY_ID=""
+AWS_S3_SECRET_ACCESS_KEY=""
+
+# Cloudflare R2
+CLOUDFLARE_R2_ACCESS_KEY_ID=""
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=""
+CLOUDFLARE_R2_ENDPOINT="https://your-account-id.r2.cloudflarestorage.com"
+CLOUDFLARE_R2_BUCKET_NAME=""
+CLOUDFLARE_R2_PUBLIC_DEV_URL="https://pub-xxx.r2.dev"
+
+# UploadThing
+UPLOADTHING_TOKEN=""
+
+# ──────────────────────────────
+# GitHub API (server-to-server)
+# ──────────────────────────────
+GITHUB_API_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxxxxxx"
+
+# ──────────────────────────────
+# Cache / Queues
+# ──────────────────────────────
+UPSTASH_REDIS_REST_URL=""
+UPSTASH_REDIS_REST_TOKEN=""
+INNGEST_EVENT_KEY=""
+INNGEST_SIGNING_KEY=""
+
+# ──────────────────────────────
+# AI
+# ──────────────────────────────
+ANTHROPIC_API_KEY="sk-ant-..."
+OPENAI_API_KEY="sk-proj-..."
+GEMINI_API_KEY="AIzaSy..."
+```
+
+---
+
+## Production hygiene — read this before you ship
+
+1. **Never commit `.env*` files.** Check that `.env`, `.env.local`, `.env.production` are all in `.gitignore`. Most starter templates already do this — verify before your first commit.
+2. **Rotate keys when team members leave.** Every key on this list can be revoked and regenerated from the same dashboards.
+3. **Use different keys per environment.** Test keys in dev, live keys only in production. Especially for Stripe and DGateway — mixing them is the most common mistake I see.
+4. **Set spend limits where the dashboard offers them** (Anthropic, OpenAI, AWS) — protects you from runaway agents and credential leaks.
+5. **For deploys, store env vars in your platform's secret manager** — Vercel, Dokploy, Hetzner Coolify, GitHub Actions secrets, or AWS Secrets Manager — never in the repo.
+6. **`NEXT_PUBLIC_…` is shipped to every visitor's browser.** Only put values you're happy to expose publicly.
+
+---
+
+## When something doesn't work
+
+Most "API key isn't working" issues come down to four causes:
+
+- You're in the wrong mode (test vs. live).
+- The redirect URI doesn't exactly match what the dashboard has registered.
+- You forgot to restart `pnpm dev` after editing `.env.local`.
+- The env variable name has a typo or is missing the `NEXT_PUBLIC_` prefix when the client needs it.
+
+If you're still stuck, ping me on [YouTube](https://www.youtube.com/@JBWEBDEVELOPER) or [X](https://x.com/MJohnbaptist). Bookmark this page — you'll come back to it on every new project.
+
+— JB
