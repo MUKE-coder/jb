@@ -20,16 +20,12 @@ export const MAIN_NAV: NavItem[] = [
     href: "/courses",
   },
   {
-    title: "Tools",
+    title: "Tools and Public APIs",
     href: "/tools",
   },
   {
     title: "Devops",
     href: "/devops",
-  },
-  {
-    title: "Golang",
-    href: "/golang",
   },
   {
     title: "Ebooks",

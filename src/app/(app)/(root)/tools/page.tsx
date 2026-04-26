@@ -5,6 +5,7 @@ import { USER } from "@/data/user";
 import { ProfileHeader } from "@/features/profile/components/profile-header";
 import { cn } from "@/lib/utils";
 
+import PublicApis from "./components/public-apis";
 import Tools from "./components/tools";
 
 export default function Page() {
@@ -22,6 +23,9 @@ export default function Page() {
         <Separator />
 
         <Tools />
+        <Separator />
+
+        <PublicApis />
         <Separator />
       </div>
     </>
