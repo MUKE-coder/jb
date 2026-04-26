@@ -106,6 +106,14 @@ Here is what we will build with and why each piece matters:
 
 > **Note on the Database:** Neon is excellent for getting started — it is free, serverless, and easy to connect. However, as your API grows and you accumulate paying customers, consider migrating to a **self-hosted PostgreSQL instance** on a VPS (e.g., using DigitalOcean, Hetzner, or a local cloud provider). Self-hosting gives you full control over data residency, lower costs at scale, and better performance for read-heavy workloads. Services like Supabase (managed) or raw PostgreSQL on Docker are good intermediate steps.
 
+### All the components & install commands in one place
+
+Throughout this guide we install several shadcn-compatible components (Better Auth UI, Stripe UI, Scalar API Docs, Website UI, Zustand Cart, etc.). For a single copy-pasteable cheat-sheet of every component install command used in this build, see this gist:
+
+**📋 [JB Components Install Cheat-Sheet (gist)](https://gist.github.com/MUKE-coder/fbe191619db282f95755da7c1a643c89)**
+
+Bookmark it — you'll come back to it as you scaffold each part of the app.
+
 ---
 
 ## Part 1: Project Setup
@@ -135,39 +143,58 @@ Choose **New York** style and **Zinc** colour when prompted. This sets up your `
 
 ### Step 3: Set Up Prisma 7 with PostgreSQL
 
-Prisma 7 introduces a new setup flow with a dedicated config file and the `@prisma/adapter-pg` driver adapter. This is different from older guides — follow this carefully.
+Prisma 7 introduces a new setup flow with a dedicated config file (`prisma.config.ts`) and the `@prisma/adapter-pg` driver adapter. The flow below mirrors the canonical setup from the [Complete Guide to Setting Up Prisma 7 ORM with Next.js 16](https://jb.desishub.com/blog/nextjs-with-prisma-7-and-postgres) — refer to that post for additional context, common errors, and Vercel deployment notes.
 
-**Install Prisma 7 dependencies:**
-
-```bash
-pnpm add prisma tsx @types/pg --save-dev
-pnpm add @prisma/client @prisma/adapter-pg dotenv pg
-```
-
-**Initialise Prisma with an output directory:**
+#### Step 3.1: Install Prisma 7 dependencies
 
 ```bash
-pnpm dlx prisma init --db --output ../app/generated/prisma
+npm install prisma tsx @types/pg --save-dev
+npm install @prisma/client @prisma/adapter-pg dotenv pg
 ```
 
-This creates:
+#### Step 3.2: Initialise Prisma
+
+```bash
+npx prisma init --db --output ../app/generated/prisma
+```
+
+**What this creates:**
 
 - `prisma/schema.prisma` — your schema file
 - `prisma.config.ts` — the new Prisma 7 config file
 - `app/generated/prisma/` — where the generated client goes
-- `.env` — with a `DATABASE_URL` placeholder
+- `.env` file with a `DATABASE_URL` placeholder
 
-**Create your Neon database:**
+#### Step 3.3: Connect a database
 
-1. Go to [neon.tech](https://neon.tech) and create a free account.
-2. Create a new project and copy your connection string.
-3. Paste it in your `.env` file:
+You can use either a free **Prisma Postgres** database (created automatically by `prisma init --db`) or a **Neon** database. Both work — pick one and paste the connection string into `.env`:
 
 ```env
 DATABASE_URL="postgresql://username:password@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require"
 ```
 
-**Configure `prisma.config.ts`:**
+> **Database choice:** Prisma Postgres gives you 5 free databases. Neon gives you 10 free projects and a generous serverless tier. Both are great for getting started.
+
+#### Step 3.4: Define the database schema
+
+Update `prisma/schema.prisma` — the generator block is different in Prisma 7:
+
+```prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+```
+
+> **Key change from Prisma 5/6:** The `provider` is now `"prisma-client"` (not `"prisma-client-js"`), and you specify an explicit output directory. All imports come from `"../app/generated/prisma/client"` instead of `"@prisma/client"`.
+
+#### Step 3.5: Configure `prisma.config.ts` with dotenv
+
+Add the dotenv import so Prisma reads your `.env` file:
 
 ```typescript
 // prisma.config.ts
@@ -186,36 +213,39 @@ export default defineConfig({
 });
 ```
 
-**Update `prisma/schema.prisma` — the generator block changes in Prisma 7:**
+#### Step 3.6: Push schema to the database
 
-```prisma
-generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
-}
+⚠️ **IMPORTANT:** In Prisma 7, the standard migration command does not work properly during initial setup.
 
-datasource db {
-  provider = "postgresql"
-}
-```
-
-> **Key difference from Prisma 5/6:** The `provider` is now `"prisma-client"` (not `"prisma-client-js"`), and you specify an explicit output directory. All imports in your code come from `"../app/generated/prisma/client"` instead of `"@prisma/client"`.
-
-**Push schema to database:**
+**DON'T USE:**
 
 ```bash
-# ⚠️ In Prisma 7, use db push instead of migrate dev for initial setup
-pnpm dlx prisma db push
-
-# Then generate the client
-pnpm dlx prisma generate
+npx prisma migrate dev --name init  # ❌ This currently fails on Prisma 7
 ```
 
-> **Why `db push` and not `migrate dev`?** In Prisma 7, `migrate dev` has known issues with certain setups. Use `db push` during development to sync your schema, then use `migrate dev` only when you need a tracked migration history for production deployments.
+**USE INSTEAD:**
 
-### Step 4: Create the Prisma Client Singleton
+```bash
+npx prisma db push  # ✅ This works
+```
 
-Prisma 7 uses a driver adapter pattern. Create `lib/prisma.ts`:
+Then generate the Prisma Client:
+
+```bash
+npx prisma generate
+```
+
+Use `db push` during development. Once your schema is stable and you're ready to track migrations for production deployments, switch to the `migrate` flow.
+
+#### Step 3.7: Create the Prisma Client singleton
+
+Create `lib/prisma.ts`:
+
+```bash
+mkdir -p lib && touch lib/prisma.ts
+```
+
+Add this code:
 
 ```typescript
 // lib/prisma.ts
@@ -237,9 +267,30 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
 export default db;
 ```
 
-> **Important:** We export as the default `db` — import it as `import db from "@/lib/prisma"` throughout your project. The adapter is required in Prisma 7 when using PostgreSQL with the new driver-based approach.
+> **Note:** We export as the default `db` — import it as `import db from "@/lib/prisma"` throughout your project. The `PrismaPg` driver adapter is required in Prisma 7 when using PostgreSQL with the new driver-based approach.
 
-If you have a Turbopack issue (Next.js 15.2.0 or 15.2.1), remove `--turbopack` from your dev script in `package.json`:
+#### Step 3.8: Add the postinstall script for Vercel
+
+Update `package.json` to ensure Prisma Client is generated on every deploy:
+
+```json
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "postinstall": "prisma generate",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}
+```
+
+#### Step 3.9: Handle the Turbopack issue (Next.js 15.2.0 / 15.2.1 only)
+
+If you're on Next.js 15.2.0 or 15.2.1, remove `--turbopack` from your dev script — it conflicts with the Prisma adapter. From Next.js 15.2.2+ this is no longer needed.
 
 ```json
 {
@@ -248,6 +299,8 @@ If you have a Turbopack issue (Next.js 15.2.0 or 15.2.1), remove `--turbopack` f
   }
 }
 ```
+
+> **Want a deeper walk-through?** See the dedicated post: [Complete Guide to Setting Up Prisma 7 ORM with Next.js 16](https://jb.desishub.com/blog/nextjs-with-prisma-7-and-postgres) — it covers seeding, server actions, common errors, and full Vercel deployment.
 
 ---
 
@@ -625,6 +678,92 @@ export async function DELETE(request: NextRequest, { params }: Params) {
 ```
 
 > **PATCH vs PUT:** Use `PATCH` for partial updates (only the fields you send are changed) and `PUT` for full replacements (you send the entire object and it replaces what is there). For most APIs, `PATCH` is friendlier for clients. Prisma's `update` works perfectly for both.
+
+---
+
+## CORS — Letting Browsers Call Your API
+
+Once you ship your API, the very first issue most developers hit is a browser console error like this:
+
+```
+Access to fetch at 'https://your-api.com/api/v1/recipes' from origin
+'https://customer-app.com' has been blocked by CORS policy: No
+'Access-Control-Allow-Origin' header is present on the requested resource.
+```
+
+**Cross-Origin Resource Sharing (CORS)** is a browser security feature that prevents one origin (e.g. `https://customer-app.com`) from calling another origin (`https://your-api.com`) unless the server explicitly allows it. Server-to-server calls (cURL, Node, Python SDK) are not affected — only browser JavaScript is.
+
+For a public API product, you almost always want to allow all origins. The cleanest way to do this in Next.js is via the `headers()` function in `next.config.ts` (or `next.config.js`). It runs at the edge before your handler executes, so you don't have to repeat headers in every route.
+
+### Add CORS Headers in `next.config.ts`
+
+```typescript
+// next.config.ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/api/:path*",
+        headers: [
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*", // Set your origin
+          },
+          {
+            key: "Access-Control-Allow-Methods",
+            value: "GET, POST, PUT, DELETE, OPTIONS",
+          },
+          {
+            key: "Access-Control-Allow-Headers",
+            value: "Content-Type, Authorization",
+          },
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;
+```
+
+### What each header does
+
+| Header                         | Purpose                                                                                       |
+| ------------------------------ | --------------------------------------------------------------------------------------------- |
+| `Access-Control-Allow-Origin`  | Which origins may call your API. `*` means any origin. Set to a specific URL to lock it down. |
+| `Access-Control-Allow-Methods` | Which HTTP methods are allowed. Always include `OPTIONS` for the browser preflight check.     |
+| `Access-Control-Allow-Headers` | Which custom request headers are allowed. Include `Authorization` so API keys can be sent.    |
+
+### Tightening CORS for production
+
+`Access-Control-Allow-Origin: *` is fine for a public, key-protected API (the API key is the actual security boundary). But if your API is private — for example, internal dashboards or paid customer apps — you should restrict it:
+
+```typescript
+{
+  key: "Access-Control-Allow-Origin",
+  // For a single origin
+  value: "https://your-customer-app.com",
+}
+```
+
+For multiple known origins, use middleware to inspect the request `Origin` header and echo back a matching value (Next.js header config doesn't support multiple `Allow-Origin` values natively).
+
+### Handling preflight (`OPTIONS`) requests
+
+The header config above answers preflight requests automatically. If you also implement custom auth that runs on every request, make sure it short-circuits for `OPTIONS` so the browser preflight succeeds:
+
+```typescript
+export async function GET(request: NextRequest) {
+  if (request.method === "OPTIONS") {
+    return new NextResponse(null, { status: 204 });
+  }
+  // ... rest of your handler
+}
+```
+
+> **Tip:** If your API is being consumed by an AI agent or a backend service (n8n, Zapier, custom Node script), CORS is irrelevant — those clients aren't browsers. CORS only matters when JavaScript running in a browser tab calls your API.
 
 ---
 
