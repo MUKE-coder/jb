@@ -23,7 +23,7 @@ export default function PublicApis() {
         </p>
       </PanelHeader>
 
-      <div className="flex flex-col">
+      <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
         {PUBLIC_APIS.map((api) => (
           <PublicApiCard key={api.href} {...api} />
         ))}

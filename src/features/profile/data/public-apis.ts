@@ -23,7 +23,8 @@ export const PUBLIC_APIS: PublicApi[] = [
     description:
       "A public REST API for Ugandan education data — universities, courses, scholarships, and admission requirements. Built for EdTech apps, AI student advisors, and counselling tools that need accurate local education data. The first public API in the JB API portfolio.",
     href: "https://edugate-api.vercel.app",
-    image: "/public-apis/edugate-api.png",
+    image:
+      "https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfmMJjl7nibwuer8Kl7Ds0T2Vc15fdFEoQq6OL",
     badge: "New",
     tags: ["Next.js", "Prisma", "PostgreSQL", "Education"],
   },

@@ -16,10 +16,6 @@ export const META_THEME_COLORS = {
 
 export const MAIN_NAV: NavItem[] = [
   {
-    title: "Courses",
-    href: "/courses",
-  },
-  {
     title: "Tools and APIs",
     href: "/tools",
   },
@@ -31,15 +27,10 @@ export const MAIN_NAV: NavItem[] = [
     title: "Ebooks",
     href: "/ebooks",
   },
-
   {
     title: "Blogs",
     href: "/blog",
   },
-  // {
-  //   title: "Components",
-  //   href: "/components",
-  // },
 ];
 
 export const SOURCE_CODE_GITHUB_REPO = "https://github.com/MUKE-coder";

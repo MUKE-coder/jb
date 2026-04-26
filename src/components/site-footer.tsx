@@ -1,4 +1,5 @@
 import { Github, Linkedin, Youtube } from "lucide-react";
+import Link from "next/link";
 
 export function SiteFooter() {
   const currentYear = new Date().getFullYear();
@@ -11,6 +12,34 @@ export function SiteFooter() {
   return (
     <footer className="max-w-screen overflow-x-hidden px-2">
       <div className="screen-line-before mx-auto border-x border-edge pt-4 md:max-w-3xl">
+        {/* Explore More Section (internal site links not in the navbar) */}
+        <div className="mb-4 px-4 text-center">
+          <p className="mb-2 font-mono text-sm text-muted-foreground">
+            Explore More
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 text-sm">
+            <Link className="link" href="/courses">
+              Courses
+            </Link>
+            <span className="text-muted-foreground">•</span>
+            <Link className="link" href="/components">
+              Components
+            </Link>
+            <span className="text-muted-foreground">•</span>
+            <Link className="link" href="/mentorship">
+              Mentorship
+            </Link>
+            <span className="text-muted-foreground">•</span>
+            <Link className="link" href="/ai-prompts">
+              AI Prompts
+            </Link>
+            <span className="text-muted-foreground">•</span>
+            <Link className="link" href="/sandbox">
+              Sandbox
+            </Link>
+          </div>
+        </div>
+
         {/* Main Sites Section */}
         <div className="mb-4 px-4 text-center">
           <p className="mb-2 font-mono text-sm text-muted-foreground">
@@ -51,10 +80,6 @@ export function SiteFooter() {
               rel="noopener"
             >
               Omnistack
-            </a>
-            <span className="text-muted-foreground">•</span>
-            <a className="link" href="/ai-prompts">
-              AI Prompts
             </a>
             {/* <a
               className="link"

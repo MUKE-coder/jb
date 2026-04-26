@@ -16,7 +16,7 @@ export function PublicApiCard({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group/api-card screen-line-before screen-line-after block overflow-hidden border-y border-edge transition-colors hover:bg-zinc-50/40 dark:hover:bg-zinc-900/40"
+      className="group/api-card block overflow-hidden rounded-xl border border-edge transition-colors hover:bg-zinc-50/40 dark:hover:bg-zinc-900/40"
     >
       <div className="relative aspect-[16/9] w-full overflow-hidden border-b border-edge bg-zinc-100 dark:bg-zinc-900">
         <Image
