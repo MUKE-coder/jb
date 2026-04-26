@@ -767,6 +767,167 @@ export async function GET(request: NextRequest) {
 
 ---
 
+## Protecting Your Endpoints — The `withApiKey` Pattern (Quick Start)
+
+Now that your CRUD endpoints exist and are reachable from browsers, you need a clean way to require an API key on every protected route. The pattern below is the production setup we use across all routes — it's three small files, drop-in, and adds a usage log entry on every successful call.
+
+> 📖 **For the complete walkthrough** (schema design, API-key generation, dashboard UI, plan limits, and revocation), read the dedicated guide: **[Protecting an API with API Keys — Full Tutorial](https://codemint-gamma.vercel.app/blog/protecting-api-using-apiKey)**. The three files below are a condensed copy of that pattern.
+
+### File 1 — `lib/api-key.ts` (validate the key)
+
+This is the low-level validator. It pulls the key from either the `Authorization: Bearer …` header or the `x-api-key` header, looks it up in the database, and bumps usage stats asynchronously.
+
+```typescript
+// lib/api-key.ts
+import { NextRequest } from "next/server";
+import db from "@/lib/prisma";
+
+interface ValidationResult {
+  valid: boolean;
+  apiKeyId?: string;
+  userId?: string;
+}
+
+export async function validateApiKey(
+  request: NextRequest
+): Promise<ValidationResult> {
+  // Clients should send the key in the Authorization header:
+  // Authorization: Bearer lapi_xxxxx
+  // OR as a custom header: x-api-key: lapi_xxxxx
+  const authHeader = request.headers.get("authorization");
+  const xApiKey = request.headers.get("x-api-key");
+
+  let key: string | null = null;
+
+  if (authHeader?.startsWith("Bearer ")) {
+    key = authHeader.slice(7);
+  } else if (xApiKey) {
+    key = xApiKey;
+  }
+
+  if (!key) {
+    return { valid: false };
+  }
+
+  const apiKey = await db.apiKey.findUnique({
+    where: { key },
+    select: { id: true, userId: true },
+  });
+
+  if (!apiKey) {
+    return { valid: false };
+  }
+
+  // Update usage stats asynchronously (do not await — do not slow down the response)
+  db.apiKey
+    .update({
+      where: { id: apiKey.id },
+      data: {
+        usageCount: { increment: 1 },
+        lastUsedAt: new Date(),
+      },
+    })
+    .catch(console.error);
+
+  return { valid: true, apiKeyId: apiKey.id, userId: apiKey.userId };
+}
+```
+
+### File 2 — `lib/with-api-key.ts` (the wrapper)
+
+`withApiKey` is a higher-order function. Wrap any Route Handler with it and you get: 401 on missing/invalid key, automatic usage logging on success, and zero per-route boilerplate.
+
+```typescript
+// lib/with-api-key.ts
+import { NextRequest, NextResponse } from "next/server";
+import db from "@/lib/prisma";
+import { validateApiKey } from "@/lib/api-key";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RouteHandler = (req: NextRequest, ctx: any) => Promise<NextResponse>;
+
+/**
+ * Wraps a Route Handler so the request is rejected with 401 unless it carries a
+ * valid API key via `Authorization: Bearer …` or `x-api-key`. On success the
+ * underlying handler runs and the request is logged to `ApiUsageLog` so it
+ * shows up in the user's dashboard overview.
+ */
+export function withApiKey<H extends RouteHandler>(handler: H): H {
+  return (async (req, ctx) => {
+    const { valid, apiKeyId } = await validateApiKey(req);
+
+    if (!valid || !apiKeyId) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "UNAUTHORIZED",
+            message:
+              "Missing or invalid API key. Pass it as `Authorization: Bearer <key>` or `x-api-key: <key>`.",
+          },
+        },
+        { status: 401 }
+      );
+    }
+
+    const response = await handler(req, ctx);
+
+    // Fire-and-forget usage log. Failures here must not affect the response.
+    db.apiUsageLog
+      .create({
+        data: {
+          apiKeyId,
+          endpoint: new URL(req.url).pathname,
+          method: req.method,
+          statusCode: response.status,
+        },
+      })
+      .catch((err: unknown) =>
+        console.error("[withApiKey] usage-log write failed:", err)
+      );
+
+    return response;
+  }) as H;
+}
+```
+
+### File 3 — `app/api/v1/categories/route.ts` (use it on a real route)
+
+Once `withApiKey` exists, every protected handler becomes a one-line wrap. Here is a real example from EduGate API:
+
+```typescript
+// app/api/v1/categories/route.ts
+import db from "@/lib/prisma";
+import { withApiKey } from "@/lib/with-api-key";
+import { NextResponse } from "next/server";
+
+export const GET = withApiKey(async () => {
+  const categories = await db.category.findMany({
+    where: { parentId: null },
+    include: {
+      subcategories: true,
+      levelDurations: {
+        include: { level: true },
+      },
+    },
+  });
+  const formatted = categories.map((cat) => ({
+    name: cat.name,
+    subcategories: cat.subcategories.map((sub) => sub.name),
+    levels: cat.levelDurations.map((ld) => ld.level.name),
+    typical_duration: Object.fromEntries(
+      cat.levelDurations.map((ld) => [ld.level.name, ld.durationYears])
+    ),
+  }));
+  return NextResponse.json({ categories: formatted });
+});
+```
+
+That's the entire protection pattern in three files. Every other route in the API uses the same `withApiKey(...)` wrap — no copy-pasted auth logic, no forgotten checks, and every successful request is logged for the user's dashboard usage stats.
+
+The next section dives deeper into the API-key generation flow, dashboard UI, and plan-based usage limits.
+
+---
+
 ## Part 4: Protecting Your API with API Keys
 
 Every request to your API must include a valid API key. This is how you know who is calling your API, enforce usage limits, and track billing.
