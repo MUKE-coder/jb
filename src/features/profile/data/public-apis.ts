@@ -24,8 +24,18 @@ export const PUBLIC_APIS: PublicApi[] = [
       "A public REST API for Ugandan education data — universities, courses, scholarships, and admission requirements. Built for EdTech apps, AI student advisors, and counselling tools that need accurate local education data. The first public API in the JB API portfolio.",
     href: "https://edugate-api.vercel.app",
     image:
-      "https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfmMJjl7nibwuer8Kl7Ds0T2Vc15fdFEoQq6OL",
+      "https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfaXiqUPrey0sG7VoXF2ncfjxOBDrWZTvhJwmu",
     badge: "New",
     tags: ["Next.js", "Prisma", "PostgreSQL", "Education"],
+  },
+  {
+    title: "Uganda Food API",
+    description:
+      "Authentic Ugandan recipes — luwombo, matooke, eshabwe, malakwang, kuon kal — with real ingredients, step-by-step instructions, nutrition, UGX cost analysis and local-language names. Built for mobile apps, food-delivery platforms and nutrition tools.",
+    href: "https://ugafoodapi.vercel.app/",
+    image:
+      "https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfHSG8nkBCDLwfiQb7ypA8NqdmaR9OJs6ego2E",
+    badge: "New",
+    tags: ["Next.js", "Recipes", "Nutrition", "Uganda"],
   },
 ];
