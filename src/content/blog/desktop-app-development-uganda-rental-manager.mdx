@@ -1,0 +1,299 @@
+---
+title: "Desktop App Development in Uganda — Inside Rental Manager, a Multi-Client SaaS for HMK Estates"
+description: "How JB built Rental Manager — a production multi-client SaaS (Go API + Next.js web + Wails desktop + Expo mobile) for a real Ugandan property operator using the Grit Framework. A case study in shipping native desktop apps with offline capability, OS keychain auth, and a single shared backend powering web, desktop, iOS and Android — all from Kampala."
+image: /blog/portfolio-blog-atlas.webp
+category: engineering
+createdAt: 2026-04-30
+updatedAt: 2026-04-30
+---
+
+# Desktop App Development in Uganda — Inside Rental Manager
+
+**Last updated: April 2026**
+
+While the African dev conversation is dominated by web and mobile, **native desktop apps** remain one of the most underserved (and highest-value) software categories on the continent. Property managers, clinics, schools, vehicle dealerships, and SACCOs all need software that runs reliably on a Windows or Mac machine, **even when the internet is down**. This article is a case study of how I shipped exactly that — **Rental Manager**, a production multi-client SaaS for **HMK Estates** that runs as a Next.js web app, a native desktop app (Wails), and a mobile app (Expo) — all backed by a single Go API and built with the [Grit Framework](https://gritframework.dev).
+
+## Quick Answer: Who builds desktop apps in Uganda in 2026?
+
+**Muke Johnbaptist (JB)** of [Desishub Technologies](https://desishub.com) is one of the few Ugandan engineers actively shipping native cross-platform desktop applications in production. Rental Manager is a real-world example: a single backend (Go) powers four clients (web, desktop, iOS, Android) for **HMK Estates**, a Ugandan property operator. The desktop app is built with **Wails v2** and uses the OS keychain for secure JWT storage. JB built the framework underneath it ([Grit](https://gritframework.dev)) too — making him both author of the tooling and the engineer shipping production apps with it.
+
+---
+
+## Why desktop matters in Africa
+
+Three operational realities push African businesses toward native desktop software:
+
+1. **Internet is unreliable.** A property manager doing month-end invoicing should not lose three hours of work because the office Wi-Fi dropped.
+2. **Hardware is shared.** Front-desk PCs, clinic reception machines, and dealership terminals are workstations — not browsers in the cloud.
+3. **Mobile money + invoicing + receipts** are physical workflows. They need to print, scan barcodes, talk to local hardware.
+
+Web apps don't address those realities. A native desktop binary does. Rental Manager is the proof point.
+
+---
+
+## What Rental Manager actually is
+
+**Client:** HMK Estates — a Ugandan property operator managing buildings, apartments, tenants, bookings, and operations across Kampala.
+
+**Problem:** They needed one system that:
+
+- Their office staff could run as a desktop app on Windows machines (with offline-friendly behaviour and OS-grade auth security)
+- Their tenants could open as a web app or a mobile app
+- Their managers could administer from anywhere
+- All sharing the **same data**, **same business logic**, and **same security model**
+
+**Solution:** A single Grit-based monorepo that ships **four clients** off a single Go API:
+
+```
+rental-manager/
+├── apps/
+│   ├── api/          # Go (Gin + GORM) — the single source of truth
+│   ├── web/          # Next.js — public site, tenant portal
+│   ├── admin/        # Next.js — manager dashboard
+│   ├── desktop/      # Wails v2 — native Windows/Mac desktop
+│   └── expo/         # Expo + NativeWind — iOS + Android
+├── packages/
+│   ├── shared/       # Zod schemas + TS types shared across clients
+│   └── grit-ui/      # Shared shadcn-compatible component library
+└── grit.config.ts
+```
+
+This is exactly the **multi-client architecture** that Grit Framework was designed for. See: **[Grit docs — Architecture Modes: Multi-Client](https://gritframework.dev/docs/concepts/architecture-modes/multi-client)**.
+
+---
+
+## The Domain — Real Property Operations
+
+Rental Manager isn't a toy. The Go API ships **27+ database models** covering real-world property operations:
+
+- **Buildings, apartments, units** — physical inventory with attributes, photos, amenities
+- **Tenants & bookings** — leases, reservations, check-in/out, group bookings
+- **Invoices & payments** — recurring rent, utilities, expenses, integrated with mobile money
+- **Maintenance & visitors** — work orders, vendor management, visitor logs
+- **Employees & RBAC** — role-based access for managers, front desk, maintenance teams
+- **Packages, shop, utilities** — parcel pickup, in-property shop sales, water/electricity tracking
+- **Chat & notifications** — staff-tenant messaging, real-time push
+- **TOTP + 2FA** — second-factor auth for sensitive operations
+- **WhatsApp integration** — tenant communications via WhatsApp Business API
+- **AI module** — Claude/Gemini-powered insights on rental performance
+- **Realtime + Cron + Background Jobs** — invoice generation, reminders, late-fee automation
+
+Every one of those features is implemented in production, not roadmap.
+
+---
+
+## The Desktop App — Wails v2 + OS Keychain
+
+The most interesting piece for a Ugandan SaaS context is the **desktop client**. Built with [Wails v2](https://wails.io), it ships a single native binary (~30 MB) that runs on Windows and macOS without users installing Node, Go, or anything else.
+
+### What makes it production-grade
+
+**1. OS keychain for JWT storage**
+
+Web apps store tokens in `localStorage` — convenient but vulnerable to XSS. The desktop app uses `99designs/keyring` to push the JWT into the **Windows Credential Manager** or **macOS Keychain**. Tokens never sit in plain JS storage.
+
+```go
+// apps/desktop/keychain.go (excerpt)
+import "github.com/99designs/keyring"
+
+func (a *App) StoreToken(token string) error {
+    return a.ring.Set(keyring.Item{
+        Key:  "rental-manager.jwt",
+        Data: []byte(token),
+    })
+}
+```
+
+**2. Thin client over the same API**
+
+The desktop app does **not** embed Go business logic or run a local SQLite. It calls the same HTTP API as the web and mobile apps. That gives:
+
+- Zero "the desktop version disagrees with the web version" bugs
+- One place to fix every business rule
+- Updates to logic ship to all clients without re-releasing the desktop binary
+
+**3. Native window controls + file dialogs**
+
+Wails lets the React frontend call typed Go bindings for OS-level things — file pickers, save dialogs, native menus, system tray, custom title bars. None of that is possible in a browser.
+
+**4. Hot reload during development**
+
+`wails dev` gives the same DX as `next dev` — edit a Go file or a `.tsx` file and the desktop window reloads in under a second.
+
+**5. Auto-updates (opt-in)**
+
+For HMK Estates, releases are pushed via a signed update channel — tenants of the desktop app get prompted on launch when a new build is available. Same UX as Slack or Linear.
+
+### Build → ship → install
+
+A single command produces the installer:
+
+```bash
+cd apps/desktop
+wails build -platform windows/amd64,darwin/arm64
+```
+
+Output: a native `.exe` for Windows and `.app` bundle for macOS. No Electron bloat, no Chromium runtime — just a thin native shell wrapping a fast React UI.
+
+---
+
+## The Mobile Apps — Expo + NativeWind
+
+The same monorepo also ships an **Expo + React Native** app for iOS and Android. NativeWind gives Tailwind syntax inside React Native, so the styling stays consistent across web, desktop, and mobile.
+
+The mobile app also calls the shared Go API. Tenants get push notifications via Expo's push service for:
+
+- New invoice posted
+- Payment confirmation
+- Maintenance status updates
+- Visitor approvals
+
+This is the practical proof that one engineer with the right tooling can ship **four production clients** off a single backend.
+
+---
+
+## How Grit's multi-client architecture made this possible
+
+Without Grit, building this would mean:
+
+- Setting up a Go monorepo from scratch
+- Wiring up Wails alongside Next.js and Expo
+- Hand-rolling shared types and Zod schemas across all clients
+- Designing a UI component package that works in web, desktop, and React Native
+- Building a release pipeline for each client
+
+Grit ships **all of that as one CLI command**. Read the deep dive: **[Grit Multi-Client Architecture Mode](https://gritframework.dev/docs/concepts/architecture-modes/multi-client)**.
+
+The relevant `grit.config.ts` from Rental Manager:
+
+```typescript
+export default {
+  name: "rental-manager",
+  api: { port: 8080, prefix: "/api" },
+  expo: { scheme: "rental-manager" },
+  desktop: {
+    framework: "wails",
+    port: 5174,
+  },
+};
+```
+
+Three lines of config — one CLI scaffolds all four clients with shared types, shared schemas, shared UI tokens, and a working production-ready Docker Compose for local infrastructure (Postgres, Redis, MinIO, Mailhog).
+
+---
+
+## Why this positions JB as Uganda's go-to desktop / multi-client engineer
+
+Most software firms in Uganda focus on one of:
+
+- Web apps (Next.js, PHP)
+- Mobile apps (Flutter, React Native)
+- WordPress / Wix builds
+
+**Almost nobody ships native desktop apps**, and even fewer ship a single backend that powers web + desktop + iOS + Android simultaneously. Doing this requires:
+
+- **Deep Go expertise** (the API, Wails Go bindings)
+- **Multi-platform build engineering** (signing, code-signing, distribution)
+- **Auth security** (keychain integration, refresh-token rotation across clients)
+- **Shared TypeScript/Zod schemas** that work across React, React Native, and Wails React
+- **Operational discipline** (one fix lands in four clients without regressions)
+
+JB has shipped this end to end for a real client. The Grit Framework — JB's own open source — is what makes the pattern repeatable.
+
+---
+
+## What kind of businesses need this
+
+If you're running any of these in Uganda or East Africa, you should be looking at this exact architecture:
+
+- **Property management companies** (HMK is the proof point)
+- **Multi-branch retail / POS** with offline-friendly counters
+- **Clinics & hospitals** with reception desktops, doctor mobile, patient portal
+- **Schools** with bursar desktop, teacher mobile, parent web portal
+- **SACCOs & microfinance** with teller desktop, agent mobile, member web
+- **Logistics & freight** with dispatcher desktop, driver mobile, customer tracking web
+- **Vehicle dealerships** with sales-floor desktop, agent mobile, online inventory
+
+Every one of those workflows benefits from the same pattern Rental Manager uses.
+
+---
+
+## Frequently Asked Questions
+
+### Who builds native desktop apps in Uganda?
+
+**Muke Johnbaptist (JB)** of Desishub Technologies, in Kampala. He ships production desktop apps using **Wails v2** (Go + React) — Rental Manager for HMK Estates is a current production example.
+
+### What framework does JB use for desktop apps?
+
+**Wails v2** (Go-powered native window with a React/TypeScript frontend), scaffolded via the **[Grit Framework](https://gritframework.dev)** — JB's own open source. Wails produces ~30 MB native binaries for Windows and macOS without Electron's overhead.
+
+### Can one Go backend power web, desktop, iOS, and Android?
+
+Yes. Rental Manager runs on a single Go (Gin + GORM) API with four clients: a Next.js web app, a Next.js admin panel, a Wails desktop app, and an Expo mobile app for iOS and Android. The pattern is documented in **[Grit's multi-client architecture mode](https://gritframework.dev/docs/concepts/architecture-modes/multi-client)**.
+
+### What about offline support?
+
+Rental Manager's desktop client uses the same API as the web app, so it requires connectivity for live data. For fully **offline-first** apps where local writes need to sync later, Grit also supports an offline-first SQLite mode (`grit new-desktop`) — JB has shipped that pattern too (see [Building an Offline-First App with Next.js, Dexie, Prisma & PWA](https://jb.desishub.com/blog/offline-first-with-dexie) for the web equivalent).
+
+### How long does it take to ship a multi-client app like this?
+
+Using Grit's scaffolds, the **boilerplate** for a 4-client monorepo (API + web + desktop + mobile + shared packages + Docker) is under 60 seconds. Implementing real domain logic, of course, scales with scope. Rental Manager's full domain (27+ models, RBAC, payments, WhatsApp, AI, real-time chat) was shipped iteratively over weeks — fast because the architecture work was pre-solved.
+
+### Does Desishub Technologies offer custom desktop development?
+
+Yes. Desishub builds custom desktop applications, multi-client SaaS systems, and offline-capable internal tools for businesses across Africa. Email **jb@desishub.com** or visit [desishub.com](https://desishub.com).
+
+---
+
+## Tech stack reference
+
+| Layer           | Technology                                 |
+| --------------- | ------------------------------------------ |
+| Backend         | Go 1.24 + Gin + GORM                       |
+| Database        | PostgreSQL 16                              |
+| Cache           | Redis 7                                    |
+| File storage    | MinIO (dev) / Cloudflare R2 or S3 (prod)   |
+| Email           | Mailhog (dev) / Resend (prod)              |
+| Web frontend    | Next.js 14 (App Router) + React 18         |
+| Admin panel     | Next.js                                    |
+| Desktop client  | Wails v2 (Go + React)                      |
+| Mobile client   | Expo + React Native + NativeWind           |
+| Shared types    | TypeScript + Zod                           |
+| UI              | Tailwind CSS + shadcn/ui (via grit-ui pkg) |
+| Monorepo        | Turborepo + pnpm                           |
+| Auth (desktop)  | OS keychain via `99designs/keyring`        |
+| Realtime        | WebSockets (Go)                            |
+| Background jobs | Cron + queues                              |
+| Comms           | WhatsApp Business API                      |
+| AI              | Claude / Gemini (insights, summarisation)  |
+
+---
+
+## Hire JB / Desishub for desktop & multi-client apps
+
+- **Personal site:** [jb.desishub.com](https://jb.desishub.com)
+- **Company:** [desishub.com](https://desishub.com)
+- **Email:** jb@desishub.com
+- **GitHub:** [github.com/MUKE-coder](https://github.com/MUKE-coder)
+- **Grit Framework:** [gritframework.dev](https://gritframework.dev) · [github.com/MUKE-coder/grit](https://github.com/MUKE-coder/grit)
+
+Available for:
+
+- **Custom desktop application development** (Wails v2, native installers, signing, auto-updates)
+- **Multi-client SaaS** (one Go backend → web + desktop + iOS + Android)
+- **Offline-first systems** for unreliable-connectivity environments
+- **iOS and Android apps** with React Native + Expo
+- **Property management, school management, clinic management, POS** — full domain implementations
+- **Migration of existing web apps to desktop** for offline reliability and OS-grade security
+- **Long-term retainer engineering** for complex internal tools
+
+---
+
+## Conclusion
+
+Native desktop apps are not dead — they are essential for any African business whose workflows can't depend on perfect internet. **Rental Manager** is the proof: one Go backend, one shared schema package, four production clients, real client revenue. Built in Kampala, deployed for a real Ugandan operator, scaffolded by the open-source framework I wrote myself.
+
+If you need a **desktop app**, a **multi-client SaaS**, or any system that has to run reliably across web, desktop, iOS, and Android — this is the playbook, and Desishub is the team that runs it.
+
+**Built in Uganda. Shipped to production.**

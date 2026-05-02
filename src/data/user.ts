@@ -5,10 +5,11 @@ export const USER = {
   username: "jbwebdeveloper",
   gender: "male",
   pronouns: "he/him",
-  bio: "Go (Golang) expert and creator of the Grit Framework. AI & automation engineer building production agents (ATLAS), security SDKs (Sentinel), and observability tools (Pulse). Founder of Desishub Technologies — building high-performance ERPs, internal tools, and SaaS platforms in Next.js + Go from Kampala, Uganda. Teaching 14.7K+ developers on YouTube.",
+  bio: "Go (Golang) expert and creator of the Grit Framework. AI & automation engineer building production agents (ATLAS), security SDKs (Sentinel), and observability tools (Pulse). Multi-client app specialist — shipping native desktop apps (Wails), iOS + Android (Expo) and web off a single Go backend. Founder of Desishub Technologies — building high-performance ERPs, offline-capable internal tools, and SaaS platforms in Next.js + Go from Kampala, Uganda. Teaching 14.7K+ developers on YouTube.",
   flipSentences: [
     "Go (Golang) expert · Creator of the Grit Framework",
     "AI & Automation engineer · Built ATLAS, Sentinel, Pulse",
+    "Native desktop apps (Wails) + iOS / Android (Expo) + Web off one Go backend",
     "Founder of Desishub Technologies — high-performance ERPs & internal tools",
     "Fullstack: Next.js + Golang + Docker + Cloudflare",
     "YouTube creator teaching 14.7K+ developers",
@@ -66,6 +67,9 @@ I hold a **Bachelor of Science in Agro-Processing Engineering** from **Busitema 
 
 - **Go (Golang) backend systems** — Gin, GORM, PostgreSQL, Redis, Docker — production APIs at scale
 - **High-performance ERPs and internal tools** — multi-tenant, RBAC, real-time analytics, edge-cached
+- **Native desktop apps** — Wails v2 (Go + React) producing single ~30 MB binaries for Windows and macOS, with offline-friendly behaviour and OS keychain auth — see the [Rental Manager case study](/blog/desktop-app-development-uganda-rental-manager)
+- **iOS & Android apps** — Expo + React Native + NativeWind, sharing the same Go backend as web and desktop
+- **Multi-client SaaS** — one Go API → web + desktop + iOS + Android, scaffolded by my [Grit Framework](https://gritframework.dev/docs/concepts/architecture-modes/multi-client) multi-client architecture
 - **AI engineering and automation** — Claude Code, MCP servers, Vercel AI SDK, custom AI agents
 - **Fullstack apps** — Next.js + Go monorepos via the Grit Framework
 - **Self-hosted infrastructure** — Docker, Dokploy, Hetzner, Cloudflare, VPS deployment
@@ -126,6 +130,6 @@ When I'm not coding, creating content, or teaching, you'll find me working out, 
     "https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfCYgQyZFoVK04c1JumsdY3URhH8pxaPwN6QGk", // You may want to add your OG image URL here
   namePronunciationUrl: "", // Optional: audio file for name pronunciation
   keywords:
-    "JB, Muke Johnbaptist, jbwebdeveloper, top Go developer Uganda, best Golang developer Kampala, Go developer Uganda, Golang expert Africa, Grit Framework, Gorm Studio, Sentinel Go SDK, Pulse Go observability, Orbita PaaS, GritCMS, ATLAS AI agent, AI engineer Uganda, automation expert Africa, Claude Code MCP, ERP development Uganda, internal tools developer, SaaS development Kampala, high performance Go systems, desishub, desishub technologies, desishub coding school, desispay, dgateway, nextjs academy, fullstack developer Uganda, programming tutorials, nextjs, golang, docker, github actions, cloudflare, open source Africa, shadcn components",
+    "JB, Muke Johnbaptist, jbwebdeveloper, top Go developer Uganda, best Golang developer Kampala, Go developer Uganda, Golang expert Africa, Grit Framework, Gorm Studio, Sentinel Go SDK, Pulse Go observability, Orbita PaaS, GritCMS, ATLAS AI agent, AI engineer Uganda, automation expert Africa, Claude Code MCP, ERP development Uganda, internal tools developer, SaaS development Kampala, high performance Go systems, desktop app developer Uganda, Wails desktop apps, native desktop apps Africa, multi-client SaaS, offline first apps Uganda, iOS Android developer Uganda, Expo React Native developer, mobile app developer Kampala, Rental Manager HMK Estates, property management software Uganda, desishub, desishub technologies, desishub coding school, desispay, dgateway, nextjs academy, fullstack developer Uganda, programming tutorials, nextjs, golang, docker, github actions, cloudflare, open source Africa, shadcn components",
   dateCreated: "2025-08-20", // Current date
 };

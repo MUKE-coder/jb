@@ -2,6 +2,41 @@ import type { Project } from "../types/projects";
 
 export const PROJECTS: Project[] = [
   {
+    id: "rental-manager-hmk",
+    title: "Rental Manager — Multi-Client SaaS for HMK Estates",
+    period: {
+      start: "01.2026",
+    },
+    link: "https://jb.desishub.com/blog/desktop-app-development-uganda-rental-manager",
+    skills: [
+      "Production Project",
+      "Grit Framework",
+      "Go (Gin + GORM)",
+      "Next.js",
+      "Wails v2 (Desktop)",
+      "Expo (iOS + Android)",
+      "Multi-Client Monorepo",
+      "Native Desktop App",
+      "Mobile App",
+      "PostgreSQL",
+      "Redis",
+      "WhatsApp Business API",
+      "OS Keychain Auth",
+      "AI (Claude / Gemini)",
+      "Realtime",
+    ],
+    description: `A production multi-client SaaS shipped for HMK Estates — a Ugandan property operator — using the Grit Framework's multi-client architecture. One Go backend powers four clients off a single shared schema package.
+- **Single Go API (Gin + GORM)** with 27+ domain models: buildings, apartments, tenants, bookings, invoices, expenses, maintenance, visitors, packages, employees, RBAC, chat, notifications, TOTP/2FA
+- **Native desktop app** (Wails v2) — single ~30 MB native binary for Windows and macOS, OS keychain JWT storage, native window controls, hot reload during development
+- **Mobile app** (Expo + NativeWind) — iOS and Android, Expo push notifications, shared design tokens
+- **Web + admin** (Next.js 14) — public site, tenant portal, manager dashboard
+- **Operational stack:** PostgreSQL + Redis + MinIO + cron jobs + WhatsApp Business API integration + Claude/Gemini for insights
+- **Shared packages** — Zod schemas + TS types + grit-ui shadcn-compatible component library used across web, desktop, and mobile
+- **Production-grade:** Docker Compose for local infra, signed update channel for desktop releases, RBAC across client + back-office roles
+- Built end-to-end by JB using JB's own open-source [Grit Framework](https://github.com/MUKE-coder/grit) — proof of the multi-client architecture in real production use`,
+    isExpanded: true,
+  },
+  {
     id: "codemint-marketplace",
     title: "CodeMint Marketplace",
     period: {
