@@ -1,5 +1,7 @@
 # [chanhdai.com](https://chanhdai.com)
 
+# Changes
+
 A minimal portfolio, component registry, and blog to showcase my work as a Design Engineer.
 
 Check out the live site: [chanhdai.com](https://chanhdai.com)
