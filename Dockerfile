@@ -1,3 +1,11 @@
+# syntax=docker/dockerfile:1.7
+#
+# BuildKit cache mounts (the `--mount=type=cache,...` lines below) require
+# Docker BuildKit. Dokploy and modern Docker enable it by default. They
+# persist pnpm's content-addressable store and Next.js's incremental
+# build cache across deploys, which is the single biggest win on slow
+# VPS filesystems — subsequent builds skip almost all the disk IO.
+
 FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.10.0 --activate
 
@@ -7,7 +15,11 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# Cache the global pnpm store across builds. `--prefer-offline` drops
+# unnecessary network round-trips when the cache is warm.
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
+    pnpm config set store-dir /pnpm-store && \
+    pnpm install --frozen-lockfile --prefer-offline
 
 # --- Builder ---
 FROM base AS builder
@@ -18,6 +30,9 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+# Skip the slow-fs benchmark warning that Next.js prints during build.
+# It's purely informational and adds a one-shot benchmark we don't need.
+ENV NEXT_DISABLE_FILESYSTEM_BENCHMARK=1
 
 # Build-time env vars (set in Dokploy build args)
 ARG APP_URL
@@ -29,7 +44,11 @@ ENV REGISTRY_URL=$REGISTRY_URL
 ENV GITHUB_API_TOKEN=$GITHUB_API_TOKEN
 ENV NEXT_PUBLIC_DMCA_URL=$NEXT_PUBLIC_DMCA_URL
 
-RUN pnpm build
+# Cache .next/cache between builds. This holds Next.js's incremental
+# compile artifacts (Babel/SWC, Shiki grammars, MDX serialization, etc).
+# A warm cache cuts subsequent build times dramatically.
+RUN --mount=type=cache,id=next-cache,target=/app/.next/cache \
+    pnpm build
 
 # --- Runner ---
 FROM node:24-alpine AS runner
