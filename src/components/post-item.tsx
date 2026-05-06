@@ -29,9 +29,15 @@ export function PostItem({
             alt={post.metadata.title}
             width={1200}
             height={630}
-            quality={100}
+            // Drop quality from 100 -> 90; difference is imperceptible at
+            // listing thumbnail size and saves real bytes on /blog where
+            // ~100 images load.
+            quality={90}
             priority={shouldPreloadImage}
-            unoptimized
+            // Allow Next/Image to optimize: serves AVIF/WebP at the
+            // requested size from the configured remotePatterns hosts.
+            // Massively cuts bandwidth on /blog vs. raw 1200x630 PNGs.
+            sizes="(min-width: 640px) 50vw, 100vw"
           />
 
           <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-black/10 ring-inset dark:ring-white/10" />

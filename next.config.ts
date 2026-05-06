@@ -7,12 +7,22 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["chanhdai-macbook.local"],
   devIndicators: false,
   images: {
+    // Specific hosts only. Adding a new image source? Add the host here.
+    // Wildcards are allowed (e.g. "**.ufs.sh") for CDNs that vary the
+    // subdomain per upload.
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "*",
-        port: "",
-      },
+      // UploadThing — primary blog/post screenshot host
+      { protocol: "https", hostname: "**.ufs.sh" },
+      // Demo / placeholder images used in tutorials
+      { protocol: "https", hostname: "images.unsplash.com" },
+      // Own domain — OG images and self-referenced assets
+      { protocol: "https", hostname: "jb.desishub.com" },
+      // TODO(migrate-off-chanhdai): still used by tech-stack.tsx (home
+      // tech icons), use-click-sound.ts, two legacy blog frontmatter
+      // images, and registry/examples/work-experience-demo.tsx.
+      // Remove this entry once those have been migrated to local
+      // assets or another source.
+      { protocol: "https", hostname: "assets.chanhdai.com" },
     ],
   },
   async rewrites() {
