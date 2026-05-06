@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
   transpilePackages: ["next-mdx-remote"],
   allowedDevOrigins: ["chanhdai-macbook.local"],
   devIndicators: false,
+
+  // The default per-page static generation timeout is 60s. Large MDX
+  // posts (e.g. the 30-day course blogs and the 2,500-line API guide)
+  // exceed this on slow VPS disks because of the volume of code blocks
+  // each one runs through Shiki. 300s is plenty of headroom.
+  staticPageGenerationTimeout: 300,
   images: {
     // Specific hosts only. Adding a new image source? Add the host here.
     // Wildcards are allowed (e.g. "**.ufs.sh") for CDNs that vary the

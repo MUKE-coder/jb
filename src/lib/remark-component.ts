@@ -28,12 +28,21 @@ export function remarkComponent() {
         }
 
         try {
-          let src: string;
+          let src: string | undefined;
 
           if (srcPath) {
             src = path.join(process.cwd(), srcPath);
           } else {
             const component = Index[name];
+            // Defensive: a missing registry entry must not crash the
+            // /blog.mdx/[slug] route handler. Mirror the guard in
+            // rehype-component.ts.
+            if (!component || !Array.isArray(component.files)) {
+              console.warn(
+                `[remark-component] ComponentSource: registry entry "${name}" not found — skipping.`
+              );
+              return null;
+            }
             src = fileName
               ? component.files.find((file: unknown) => {
                   if (typeof file === "string") {
@@ -45,6 +54,13 @@ export function remarkComponent() {
                   return false;
                 }) || component.files[0]?.path
               : component.files[0]?.path;
+          }
+
+          if (!src) {
+            console.warn(
+              `[remark-component] ComponentSource: could not resolve source path for "${name}" — skipping.`
+            );
+            return null;
           }
 
           // Read the source file.
@@ -91,7 +107,21 @@ export function remarkComponent() {
         try {
           const component = Index[name];
 
+          // Defensive: missing registry entry must not crash the route.
+          if (!component || !Array.isArray(component.files)) {
+            console.warn(
+              `[remark-component] ComponentPreview: registry entry "${name}" not found — skipping.`
+            );
+            return null;
+          }
+
           const src = component.files[0]?.path;
+          if (!src) {
+            console.warn(
+              `[remark-component] ComponentPreview: registry entry "${name}" has no files — skipping.`
+            );
+            return null;
+          }
 
           // Read the source file.
           const filePath = src;

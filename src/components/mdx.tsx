@@ -5,6 +5,11 @@ import type { LineElement } from "rehype-pretty-code";
 import rehypePrettyCode from "rehype-pretty-code";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
+import {
+  type BundledLanguage,
+  getSingletonHighlighter,
+  type Highlighter,
+} from "shiki";
 import { visit } from "unist-util-visit";
 
 import { CodeCollapsibleWrapper } from "@/components/code-collapsible-wrapper";
@@ -136,6 +141,49 @@ const components: MDXRemoteProps["components"] = {
   ),
 };
 
+// Languages that actually appear in the blog (and a few common neighbours).
+// Anything not on this list still renders as plain text — no error. Adding
+// a language is cheap; pre-loading them all is what kills startup time.
+const SHIKI_LANGS: BundledLanguage[] = [
+  "typescript",
+  "tsx",
+  "javascript",
+  "jsx",
+  "go",
+  "bash",
+  "shell",
+  "json",
+  "yaml",
+  "html",
+  "css",
+  "diff",
+  "dockerfile",
+  "sql",
+  "python",
+  "prisma",
+  "markdown",
+  "mdx",
+  // Note: ```env``` falls back to plain text — not a Shiki language but
+  // common in our blogs. Acceptable since env files don't gain much from
+  // syntax highlighting anyway.
+];
+
+// Singleton Shiki highlighter — one instance per Node process, reused
+// across every MDX render. Without this, each blog page (~111 of them)
+// re-loaded both themes and re-registered every grammar from scratch,
+// which is the dominant cost on slow VPS disks. With this, themes load
+// once and grammars are registered lazily on first use, then cached.
+let _highlighterPromise: Promise<Highlighter> | null = null;
+function getMdxHighlighter() {
+  if (!_highlighterPromise) {
+    _highlighterPromise = getSingletonHighlighter({
+      themes: ["github-dark", "github-light"],
+      langs: SHIKI_LANGS,
+    });
+  }
+  return _highlighterPromise;
+}
+
 const options: MDXRemoteProps["options"] = {
   mdxOptions: {
     remarkPlugins: [remarkGfm, remarkCodeImport],
@@ -166,6 +214,12 @@ const options: MDXRemoteProps["options"] = {
             light: "github-light",
           },
           keepBackground: false,
+          // Reuse the singleton highlighter across every page render.
+          // Without this option, rehype-pretty-code creates a fresh
+          // highlighter per render and re-loads both themes + every
+          // language used. On Contabo's shared NVMe this was pushing
+          // the largest posts past the 60s static-generation timeout.
+          getHighlighter: () => getMdxHighlighter(),
           onVisitLine(node: LineElement) {
             // Prevent lines from collapsing in `display: grid` mode, and allow empty
             // lines to be copy/pasted
