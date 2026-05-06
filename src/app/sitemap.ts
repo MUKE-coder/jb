@@ -2,17 +2,17 @@ import dayjs from "dayjs";
 import type { MetadataRoute } from "next";
 
 import { SITE_INFO } from "@/config/site";
-import { getAllPosts, getPostsByCategory } from "@/data/blog";
+import { getAllPostsMetadata, getPostsByCategoryMetadata } from "@/data/blog";
 import { goCourse } from "@/lib/courseData";
 import { roadmapPhases } from "@/lib/roadmap-data";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const posts = getAllPosts().map((post) => ({
+  const posts = getAllPostsMetadata().map((post) => ({
     url: `${SITE_INFO.url}/blog/${post.slug}`,
     lastModified: dayjs(post.metadata.updatedAt).toISOString(),
   }));
 
-  const components = getPostsByCategory("components").map((post) => ({
+  const components = getPostsByCategoryMetadata("components").map((post) => ({
     url: `${SITE_INFO.url}/components/${post.slug}`,
     lastModified: dayjs(post.metadata.updatedAt).toISOString(),
   }));

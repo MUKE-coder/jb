@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Icons } from "@/components/icons";
-import { getPostsByCategory } from "@/data/blog";
+import { getPostsByCategoryMetadata } from "@/data/blog";
 
 export const metadata: Metadata = {
   title: "Components",
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  const posts = getPostsByCategory("components");
+  const posts = getPostsByCategoryMetadata("components");
 
   return (
     <div className="min-h-svh [--color-react:#087EA4] dark:[--color-react:#58C4DC]">

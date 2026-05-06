@@ -4,12 +4,13 @@ import React from "react";
 
 import { PostItem } from "@/components/post-item";
 import { Button } from "@/components/ui/button";
-import { getAllPosts } from "@/data/blog";
+import { getAllPostsMetadata } from "@/data/blog";
 
 import { Panel, PanelHeader, PanelTitle } from "./panel";
 
 export function Blog() {
-  const allPosts = getAllPosts();
+  // Metadata-only — the home Blog panel only needs slug + frontmatter
+  const allPosts = getAllPostsMetadata();
 
   return (
     <Panel id="blog">

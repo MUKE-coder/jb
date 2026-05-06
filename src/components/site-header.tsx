@@ -6,7 +6,7 @@ import { MobileNav } from "@/components/mobile-nav";
 import { NavItemGitHub } from "@/components/nav-item-github";
 import { ToggleTheme } from "@/components/toggle-theme";
 import { MAIN_NAV } from "@/config/site";
-import { getAllPosts } from "@/data/blog";
+import { getAllPostsMetadataIncludingComponents } from "@/data/blog";
 import { cn } from "@/lib/utils";
 
 import { SiteHeaderMark } from "./site-header-mark";
@@ -21,7 +21,9 @@ const CommandMenu = dynamic(() =>
 );
 
 export function SiteHeader() {
-  const posts = getAllPosts();
+  // Metadata-only — CommandMenu only renders titles + slugs, never `content`.
+  // Full-content posts here would push ~3 MB of MDX into every page's RSC payload.
+  const posts = getAllPostsMetadataIncludingComponents();
 
   return (
     <SiteHeaderWrapper

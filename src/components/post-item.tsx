@@ -3,14 +3,14 @@ import Image from "next/image";
 import Link from "next/link";
 import React from "react";
 
+import type { PostMeta } from "@/data/blog";
 import { cn } from "@/lib/utils";
-import type { Post } from "@/types/blog";
 
 export function PostItem({
   post,
   shouldPreloadImage,
 }: {
-  post: Post;
+  post: PostMeta;
   shouldPreloadImage?: boolean;
 }) {
   return (

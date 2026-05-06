@@ -14,13 +14,13 @@ import { PostShareMenu } from "@/components/post-share-menu";
 import { Button } from "@/components/ui/button";
 import { Prose } from "@/components/ui/typography";
 import { SITE_INFO } from "@/config/site";
-import { findNeighbour, getAllPosts, getPostBySlug } from "@/data/blog";
+import { findNeighbour, getAllPostsMetadata, getPostBySlug } from "@/data/blog";
 import { USER } from "@/data/user";
 import { cn } from "@/lib/utils";
 import type { Post } from "@/types/blog";
 
 export async function generateStaticParams() {
-  const posts = getAllPosts();
+  const posts = getAllPostsMetadata();
   return posts.map((post) => ({
     slug: post.slug,
   }));
@@ -105,8 +105,9 @@ export default async function Page({
 
   const toc = getTableOfContents(post.content);
 
-  const allPosts = getAllPosts();
-  const { previous, next } = findNeighbour(allPosts, slug);
+  // findNeighbour only needs slug + metadata, so use the lightweight list
+  const allPostsMeta = getAllPostsMetadata();
+  const { previous, next } = findNeighbour(allPostsMeta, slug);
 
   return (
     <>

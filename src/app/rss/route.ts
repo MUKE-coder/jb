@@ -1,12 +1,12 @@
 import dayjs from "dayjs";
 
 import { SITE_INFO } from "@/config/site";
-import { getAllPosts } from "@/data/blog";
+import { getAllPostsMetadata } from "@/data/blog";
 
 export const dynamic = "force-static";
 
 export function GET() {
-  const allPosts = getAllPosts();
+  const allPosts = getAllPostsMetadata();
 
   const itemsXml = allPosts
     .map(

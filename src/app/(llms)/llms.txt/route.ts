@@ -1,7 +1,7 @@
 import { SITE_INFO } from "@/config/site";
-import { getAllPosts } from "@/data/blog";
+import { getAllPostsMetadata } from "@/data/blog";
 
-const allPosts = getAllPosts();
+const allPosts = getAllPostsMetadata();
 
 const content = `# JB (Muke Johnbaptist) — jb.desishub.com
 

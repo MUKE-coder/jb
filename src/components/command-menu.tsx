@@ -26,9 +26,9 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
+import type { PostMeta } from "@/data/blog";
 import { SOCIAL_LINKS } from "@/features/profile/data/social-links";
 import { cn } from "@/lib/utils";
-import type { Post } from "@/types/blog";
 
 import { ChanhDaiMark } from "./chanhdai-mark";
 import { Icons } from "./icons";
@@ -108,7 +108,7 @@ const SOCIAL_LINK_ITEMS: CommandLinkItem[] = SOCIAL_LINKS.map((item) => ({
   openInNewTab: true,
 }));
 
-export function CommandMenu({ posts }: { posts: Post[] }) {
+export function CommandMenu({ posts }: { posts: PostMeta[] }) {
   const router = useRouter();
 
   const { setTheme } = useTheme();
@@ -460,7 +460,7 @@ function CommandMenuKbd({ className, ...props }: React.ComponentProps<"kbd">) {
   );
 }
 
-function postToCommandLinkItem(post: Post): CommandLinkItem {
+function postToCommandLinkItem(post: PostMeta): CommandLinkItem {
   const isComponent = post.metadata?.category === "components";
 
   return {

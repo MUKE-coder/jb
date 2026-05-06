@@ -2,7 +2,7 @@ import dayjs from "dayjs";
 import type { Metadata } from "next";
 
 import { PostItem } from "@/components/post-item";
-import { getAllPosts } from "@/data/blog";
+import { getAllPostsMetadata } from "@/data/blog";
 
 export const metadata: Metadata = {
   title: "Blog",
@@ -10,7 +10,8 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  const allPosts = getAllPosts();
+  // Metadata-only — listings never render post.content
+  const allPosts = getAllPostsMetadata();
 
   return (
     <>

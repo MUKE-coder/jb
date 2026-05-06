@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import type { Post } from "@/types/blog";
+// Only `slug` is read from previous/next — keep the prop type minimal so
+// callers can pass either a full Post or a lightweight PostMeta.
+type SlugLike = { slug: string };
 
 export function PostKeyboardShortcuts({
   basePath,
@@ -11,12 +13,12 @@ export function PostKeyboardShortcuts({
   next,
 }: {
   basePath: string;
-  previous: Post | null;
-  next: Post | null;
+  previous: SlugLike | null;
+  next: SlugLike | null;
 }) {
   const router = useRouter();
 
-  const navigate = (post: Post | null) => {
+  const navigate = (post: SlugLike | null) => {
     if (post) {
       router.push(`${basePath}/${post.slug}`);
     }

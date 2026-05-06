@@ -1,68 +1,123 @@
+import "server-only";
+
 import fs from "fs";
 import matter from "gray-matter";
 import path from "path";
+import { cache } from "react";
 
 import type { Post, PostMetadata } from "@/types/blog";
 
-function parseFrontmatter(fileContent: string) {
-  const file = matter(fileContent);
+/**
+ * Lightweight view of a post — slug + frontmatter, NO content body.
+ * Use this anywhere you don't need the MDX body (listings, CommandMenu,
+ * RSS, sitemap, llms.txt, neighbour navigation, etc.) so we don't
+ * serialise multi-MB strings into the RSC payload.
+ */
+export type PostMeta = {
+  slug: string;
+  metadata: PostMetadata;
+};
 
-  return {
-    metadata: file.data as PostMetadata,
-    content: file.content,
-  };
-}
+const POSTS_DIR = path.join(process.cwd(), "src/content/blog");
 
-function getMDXFiles(dir: string) {
-  return fs.readdirSync(dir).filter((file) => path.extname(file) === ".mdx");
-}
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Disk read — memoised at module level                                     */
+/* ────────────────────────────────────────────────────────────────────────── */
 
-function readMDXFile(filePath: string) {
-  const rawContent = fs.readFileSync(filePath, "utf-8");
-  return parseFrontmatter(rawContent);
-}
+// Module-level cache. Survives across requests in the same Node process,
+// which is what we want for static MDX content. Next.js HMR will reset
+// this when source files change in dev — exactly the desired behaviour.
+let _diskCache: Post[] | null = null;
 
-function getMDXData(dir: string) {
-  const mdxFiles = getMDXFiles(dir);
+function loadPostsFromDisk(): Post[] {
+  if (_diskCache) return _diskCache;
 
-  return mdxFiles.map<Post>((file) => {
-    const { metadata, content } = readMDXFile(path.join(dir, file));
+  const files = fs
+    .readdirSync(POSTS_DIR)
+    .filter((file) => path.extname(file) === ".mdx");
 
-    const slug = path.basename(file, path.extname(file));
-
+  const posts = files.map<Post>((file) => {
+    const filePath = path.join(POSTS_DIR, file);
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const parsed = matter(raw);
     return {
-      metadata,
-      slug,
-      content,
+      metadata: parsed.data as PostMetadata,
+      content: parsed.content,
+      slug: path.basename(file, path.extname(file)),
     };
   });
-}
 
-function getAllPostsUnfiltered() {
-  return getMDXData(path.join(process.cwd(), "src/content/blog")).sort(
+  posts.sort(
     (a, b) =>
       new Date(b.metadata.createdAt).getTime() -
       new Date(a.metadata.createdAt).getTime()
   );
+
+  _diskCache = posts;
+  return posts;
 }
 
-export function getAllPosts() {
+// React.cache adds per-render dedupe on top of the module cache. Calls to
+// the same function during the same render share their result.
+const getAllPostsUnfiltered = cache((): Post[] => loadPostsFromDisk());
+
+const getAllPostsMetadataCached = cache((): PostMeta[] =>
+  getAllPostsUnfiltered().map((p) => ({ slug: p.slug, metadata: p.metadata }))
+);
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Full-content APIs — only call from the post DETAIL page or RSC that      */
+/*  actually renders the body.                                                */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export function getAllPosts(): Post[] {
   return getAllPostsUnfiltered().filter(
     (post) => post.metadata.category !== "components"
   );
 }
 
-export function getPostBySlug(slug: string) {
+export function getPostBySlug(slug: string): Post | undefined {
   return getAllPostsUnfiltered().find((post) => post.slug === slug);
 }
 
-export function getPostsByCategory(category: string) {
+export function getPostsByCategory(category: string): Post[] {
   return getAllPostsUnfiltered().filter(
     (post) => post.metadata?.category === category
   );
 }
 
-export function findNeighbour(posts: Post[], slug: string) {
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Metadata-only APIs — prefer these for listings, navbar, sitemap, RSS,    */
+/*  llms.txt, generateStaticParams, etc. They never expose post.content.     */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** All posts (excluding the components category) — slug + metadata only. */
+export function getAllPostsMetadata(): PostMeta[] {
+  return getAllPostsMetadataCached().filter(
+    (post) => post.metadata.category !== "components"
+  );
+}
+
+/** All posts including components — slug + metadata only. */
+export function getAllPostsMetadataIncludingComponents(): PostMeta[] {
+  return getAllPostsMetadataCached();
+}
+
+/** Posts in a single category — slug + metadata only. */
+export function getPostsByCategoryMetadata(category: string): PostMeta[] {
+  return getAllPostsMetadataCached().filter(
+    (post) => post.metadata?.category === category
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Navigation                                                                */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export function findNeighbour<T extends { slug: string }>(
+  posts: T[],
+  slug: string
+): { previous: T | null; next: T | null } {
   const len = posts.length;
 
   for (let i = 0; i < len; ++i) {
