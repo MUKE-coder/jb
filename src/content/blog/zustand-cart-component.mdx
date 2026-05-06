@@ -70,7 +70,8 @@ npm install zustand lucide-react
 
 <Step>Copy the cart component</Step>
 
-<ComponentSource name="cart" title="components/cart.tsx" showLineNumbers />
+The full `cart.tsx` component is included in the install above. See the
+**individual component files** section below for the source.
 
 <Step>Update the import paths to match your project setup</Step>
 
@@ -252,7 +253,7 @@ const handleCheckout = () => {
 
 ## Examples
 
-<ComponentPreview name="zustand-cart-demo" notProse={false} codeCollapsible />
+A live demo is available in the [reactuicomponents.com](https://reactuicomponents.com) playground. The complete source for the cart store, cart UI, and all sub-components is shown below.
 
 Now let me create the individual component files as referenced in the documentation:
 
@@ -391,10 +392,10 @@ export function ProductCard({
               target.src = "https://via.placeholder.com/400x300?text=Product";
             }}
           />
-          <div className="absolute inset-0 bg-black bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
+          <div className="bg-opacity-0 group-hover:bg-opacity-20 absolute inset-0 bg-black transition-all duration-300" />
 
           {/* Quick actions overlay */}
-          <div className="absolute right-4 top-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+          <div className="absolute top-4 right-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
             <button className="rounded-full bg-white p-2 shadow-md transition-colors hover:bg-gray-50">
               <Heart className="h-4 w-4 text-gray-600" />
             </button>
@@ -506,7 +507,7 @@ export function Cart() {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50">
+    <div className="fixed right-4 bottom-4 z-50">
       {/* Cart Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -514,7 +515,7 @@ export function Cart() {
       >
         <ShoppingCart className="h-6 w-6" />
         {totalItems > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
             {totalItems}
           </span>
         )}
@@ -522,7 +523,7 @@ export function Cart() {
 
       {/* Cart Panel */}
       {isOpen && (
-        <div className="absolute bottom-16 right-0 flex max-h-96 w-80 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl">
+        <div className="absolute right-0 bottom-16 flex max-h-96 w-80 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-gray-200 p-4">
             <h3 className="text-lg font-semibold">
               Your Cart ({totalItems} items)

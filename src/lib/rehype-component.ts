@@ -30,12 +30,22 @@ export function rehypeComponent() {
         }
 
         try {
-          let src: string;
+          let src: string | undefined;
 
           if (srcPath) {
             src = path.join(process.cwd(), srcPath);
           } else {
             const component = Index[name];
+            // Defensive: a missing registry entry must NOT crash the build.
+            // If the MDX references a `name` that no longer exists in the
+            // registry (e.g. removed component, typo, stale draft), bail
+            // out cleanly so the rest of the document still renders.
+            if (!component || !Array.isArray(component.files)) {
+              console.warn(
+                `[rehype-component] ComponentSource: registry entry "${name}" not found — skipping injection.`
+              );
+              return null;
+            }
             src = fileName
               ? component.files.find((file: unknown) => {
                   if (typeof file === "string") {
@@ -47,6 +57,13 @@ export function rehypeComponent() {
                   return false;
                 }) || component.files[0]?.path
               : component.files[0]?.path;
+          }
+
+          if (!src) {
+            console.warn(
+              `[rehype-component] ComponentSource: could not resolve source path for "${name}" — skipping.`
+            );
+            return null;
           }
 
           // Read the source file.
@@ -107,7 +124,21 @@ export function rehypeComponent() {
         try {
           const component = Index[name];
 
+          // Defensive: missing registry entry must not crash the build.
+          if (!component || !Array.isArray(component.files)) {
+            console.warn(
+              `[rehype-component] ComponentPreview: registry entry "${name}" not found — skipping injection.`
+            );
+            return null;
+          }
+
           const src = component.files[0]?.path;
+          if (!src) {
+            console.warn(
+              `[rehype-component] ComponentPreview: registry entry "${name}" has no files — skipping.`
+            );
+            return null;
+          }
 
           // Read the source file.
           const filePath = src;
