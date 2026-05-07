@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { ProfileSeparator as Separator } from "@/components/profile-separator";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,8 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-
-import { Separator } from "../page";
 
 export default function DatabaseFormatter() {
   const [inputString, setInputString] = useState("");

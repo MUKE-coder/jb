@@ -17,7 +17,6 @@ import { SITE_INFO } from "@/config/site";
 import {
   findNeighbour,
   getPostBySlug,
-  getPostsByCategory,
   getPostsByCategoryMetadata,
 } from "@/data/blog";
 import { USER } from "@/data/user";
