@@ -1,0 +1,305 @@
+---
+title: "VibeKit — the framework I built to stop fighting my AI coding agent"
+description: "VibeKit is a free, open-source framework for shipping production Next.js apps with Claude Code, Cursor, or any coding agent. Stop burning tokens. Stop shipping broken auth. Start shipping real software."
+image: "https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwf0VdAvuLtvnF3cx4uPCTU9aqg2f0oY8klybGQ"
+createdAt: 2026-05-07
+updatedAt: 2026-05-07
+---
+
+I burned through Claude Code tokens last month building a single client app — a school management system. Not a complex one. Just auth, a dashboard, some CRUD, payments. Standard SaaS plumbing.
+
+Why so expensive? Because every AI coding session reinvents the wheel.
+
+It rewrites authentication from scratch — usually insecurely. It picks a different stack every project: jsPDF here, Drizzle there, `useEffect` for data when React Query is the right tool. It loops on the same broken fix for thirty minutes. It generates code that ships unauthenticated API routes to production.
+
+After watching this play out across multiple projects, I built **VibeKit** — an open-source framework that gives any AI coding agent the discipline it doesn't have on its own.
+
+This is the article version of the YouTube tutorial. If you'd rather watch:
+
+[![VibeKit Framework Crash Course](https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwf0VdAvuLtvnF3cx4uPCTU9aqg2f0oY8klybGQ)](https://youtu.be/TvGu_Tu-6UI)
+
+> **▶ Watch the full crash course on YouTube:** [VibeKit Framework Crash Course](https://youtu.be/TvGu_Tu-6UI)
+
+<iframe
+  width="100%"
+  height="450"
+  src="https://www.youtube.com/embed/TvGu_Tu-6UI"
+  title="VibeKit Framework Crash Course"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  referrerpolicy="strict-origin-when-cross-origin"
+  allowfullscreen
+></iframe>
+-->
+
+---
+
+## What is VibeKit?
+
+**VibeKit is a structured framework for building production-grade Next.js applications with any AI coding agent — Claude Code, Cursor, Cline, Windsurf, Antigravity, Aider, or anything else that reads project files.**
+
+It's three things working together:
+
+1. **A planning prompt** you paste into Claude.ai with a one-line idea. Claude interviews you, then generates four files that fully define your project.
+2. **A coding constitution** the agent reads before writing any code. It locks the tech stack, enforces patterns (Prisma v7, React Query, Zod, server-side pagination), and bans the dependencies that lead to slop.
+3. **A component registry** for the things every app needs — auth, payments, file uploads, data tables, blogs. The agent installs them instead of inventing them. This alone saves 60–80% of the tokens.
+
+VibeKit is **MIT licensed**, **free to use**, and works with whatever AI agent you already pay for.
+
+🔗 **Site:** [vibekit.desishub.com](https://vibekit.desishub.com)
+🔗 **GitHub:** [github.com/MUKE-coder/vibekit](https://github.com/MUKE-coder/vibekit)
+🔗 **WhatsApp community:** [Join here](https://chat.whatsapp.com/LKQUiM0dExJ60EiBDgoqRq)
+
+---
+
+## The problems VibeKit solves
+
+Every developer using AI to build real apps hits the same walls. VibeKit was designed to remove each one.
+
+### 1. AI slop design
+
+Every AI-built app looks identical: purple gradient hero, generic shadcn cards, no brand identity. VibeKit generates a customized **design style guide** per project — colors, typography, spacing, component specs — and forces the agent to follow it on every component it writes.
+
+### 2. Burning tokens on boilerplate
+
+Without a component library, the agent rewrites auth, file uploads, and data tables from scratch every project. That's 3,000–5,000 tokens in code generation alone, per feature. With VibeKit's component registry (`jb-components.md`), the agent installs and wires up instead — usually under 500 tokens per feature.
+
+### 3. Shipping broken auth
+
+I've seen agents generate login flows with no rate limiting, no password reset, missing OAuth callbacks, and unauthenticated API routes that anyone can hit with curl. VibeKit's master prompt makes auth-guarded route handlers and Zod-validated bodies non-negotiable, with a canonical `requireSession()` / `requireRole()` pattern.
+
+### 4. Tech stack chaos
+
+Without a locked stack, you'll get a different one every project. jsPDF in one, react-pdf in the next. Drizzle here, Prisma there. `useEffect` for data when React Query is the right tool. VibeKit pins the stack: Next.js 16, Prisma v7, Better Auth, React Query, Zod, Tailwind v4. Every project is debuggable in the same way.
+
+### 5. Prisma version drift
+
+The Prisma v6 → v7 migration changed everything: new generator name, new import path, new adapter pattern. Agents constantly mix the two and break the build. VibeKit codifies the v7 patterns exactly so the agent never drifts.
+
+### 6. Getting stuck in fix loops
+
+You ask the agent to fix one thing, it breaks two others. Twenty minutes later, you've made things worse. VibeKit's phase-by-phase build structure plus the rescue prompts in the framework's `troubleshooting.md` give you concrete escape routes — including the **Hard Reset** technique (start a fresh conversation with full context).
+
+### 7. Stripe webhooks that silently fail
+
+The #1 reason Stripe webhooks break: agents call `req.json()` to read the body, which consumes the request stream and fails signature verification. VibeKit's master prompt has the canonical raw-body pattern (`await req.text()` + idempotent event handling) baked in.
+
+### 8. Deployment confusion
+
+App works locally, fails in production. Missing env vars. Wrong `BETTER_AUTH_URL`. DNS records proxied through Cloudflare when they should be DNS-only. VibeKit ships with a complete deployment guide — Vercel, Cloudflare DNS, SSL, email domain verification — with checklists.
+
+### 9. No security audit before launch
+
+This is the one nobody talks about. AI agents systematically miss specific classes of bugs: unauthenticated routes, missing rate limiting, mass-assignment vulnerabilities, RBAC holes, missing webhook idempotency. VibeKit ships a **pre-deploy review prompt** that runs a senior-level audit covering CPU usage, performance bottlenecks, background tasks, and security. You paste it as the final task before deploying.
+
+---
+
+## How VibeKit works (the 3-step flow)
+
+The whole framework boils down to three steps:
+
+### Step 1 — Plan with Claude
+
+You paste the planning prompt into Claude.ai (the chat web UI) along with a one-paragraph description of your app. Claude either interviews you (if your brief is thin) or jumps straight to a structured summary (if your brief is detailed). It always asks for your explicit consent before generating any files.
+
+When you confirm, Claude produces **4 downloadable files**:
+
+| File                     | Purpose                                                                     |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `project-description.md` | Complete description of the app — features, data model, pages, integrations |
+| `project-phases.md`      | Build blueprint with phases and tasks the agent will check off              |
+| `design-style-guide.md`  | Customized visual design system — colors, typography, component specs       |
+| `prompt.md`              | The prompt you paste into your coding agent to start building               |
+
+### Step 2 — Build with any AI agent
+
+You drop those 4 files into your project root, plus 3 framework files from the VibeKit repo (`master_prompt.md`, `jb-components.md`, `pre-deploy-review.md`). Then you open Claude Code, Cursor, Cline, Windsurf, or whatever agent you use — and paste the contents of `prompt.md`.
+
+The agent reads everything, plans Phase 1, and starts building. **It stops between phases for your confirmation.** You're never more than one phase away from being able to course-correct.
+
+### Step 3 — Audit, then ship
+
+Before going live, you paste the pre-deploy review prompt. The agent runs a senior-level audit covering:
+
+- **Performance** — N+1 queries, missing pagination, expensive operations in hot paths
+- **Security** — unauthenticated routes, SQL injection, missing rate limiting, exposed secrets, XSS, CSRF
+- **Background tasks** — webhook idempotency, retry logic, distributed locks, dead-letter queues
+- **Resource consumption** — memory leaks, unclosed streams, missing timeouts
+
+Findings are written to `pre-deploy-review-report.md` as Critical / High / Medium. You fix every Critical, then deploy to Vercel. Done.
+
+---
+
+## The locked tech stack
+
+Every VibeKit project ships with the same opinionated stack. The agent never has to invent — it just builds.
+
+| Layer                 | Technology                   |
+| --------------------- | ---------------------------- |
+| Framework             | Next.js 16 (App Router)      |
+| Language              | TypeScript 5.9               |
+| Database              | Neon — Serverless Postgres   |
+| ORM                   | Prisma v7                    |
+| Authentication        | Better Auth                  |
+| Data Fetching         | React Query + Fetch API      |
+| API Layer             | API Routes (Route Handlers)  |
+| Validation            | Zod + React Hook Form        |
+| PDF Generation        | @react-pdf/renderer          |
+| Excel Export          | xlsx                         |
+| File Storage          | Cloudflare R2 or UploadThing |
+| Email                 | Resend + React Email         |
+| Payments              | Stripe                       |
+| Mobile Money (Africa) | DGateway                     |
+| Styling               | Tailwind CSS v4 + shadcn/ui  |
+| Deployment            | Vercel                       |
+| DNS / SSL             | Cloudflare                   |
+
+This is also a **dependency blocklist**: no `moment` (use `date-fns`), no `axios` (use `fetch`), no `next-auth` (use `better-auth`), no `jspdf` (use `@react-pdf/renderer`), no `redux`, no `material-ui`. The master prompt enforces these.
+
+---
+
+## How to use VibeKit (step by step)
+
+The full crash course is on YouTube — I rebuild a real Hardware POS system from scratch in about 3 hours. Here's the abbreviated walkthrough so you can scan the flow:
+
+### 1. Sign up for the free tiers
+
+You'll need accounts on:
+
+- [claude.ai](https://claude.ai) — for the planning step
+- Your AI coding agent — [Claude Code](https://www.anthropic.com/claude-code), [Cursor](https://cursor.com), or whichever you prefer
+- [Neon](https://neon.tech) — Postgres database
+- [Vercel](https://vercel.com) — deployment
+- [Resend](https://resend.com) — transactional email
+- [GitHub](https://github.com) — for pushing your code
+
+All free tiers cover the entire build.
+
+### 2. Plan with Claude
+
+Copy `CLAUDE_PROMPT.md` from the [VibeKit GitHub repo](https://github.com/MUKE-coder/vibekit/blob/main/CLAUDE_PROMPT.md) and paste it into a new Claude.ai conversation, followed by your app idea. For example:
+
+```
+[CLAUDE_PROMPT.md contents]
+
+I want to build a personal task manager called TaskFlow. Single user.
+Categories, due dates, priority. Dashboard with today's tasks.
+PDF export of open tasks. Light + dark mode. Indigo brand color.
+```
+
+Claude will write a structured "What I understood" summary and ask you to confirm before generating. Reply `Yes, generate the files`. You'll get 4 downloadable Artifacts in the panel on the right — click each to download, or run the bash heredoc block at the end of Claude's message to create all 4 at once.
+
+### 3. Initialize the project
+
+```bash
+mkdir my-app && cd my-app
+pnpm create next-app@latest . --typescript --tailwind --app --eslint --turbopack
+
+# Drop in the 4 files Claude generated:
+# - project-description.md
+# - project-phases.md
+# - design-style-guide.md
+# - prompt.md
+
+# Plus the 3 framework files (clone VibeKit, copy these out):
+git clone https://github.com/MUKE-coder/vibekit.git /tmp/vibekit
+cp /tmp/vibekit/master_prompt.md ./master_prompt.md
+cp /tmp/vibekit/jb-components.md ./jb-components.md
+cp /tmp/vibekit/pre-deploy-review.md ./pre-deploy-review.md
+```
+
+### 4. Build with your AI agent
+
+Open the project in Claude Code (or Cursor, Cline, etc.). Paste the contents of `prompt.md` as your first message. The agent will read everything and start Phase 1 — Foundation: Prisma + Neon, Better Auth, layout shell, design tokens.
+
+Provide your `DATABASE_URL` and `BETTER_AUTH_SECRET` when asked. Run `pnpm db:push`, then `pnpm dev`. You should be able to sign up and land on an empty dashboard.
+
+After Phase 1, the agent will stop and ask permission to proceed to Phase 2. Confirm. It builds the core CRUD features. Stop and verify between every phase.
+
+### 5. Run the pre-deploy review
+
+When the agent finishes the last build phase, paste the contents of `pre-deploy-review.md` as your next message. The agent runs the audit and writes findings to `pre-deploy-review-report.md`.
+
+For each Critical issue:
+
+```
+Fix Critical issue #1 from pre-deploy-review-report.md. Apply the suggested
+fix exactly, run a quick test, confirm the issue is resolved. Do not
+introduce changes outside the scope of this fix.
+```
+
+Iterate until the Critical count is zero.
+
+### 6. Deploy
+
+```bash
+git init
+git add .
+git commit -m "Initial commit — built with VibeKit"
+gh repo create my-app --private --source=. --push
+```
+
+Import to Vercel, set the production env vars (a NEW `BETTER_AUTH_SECRET` — never reuse the dev one), set the build command to `prisma generate && prisma migrate deploy && next build`, deploy. Add the production OAuth redirect URI in Google Cloud Console. Done.
+
+---
+
+## What I built with VibeKit (the tutorial app)
+
+In the YouTube crash course, I build **HardwarePOS** — a point-of-sale system for a small hardware shop in Uganda. It has:
+
+- Email + Google OAuth sign-in
+- Inventory with SKU, name, price (UGX), stock, low-stock alerts
+- POS sale flow with product search, cart, payment method (Cash / Mobile Money / Card)
+- Atomic stock decrements wrapped in a Prisma transaction (so concurrent sales never let stock go negative)
+- Downloadable receipt PDFs for every sale
+- Sales history with date-range filters and a daily report PDF
+- Dashboard with today's revenue, top 5 products this week, weekly chart
+- Light and dark mode
+- Deployed to Vercel with a custom domain
+
+A real shop owner could install this Monday morning and start using it. That's the bar.
+
+The full step-by-step is on the [VibeKit Tutorial page](https://vibekit.desishub.com/tutorial) — every prompt copyable inline so you don't need to context-switch.
+
+---
+
+## Why I built this
+
+I run [Desishub Technologies](https://desishub.com) in Kampala, Uganda. We ship real client apps — schools, agritech startups, freelancer platforms. We use AI heavily.
+
+The math just stopped working. Every project burned tokens like crazy. Code quality drifted between projects. Junior devs on my team couldn't onboard fast enough because every codebase looked different. Clients found security holes I should have caught.
+
+I wanted three things:
+
+1. **Consistency.** Every Desishub project ships with the same locked stack so anyone on the team can debug anything.
+2. **Speed.** Pre-built components for the things every SaaS needs — auth, payments, file uploads — instead of regenerating them every project.
+3. **Safety.** A senior-level audit that runs _before_ deploy, not after a security incident.
+
+VibeKit is what I wished existed when I started using AI agents to ship real apps. I built it for my team, then realized other people would benefit. So I open-sourced it.
+
+If it saves you a single token-burn afternoon, it was worth shipping.
+
+---
+
+## Resources
+
+- 🌐 **Website:** [vibekit.desishub.com](https://vibekit.desishub.com)
+- 📺 **YouTube tutorial:** [VibeKit Framework Crash Course](https://youtu.be/TvGu_Tu-6UI)
+- 💻 **GitHub repo:** [github.com/MUKE-coder/vibekit](https://github.com/MUKE-coder/vibekit)
+- 📚 **Quickstart:** [vibekit.desishub.com/docs/quickstart](https://vibekit.desishub.com/docs/quickstart)
+- 🧱 **Component registry:** [vibekit.desishub.com/components](https://vibekit.desishub.com/components)
+- 🤝 **Contribute a component:** [vibekit.desishub.com/contribute](https://vibekit.desishub.com/contribute)
+- 💬 **WhatsApp community:** [Join here](https://chat.whatsapp.com/LKQUiM0dExJ60EiBDgoqRq)
+
+---
+
+## Try it
+
+If you've used Claude Code or Cursor to ship anything real, you've probably hit at least three of the problems I described. VibeKit fixes them.
+
+The whole flow is free, the framework is MIT licensed, and the YouTube tutorial walks you through building a real SaaS in one afternoon.
+
+Star the [GitHub repo](https://github.com/MUKE-coder/vibekit) if it resonates. Drop into the [WhatsApp community](https://chat.whatsapp.com/LKQUiM0dExJ60EiBDgoqRq) and tell me what you ship.
+
+— JB
+[jb.desishub.com](https://jb.desishub.com)
