@@ -1,10 +1,15 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1
 #
 # BuildKit cache mounts (the `--mount=type=cache,...` lines below) require
 # Docker BuildKit. Dokploy and modern Docker enable it by default. They
 # persist pnpm's content-addressable store and Next.js's incremental
 # build cache across deploys, which is the single biggest win on slow
 # VPS filesystems — subsequent builds skip almost all the disk IO.
+#
+# Using the floating `:1` tag instead of a pinned `:1.7` so we use
+# whatever Dokploy/Contabo already has cached. Pinning to a specific
+# minor was causing `frontend grpc server closed unexpectedly` when
+# the host couldn't pull that exact tag.
 
 FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.10.0 --activate
