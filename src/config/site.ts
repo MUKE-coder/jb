@@ -1,11 +1,26 @@
 import { USER } from "@/data/user";
 import type { NavItem } from "@/types/nav";
 
+// Public contact details. Phone is shown openly here (and in the global
+// meta description) so it's discoverable by search engines and users
+// landing on the site can call/WhatsApp directly. The base64-encoded
+// USER.phoneNumber stays in user.ts for the legacy anti-scrape paths;
+// this constant is the canonical "publish my number" source of truth.
+export const JB_CONTACT = {
+  phoneE164: "+256762063160",
+  phoneFormatted: "+256 762 063 160",
+  whatsapp: "https://wa.me/256762063160",
+  email: "jb@desishub.com",
+} as const;
+
 export const SITE_INFO = {
   name: USER.displayName,
   url: process.env.APP_URL || "https://jb.desishub.com",
   ogImage: USER.ogImage,
-  description: USER.bio,
+  // Append phone number + booking CTA to the global meta description so
+  // every page Google indexes carries the phone in its snippet — useful
+  // for local search and click-to-call from SERP.
+  description: `${USER.bio} · Book a session: ${JB_CONTACT.phoneFormatted} · ${JB_CONTACT.email}`,
   keywords: USER.keywords,
 };
 
@@ -30,6 +45,10 @@ export const MAIN_NAV: NavItem[] = [
   {
     title: "Blogs",
     href: "/blog",
+  },
+  {
+    title: "Book JB",
+    href: "/book",
   },
 ];
 

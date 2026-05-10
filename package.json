@@ -85,6 +85,7 @@
     "react-resizable-panels": "^4.6.0",
     "react-rough-notation": "^1.0.5",
     "react-use": "^17.6.0",
+    "resend": "^6.12.3",
     "schema-dts": "^1.1.5",
     "shadcn": "2.6.4",
     "sharp": "^0.34.3",
