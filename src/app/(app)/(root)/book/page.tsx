@@ -16,8 +16,14 @@ import { SESSION_TYPES } from "./schema";
 
 const PAGE_TITLE =
   "Book a Session with JB — Mentorship, Code Reviews & Consulting";
-const PAGE_DESCRIPTION = `Book a 1-on-1 mentorship, weekend intensive, code review, or consulting session with JB (Muke Johnbaptist) — top Go (Golang) developer in Uganda, AI & automation engineer, founder of Desishub Technologies. Call ${JB_CONTACT.phoneFormatted}, WhatsApp, or email ${JB_CONTACT.email}.`;
+const PAGE_DESCRIPTION = `Book a 1-on-1 mentorship, weekend intensive, code review, or consulting session with JB (Muke Johnbaptist) — top Go (Golang) developer in Uganda, AI & automation engineer, founder of Desishub Technologies. Sessions from UGX 50,000. Call ${JB_CONTACT.phoneFormatted}, WhatsApp, or email ${JB_CONTACT.email}.`;
 const PAGE_URL = `${SITE_INFO.url}/book`;
+
+// Minimum session price. Specific session types (weekend intensives,
+// multi-week mentorship) are quoted higher in the booking-confirmation
+// email; this is the floor we publish.
+const MIN_PRICE_UGX = 50_000;
+const MIN_PRICE_LABEL = "UGX 50,000";
 
 export const metadata: Metadata = {
   title: PAGE_TITLE,
@@ -70,6 +76,12 @@ function getServiceJsonLd(): WithContext<Service> {
       name: s.label,
       description: s.description,
       url: PAGE_URL,
+      priceCurrency: "UGX",
+      priceSpecification: {
+        "@type": "PriceSpecification",
+        priceCurrency: "UGX",
+        minPrice: MIN_PRICE_UGX,
+      },
     })),
   };
 }
@@ -169,6 +181,13 @@ export default function BookPage() {
             type below or contact JB directly.
           </p>
 
+          {/* Price banner — visible above the fold */}
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-edge bg-zinc-50 px-3 py-1.5 font-mono text-xs dark:bg-zinc-900">
+            <span className="text-muted-foreground">From</span>
+            <span className="font-semibold">{MIN_PRICE_LABEL}</span>
+            <span className="text-muted-foreground">per session</span>
+          </div>
+
           {/* Quick contact strip — visible above the fold */}
           <div className="mt-6 flex flex-wrap gap-2 font-mono text-xs">
             <a
@@ -259,9 +278,11 @@ export default function BookPage() {
             <div>
               <dt className="font-medium">How much does a session cost?</dt>
               <dd className="mt-1 text-muted-foreground">
-                Pricing depends on session type and scope. JB sends a quote with
-                the booking confirmation — no surprise fees, no up-front
-                commitment to find out.
+                Sessions start from <strong>{MIN_PRICE_LABEL}</strong> (≈ USD
+                13) per session. Weekend intensives, multi-week mentorship and
+                team workshops are quoted higher based on scope. JB sends a
+                clear quote with the booking confirmation — no surprise fees, no
+                up-front commitment.
               </dd>
             </div>
             <div>
