@@ -1,0 +1,460 @@
+---
+title: "Electron vs Tauri vs Wails vs Grit Framework — The Best Way to Build Desktop Apps in 2026"
+description: "A complete architectural breakdown of Electron, Tauri, Wails, and the Grit Framework — bundle size, RAM, startup time, IPC overhead, and developer experience. An honest verdict on which one you should actually pick for a desktop app in 2026."
+image: /desktop_frameworks/best-way-to-build-desktop-apps-2026.png
+category: engineering
+createdAt: 2026-05-07
+updatedAt: 2026-05-07
+---
+
+# Electron vs Tauri vs Wails vs Grit Framework — The Best Way to Build Desktop Apps in 2026
+
+![Electron vs Tauri vs Wails vs Grit — desktop framework comparison cover](/desktop_frameworks/best-way-to-build-desktop-apps-2026.png)
+
+**A complete architectural breakdown of the four most popular ways to build desktop apps today — and an honest verdict on which one you should actually pick.**
+
+---
+
+If you're building a desktop app in 2026, you have four serious options: **Electron**, **Tauri**, **Wails**, and **Grit Framework**. Each one fixes a real problem with the one before it — and the gap between the heaviest and the lightest is genuinely staggering. A typical Electron app weighs around 200MB. The same app built with Grit weighs about 7MB.
+
+That's not a typo. It's a 28x difference in shipped size, and the differences in RAM usage, startup time, and developer experience are just as dramatic.
+
+In this article I'll walk you through the actual architecture of each framework — what powers the UI, how the frontend talks to the backend, what you have to wire up yourself versus what comes pre-built — and explain why each generation evolved the way it did. By the end you'll know exactly which framework fits your project, and why I think one of them is the obvious choice for most teams in 2026.
+
+---
+
+## Why this comparison matters
+
+Most "X vs Y" framework comparisons online stop at the surface: bundle size, GitHub stars, which big company uses what. That's not enough to make a real decision.
+
+The thing that actually matters is **architecture** — how the pieces fit together, what trade-offs each design forced, and what that means for you as a developer six months into a project. A framework that scaffolds in 30 seconds but costs you a week of plumbing every time you add a feature is not a fast framework. A 7MB binary that took three months to wire up because the backend language has a brutal learning curve is not a productive framework.
+
+So we'll look at four things for each option:
+
+1. **The engine** — what renders your UI
+2. **The communication layer** — how the frontend talks to the backend
+3. **The backend** — what language you write, and what comes pre-built
+4. **The real-world cost** — bundle size, RAM, startup time, and developer time
+
+Let's start with the heaviest of the four.
+
+---
+
+## 1. Electron — the original, and why it's so heavy
+
+Electron is the framework that made web-based desktop apps mainstream. VS Code, Slack, Discord, Notion, Figma's desktop client, GitHub Desktop — they're all built on Electron. It works. It's battle-tested. It runs on every operating system. And it's enormous.
+
+![Electron architecture — multi-process model with bundled Chromium + Node.js per app](/desktop_frameworks/electron_architecture.png)
+
+### How Electron works
+
+Electron uses a **multi-process model**. Every Electron app has:
+
+- **One main process** running Node.js — handles the application lifecycle, creates windows, accesses the filesystem, fires native dialogs.
+- **One or more renderer processes**, each one a complete, isolated copy of the Chromium browser — runs your HTML, CSS, and JavaScript.
+
+The frontend can't directly access the filesystem or the OS. Instead, the main process and renderers communicate through **IPC channels** — `ipcMain.handle()` on the backend side, `ipcRenderer.invoke()` on the frontend side. Messages cross between processes, get serialized, and come back.
+
+Here's the architectural picture:
+
+```
+┌──────────────────────────────────────────────────┐
+│  Your App (React / Vue / Angular)                │
+│  HTML · CSS · TypeScript                         │
+└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  Chromium Engine — full browser, ~150 MB         │
+│  Shipped with every app                          │
+└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  Node.js Runtime — ~45 MB                        │
+│  Also bundled per-app                            │
+└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  IPC Bridge (main ↔ renderer)                    │
+└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  OS Abstraction Layer                            │
+│  Windows · macOS · Linux                         │
+└──────────────────────────────────────────────────┘
+```
+
+### Why Electron is heavy
+
+The phrase "ships its own Chromium" is the key. Every Electron app you install includes a full copy of the Chromium browser engine — about 150MB on disk. Plus the Node.js runtime, another 45MB. None of it is shared with your OS or with other Electron apps.
+
+And here's the part most people don't realize: **every window in an Electron app spawns a new Chromium process**. Open a second window in Slack and you've just allocated another ~150MB of Chromium. There's no memory sharing between windows. This is why your Electron apps eat so much RAM when you have several open.
+
+### The numbers
+
+- **Bundle size**: 150–250 MB
+- **RAM at startup**: 150–500 MB (more per window)
+- **Cold start**: 2–5 seconds
+- **Backend language**: JavaScript
+
+### When Electron is the right choice
+
+There's a real argument for Electron even in 2026:
+
+- Your team is 100% JavaScript and you have zero appetite for learning a backend language.
+- You need maximum browser API compatibility — every web API, every Chromium quirk, exactly the same on every OS.
+- You're building something where 200MB of binary is genuinely fine (large enterprise tools, internal apps with no install constraints).
+
+But for everything else, Electron's weight has become a real problem — especially as users have gotten more sensitive to bloated apps, slow startups, and excessive RAM usage on their laptops.
+
+This is the gap that Tauri set out to close.
+
+---
+
+## 2. Tauri — lightweight, but Rust has a cost
+
+![Tauri architecture — OS WebView + Rust backend communicating via JSON IPC](/desktop_frameworks/tauri_architecture.png)
+
+Tauri was a real leap forward when it appeared. It looked at Electron's architecture and asked one obvious question: **why are we shipping our own browser engine when every modern OS already has one built in?**
+
+macOS has WebKit, accessible through `WKWebView`. Windows has `WebView2` (Microsoft Edge's engine, built on Chromium). Linux has WebKit via GTK. All three are kept patched and updated by the OS. So why bundle Chromium at all?
+
+Tauri's answer: don't.
+
+### How Tauri works
+
+Tauri uses the **OS-provided WebView** to render your frontend, and a **Rust backend** to handle native code. The two communicate through a JSON-based IPC layer.
+
+```
+┌──────────────────────────────────────────────────┐
+│  Your Frontend (React / Svelte / Vue)            │
+│  HTML · CSS · TypeScript                         │
+└──────────────────────────────────────────────────┘
+                       ↓
+┌──────────────────────────────────────────────────┐
+│  System WebView — OS provided, not bundled       │
+│  WKWebView · WebView2 · GTK WebKit               │
+└──────────────────────────────────────────────────┘
+                       ↓
+┌──────────────────────────────────────────────────┐
+│  JSON IPC Bridge                                 │
+│  Every call: serialize → cross → deserialize     │
+└──────────────────────────────────────────────────┘
+                       ↓
+┌──────────────────────────────────────────────────┐
+│  Tauri Core — Rust                               │
+│  #[tauri::command] handlers · Tokio async        │
+└──────────────────────────────────────────────────┘
+                       ↓
+┌──────────────────────────────────────────────────┐
+│  OS Native APIs                                  │
+└──────────────────────────────────────────────────┘
+```
+
+### What Tauri got right
+
+The bundle size win is enormous. By dropping Chromium and Node.js, Tauri apps typically ship at **5–15MB instead of 150–250MB**. RAM usage drops by an order of magnitude. Cold start goes from "noticeable" to "instant."
+
+Rust as a backend language is also genuinely fast at runtime. Memory-safe. No garbage collector. The Tauri team built a thoughtful security model around it — capabilities, allowlists, fine-grained permissions for what the frontend can ask the backend to do.
+
+For a certain kind of project — a small focused tool, a CLI companion app, something where every megabyte matters — Tauri is excellent.
+
+### The two friction points
+
+But Tauri has two problems that bite real teams shipping real products.
+
+**Problem 1: The JSON IPC bridge adds overhead.**
+
+Every time your frontend calls a Tauri backend command, the arguments get serialized to JSON, crossed over the WebView ↔ Rust boundary, deserialized on the other side, processed, then the result gets serialized back. For a click handler that fires once a minute, this is invisible. For a UI that needs to stream rows from a database, or process a folder of files, or update in real-time as the user drags a slider, those allocations add up. You start hitting noticeable latency, and the optimization techniques (batching, custom protocols, sidecars) add complexity that defeats the purpose of picking a "simple" framework.
+
+**Problem 2: Rust is hard.**
+
+This is the one that doesn't get talked about enough. Rust is a powerful language, but it has a notoriously steep learning curve. The ownership model, lifetimes, the borrow checker — these are real obstacles for teams coming from JavaScript, Python, or even Go. A senior JavaScript developer can be productive in another high-level language in days. Rust takes weeks to months before you stop fighting the compiler.
+
+For a small team or solo developer, this matters enormously. Every Rust-side feature takes longer to build than the equivalent in a friendlier language. Hiring is harder. Code reviews are slower. The library ecosystem, while excellent, is smaller than Go's or Node's.
+
+### The numbers
+
+- **Bundle size**: 5–15 MB
+- **RAM at startup**: 30–100 MB
+- **Cold start**: 0.5–1 second
+- **Backend language**: Rust
+
+### When Tauri is the right choice
+
+- Your team already writes Rust, or has the time and appetite to learn it deeply.
+- You're shipping a tiny, focused utility where the bundle size is the headline feature.
+- You need Tauri-specific features like its capability-based security model.
+
+But if you want the bundle-size win **without** committing to Rust, the next framework is the answer.
+
+---
+
+## 3. Wails — Go-powered, simple, and fast
+
+![Wails architecture — OS WebView + Go backend with direct method binding (no JSON IPC)](/desktop_frameworks/wails_architecture.png)
+
+Wails takes Tauri's core architectural insight — use the OS WebView, don't ship Chromium — and pairs it with **Go** instead of Rust. That single change makes an enormous difference in developer experience, and Wails goes further: it eliminates the JSON IPC bridge entirely.
+
+### How Wails works
+
+```
+┌──────────────────────────────────────────────────┐
+│  Frontend — React + Vite                         │
+│  TanStack Router · TanStack Query · Tailwind     │
+└──────────────────────────────────────────────────┘
+                       ↓
+┌──────────────────────────────────────────────────┐
+│  System WebView — OS provided, not bundled       │
+│  WKWebView · WebView2 · GTK WebKit               │
+└──────────────────────────────────────────────────┘
+                       ↓
+┌──────────────────────────────────────────────────┐
+│  Direct Go Method Binding ⚡                      │
+│  Zero JSON serialization                         │
+│  Native function calls, not IPC marshalling      │
+└──────────────────────────────────────────────────┘
+                       ↓
+┌──────────────────────────────────────────────────┐
+│  Go Binary                                       │
+│  Compiled single executable                      │
+└──────────────────────────────────────────────────┘
+                       ↓
+┌──────────────────────────────────────────────────┐
+│  OS Native APIs                                  │
+└──────────────────────────────────────────────────┘
+```
+
+### What changes versus Tauri
+
+**Go instead of Rust.** Go is one of the simplest serious programming languages in widespread use. Static types, garbage collected, no ownership model to fight, compiles in seconds, single-binary deploys. A JavaScript developer can be productive in Go in days, not months. The standard library is excellent and the concurrency model (goroutines, channels) is famously easy to reason about.
+
+**Direct method binding instead of JSON IPC.** This is the Wails technical superpower. At build time, Wails inspects your Go structs and generates JavaScript bindings for every exposed method. When your React code calls `App.GetUsers()`, it's a native function call into Go — no JSON, no serialization, no IPC marshalling. You get type safety on both sides, and the call latency drops to near zero.
+
+The result: bundle size as small as Tauri, RAM usage often lower, and a developer experience that's dramatically friendlier.
+
+### Where Wails leaves you hanging
+
+Wails is fantastic, but it gives you a clean slate. You still have to:
+
+- Set up your own authentication system (JWT, sessions, OAuth, 2FA)
+- Build CRUD endpoints from scratch
+- Choose and wire up an ORM
+- Set up a database browser for development
+- Configure your frontend routing, state management, and UI library
+- Generate TypeScript types for your API
+
+For a project that needs auth, user management, and a real database — which is most projects — that's easily a week of plumbing before you can write your first real feature. This is the gap that Grit Framework closes.
+
+### The numbers
+
+- **Bundle size**: 5–15 MB
+- **RAM at startup**: 25–80 MB
+- **Cold start**: < 0.5 seconds
+- **Backend language**: Go
+
+### When Wails alone is the right choice
+
+- You want maximum control and prefer to wire up every piece yourself.
+- Your app has unusual architectural requirements that don't fit a scaffolded template.
+- You enjoy the "blank canvas" experience and have time for the setup work.
+
+For everyone else — which honestly is most teams — Grit takes Wails and turns it into something genuinely production-ready from day one.
+
+---
+
+## 4. Grit Framework — the best of all worlds
+
+![Grit Framework architecture — OS WebView + Wails direct method binding + Go binary with batteries included (auth, CRUD, ORM, DB browser)](/desktop_frameworks/grit_framework_architecture.png)
+
+Grit Framework is a full-stack meta-framework built on top of Wails (for desktop) and the broader Go + React ecosystem. It takes Wails' architectural advantages and pre-builds everything you'd otherwise spend a week wiring up.
+
+One command — `grit new-desktop myapp` — gives you a complete production-ready desktop app scaffold. Not a "hello world" template. A real app with auth, CRUD, an ORM, a visual database browser, type-safe React hooks, and a sensible project structure.
+
+### How Grit works
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Frontend — React + Vite                             │
+│  • TanStack Router (file-based routing)              │
+│  • TanStack Query (server state)                     │
+│  • Tailwind + shadcn/ui                              │
+│  • Auto-generated typed hooks for every Go method    │
+└──────────────────────────────────────────────────────┘
+                          ↓
+┌──────────────────────────────────────────────────────┐
+│  System WebView (OS-provided)                        │
+└──────────────────────────────────────────────────────┘
+                          ↓
+┌──────────────────────────────────────────────────────┐
+│  Direct Go Method Binding ⚡                          │
+└──────────────────────────────────────────────────────┘
+                          ↓
+┌──────────────────────────────────────────────────────┐
+│  Go Binary — batteries included                      │
+│  • Auth: JWT · OAuth (Google/GitHub) · 2FA · RBAC    │
+│  • Gin handlers + service layer                      │
+│  • CRUD resource generator (one command)             │
+│  • Activity log + hash chain                         │
+│  • Feature flags + A/B testing                       │
+│  • Background jobs + cron                            │
+│  • PDF + CSV/Excel export                            │
+└──────────────────────────────────────────────────────┘
+                          ↓
+┌──────────────────────────────────────────────────────┐
+│  GORM ORM + SQLite                                   │
+│  • Type-safe queries · migrations · relations        │
+│  • GORM Studio — visual DB browser at /studio        │
+│  • Offline-first by default                          │
+└──────────────────────────────────────────────────────┘
+                          ↓
+┌──────────────────────────────────────────────────────┐
+│  OS Native APIs                                      │
+└──────────────────────────────────────────────────────┘
+```
+
+### What you actually get
+
+When you run `grit new-desktop myapp`, the scaffolded project includes:
+
+- **`main.go`** — Wails entry point, fully configured
+- **`app.go`** — App struct with bound methods exposed to the frontend
+- **`internal/db/db.go`** — GORM database setup with SQLite
+- **`internal/models/`** — Pre-built User, Blog, and Contact models with AutoMigrate
+- **`internal/services/`** — Authentication service, CRUD services
+- **`internal/types/`** — Shared request/response types
+- **`frontend/src/routes/`** — File-based routing with TanStack Router
+- **`frontend/src/hooks/`** — TanStack Query hooks for every backend method
+- **`frontend/src/components/`** — Reusable UI components
+- **`cmd/studio/`** — GORM Studio standalone server
+
+Two commands and you're shipping:
+
+```bash
+$ grit new-desktop myapp
+$ cd myapp && wails dev
+```
+
+The window opens. Hot reload works for both Go and React. Authentication works. The dashboard loads. The CRUD pages work. You can register a user, log in, and see the database visually with `grit studio`.
+
+### The CRUD generator
+
+This is where Grit really shines for productivity. Need a new resource? One command:
+
+```bash
+$ grit gen resource Product
+```
+
+You get a Go model, AutoMigrate config, service layer, exposed methods, TypeScript types, and React Query hooks — all wired up. The kind of work that takes hours in most frameworks takes seconds in Grit.
+
+### Real apps shipping on this stack
+
+Two production examples I&apos;ve shipped with this exact architecture:
+
+**Rental Manager — multi-client SaaS for HMK Estates** (a Ugandan property operator). One Go backend powers a Next.js web app, a Wails desktop app, and an Expo iOS / Android app. See the [full case study](/blog/desktop-app-development-uganda-rental-manager).
+
+![Rental Manager — Wails desktop app for HMK Estates, built with the Grit Framework](/desktop_frameworks/rental-manager.png)
+
+**BMS IMEI Tracking Dashboard** — internal fleet-management desktop app with offline-first SQLite, JWT auth, and a real-time tracking dashboard. The whole thing scaffolded in one command and shipped to client devices in a single ~10MB binary.
+
+![BMS IMEI Tracking Dashboard — Wails desktop app built with Grit Framework](/desktop_frameworks/bms-imei-tracking-dashboard.png)
+
+### The numbers
+
+- **Bundle size**: 5–10 MB
+- **RAM at startup**: 20–50 MB
+- **Cold start**: < 0.5 seconds
+- **Backend language**: Go
+- **Time-to-first-real-feature**: minutes, not days
+
+### When Grit is the right choice
+
+Honestly? Almost every desktop app project benefits from Grit:
+
+- You want the smallest possible bundle and fastest startup.
+- You want a backend language that's simple to learn and pleasant to write.
+- You want auth, CRUD, ORM, and a DB browser already wired up.
+- You want to grow into multi-client (web, mobile, desktop) without changing frameworks.
+- You want to ship in a weekend, not a month.
+
+The only reason **not** to pick Grit is if you have a hard constraint that rules out Go (your team is locked into another backend stack) or if your project is so unusual that a scaffolded template would get in your way more than it helps.
+
+---
+
+## The side-by-side comparison
+
+![Electron vs Tauri vs Wails vs Grit Framework — side-by-side comparison of bundle size, RAM, startup time and backend language](/desktop_frameworks/desktop_framework_comparison.png)
+
+Here's everything in one table:
+
+| Dimension                | Electron             | Tauri              | Wails              | Grit Framework                     |
+| ------------------------ | -------------------- | ------------------ | ------------------ | ---------------------------------- |
+| **Engine**               | Chromium (bundled)   | OS WebView         | OS WebView         | OS WebView                         |
+| **Bundle size**          | 150–250 MB           | 5–15 MB            | 5–15 MB            | **5–10 MB**                        |
+| **RAM at startup**       | 150–500 MB           | 30–100 MB          | 25–80 MB           | **20–50 MB**                       |
+| **Cold start**           | 2–5 s                | 0.5–1 s            | < 0.5 s            | **< 0.5 s**                        |
+| **Backend language**     | JavaScript           | Rust               | Go                 | **Go**                             |
+| **Frontend**             | Any                  | Any                | Any                | **React + TanStack (pre-wired)**   |
+| **IPC overhead**         | Process-level        | JSON serialization | Direct binding     | **Direct binding**                 |
+| **Auth included**        | No                   | No                 | No                 | **Yes (JWT + OAuth + 2FA + RBAC)** |
+| **ORM included**         | No                   | No                 | No                 | **Yes (GORM + SQLite)**            |
+| **DB browser**           | No                   | No                 | No                 | **Yes (GORM Studio)**              |
+| **CRUD generator**       | No                   | No                 | No                 | **Yes**                            |
+| **Single-binary deploy** | No (bundles)         | Yes                | Yes                | **Yes**                            |
+| **Learning curve**       | Low (if you know JS) | High (Rust)        | Low (Go is simple) | **Low (Go + conventions)**         |
+
+### How each generation evolved
+
+Reading the table left to right tells a story:
+
+- **Electron** wrapped a full Chromium per window — universal, but huge.
+- **Tauri** dropped Chromium for the OS WebView — but added JSON IPC overhead and Rust complexity.
+- **Wails** kept the OS WebView, swapped Rust for Go, and replaced JSON IPC with direct method binding — but left you to wire up auth, CRUD, and the database yourself.
+- **Grit Framework** took everything Wails got right and pre-built every battery — turning a clean slate into a production-ready app in one command.
+
+---
+
+## So which one should you pick?
+
+If you read this whole article you can probably guess my answer, but here it is explicitly:
+
+**For 95% of desktop app projects in 2026, Grit Framework is the right choice.** You get the smallest bundle, the fastest startup, a backend language that's actually pleasant to write, and a fully wired-up scaffold that saves you a week of setup work on day one.
+
+The exceptions:
+
+- **Pick Electron** if your team is 100% JavaScript with zero appetite to learn anything else, and bundle size genuinely doesn't matter for your audience.
+- **Pick raw Tauri** if your team already writes Rust and you need the specific capability-based security model.
+- **Pick raw Wails** if you have unusual architectural requirements that don't fit a scaffolded template, or you specifically want to wire everything from scratch.
+
+For everyone else — startups, indie developers, solo founders, internal tooling teams, anyone shipping a real product — Grit is the obvious choice. The same architectural advantages, none of the setup overhead.
+
+---
+
+## Try it yourself
+
+The fastest way to feel the difference is to scaffold a project and watch it run:
+
+```bash
+# Install prerequisites
+$ go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+# Scaffold a complete desktop app
+$ grit new-desktop myapp
+
+# Start it
+$ cd myapp
+$ wails dev
+```
+
+In under five minutes you'll have a desktop window running with authentication, a dashboard, CRUD pages, hot reload for both Go and React, and a visual database browser one command away. That's the entire point of Grit — to compress that first week of plumbing into the first five minutes.
+
+---
+
+## Resources
+
+- **Grit Framework website**: [gritframework.dev](https://gritframework.dev)
+- **Desktop documentation**: [gritframework.dev/docs/desktop/getting-started](https://gritframework.dev/docs/desktop/getting-started)
+- **Stack Selector** (pick the right Grit combo): [gritframework.dev/docs/stack-selector](https://gritframework.dev/docs/stack-selector)
+- **GitHub**: [github.com/MUKE-coder/grit](https://github.com/MUKE-coder/grit)
+- **Wails**: [wails.io](https://wails.io)
+- **Tauri**: [tauri.app](https://tauri.app)
+- **Electron**: [electronjs.org](https://electronjs.org)
+
+---
+
+_If this article saved you a weekend of evaluating frameworks, share it with someone else who's about to start a desktop app project. And if you want to see Grit in action, check out the 17-minute video walkthrough on YouTube where I build a complete desktop app from scratch using each of these four frameworks._
