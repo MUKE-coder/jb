@@ -19,6 +19,8 @@ export const TECH_STACK: TechStack[] = [
     title: "Golang",
     href: "https://go.dev/",
     categories: ["Language", "Backend"],
+    isLocal: true,
+    iconFile: "go.svg",
   },
   {
     key: "nodejs",
@@ -84,12 +86,16 @@ export const TECH_STACK: TechStack[] = [
     title: "GitHub Actions",
     href: "https://github.com/features/actions",
     categories: ["CI/CD"],
+    isLocal: true,
+    iconFile: "github-actions.svg",
   },
   {
     key: "cloudflare",
     title: "Cloudflare",
     href: "https://www.cloudflare.com/",
     categories: ["DNS", "Edge"],
+    isLocal: true,
+    iconFile: "cloudflare-icon.svg",
   },
 
   {

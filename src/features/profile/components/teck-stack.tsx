@@ -53,7 +53,7 @@ export function TeckStack() {
                       </>
                     ) : tech.isLocal ? (
                       <Image
-                        src={`/icons/${tech.key}.png`}
+                        src={`/icons/${tech.iconFile ?? `${tech.key}.png`}`}
                         alt={`${tech.title} icon`}
                         width={32}
                         height={32}
