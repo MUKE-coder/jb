@@ -25,7 +25,8 @@ updatedAt: 2026-05-07
 6. [Part 3 — Is Your Local Machine Compromised?](#part-3--is-your-local-machine-compromised)
 7. [Part 4 — Ongoing Monitoring Habits](#part-4--ongoing-monitoring-habits)
 8. [Part 5 — Emergency Response Playbook](#part-5--emergency-response-playbook)
-9. [Master Security Checklist](#master-security-checklist)
+9. [Part 6 — Recovery: What to Do If You Lose Your SSH Key](#part-6--recovery-what-to-do-if-you-lose-your-ssh-key)
+10. [Master Security Checklist](#master-security-checklist)
 
 ---
 
@@ -464,29 +465,73 @@ find / -type f -mtime -7 2>/dev/null \
 
 ## Part 2 — Protection Setup: How to Harden Your Server
 
-### Protection 1 — SSH Key Authentication (Critical)
+### Protection 1 — SSH Key Authentication with Named Keys (Critical)
 
-**Why:** Eliminates password brute-force attacks entirely.
+**Why:** Eliminates password brute-force attacks entirely. Using a **named key per server** instead of the default `id_ed25519` means you can tell at a glance which key belongs to which machine, rotate or revoke a single server's access without touching the others, and avoid the classic mistake of reusing one master key everywhere.
 
-**Step 1 — Generate key on your local machine:**
+#### Step 1 — Generate a named key on your local machine
 
-```bash
-ssh-keygen -t ed25519 -C "your_email@example.com"
-```
-
-**Step 2 — Copy to server:**
+Pick a name that identifies the server (e.g. `prod-api`, `myapp-vps`, `client-acme`). The convention is `<purpose>_ed25519`.
 
 ```bash
-ssh-copy-id root@your_server_ip
+ssh-keygen -t ed25519 \
+  -f ~/.ssh/myapp-vps_ed25519 \
+  -C "myapp-vps@$(hostname) - $(date +%Y-%m-%d)"
 ```
 
-**Step 3 — Test in a NEW terminal window:**
+What each flag does:
+
+- **`-t ed25519`** — the algorithm. Ed25519 is faster, shorter, and at least as secure as RSA 4096. Always pick this in 2026 unless you have a specific reason not to.
+- **`-f ~/.ssh/myapp-vps_ed25519`** — the filename. This is what creates the **named key** — the file is now `myapp-vps_ed25519` (private) and `myapp-vps_ed25519.pub` (public) instead of the generic `id_ed25519`.
+- **`-C "myapp-vps@$(hostname) - $(date +%Y-%m-%d)"`** — the comment baked into the public key. When you cat `authorized_keys` later, the comment tells you which key it is and when it was made. Format it however you like — purpose, machine, date.
+
+You'll be prompted for a passphrase. **Always set one** — it encrypts the private key on disk so a stolen laptop doesn't equal a stolen key.
+
+#### Step 2 — Copy the public key to the server
 
 ```bash
-ssh -i ~/.ssh/id_ed25519 root@your_server_ip
+ssh-copy-id -i ~/.ssh/myapp-vps_ed25519.pub root@your_server_ip
 ```
 
-**Step 4 — Only after confirming key works, disable passwords:**
+`-i ~/.ssh/myapp-vps_ed25519.pub` makes sure you copy the **named** public key (otherwise `ssh-copy-id` copies every key in `~/.ssh/`).
+
+#### Step 3 — Add an entry in `~/.ssh/config` for one-word access
+
+This is the productivity payoff. Once configured, you ssh into the server by name — no flags, no IP, no `-i` needed.
+
+```bash
+nano ~/.ssh/config
+```
+
+Append:
+
+```ssh-config
+Host myapp-vps
+    HostName        123.45.67.89
+    User            root
+    Port            22
+    IdentityFile    ~/.ssh/myapp-vps_ed25519
+    IdentitiesOnly  yes
+```
+
+- **`Host myapp-vps`** — the short alias you'll type.
+- **`HostName`** — the server IP (or domain).
+- **`IdentityFile`** — points at your named private key.
+- **`IdentitiesOnly yes`** — tells SSH "only try this key, don't offer every key in `~/.ssh/`". This avoids "Too many authentication failures" errors when you have several keys and Fail2Ban is watching.
+
+If you later change the SSH port to 2299 (Protection 6 below), just bump the `Port` line.
+
+#### Step 4 — Test the named key in a NEW terminal window
+
+**Do not close your current SSH session.** Open a brand new terminal and try the alias:
+
+```bash
+ssh myapp-vps
+```
+
+If you see the server prompt, the named key works. If anything fails, fix it from the still-open original session before moving on.
+
+#### Step 5 — Only after confirming the key works, disable passwords
 
 ```bash
 sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -501,6 +546,8 @@ systemctl restart ssh
 sshd -T | grep passwordauthentication
 # Expected: passwordauthentication no
 ```
+
+> ⚠️ **Before you disable passwords, read [Part 6 — Recovery: what to do if you lose your SSH key](#part-6--recovery-what-to-do-if-you-lose-your-ssh-key) below.** Once `PasswordAuthentication no` is set and your key is gone, SSH is no longer an option — you have to recover through the VPS console.
 
 ---
 
@@ -1069,6 +1116,114 @@ ps aux --sort=-%cpu | head -10
 ss -tnp
 fail2ban-client status sshd
 ```
+
+---
+
+## Part 6 — Recovery: What to Do If You Lose Your SSH Key
+
+This is the scenario that scares people away from disabling password authentication: **your laptop dies, your key is gone, and the server only accepts SSH keys.** SSH is locked. Now what?
+
+Good news — you are **never actually locked out**. SSH is just one access path. The VPS itself is still running, and every cloud provider gives you at least one out-of-band way back in: a browser console, a rescue boot, a metadata API, or support. The trick is knowing which lever to pull.
+
+This section gives you the playbook, ordered by speed and reliability.
+
+### Recovery option 1 — VPS web console (5 minutes, works everywhere)
+
+Every major VPS provider has a **browser-based console** that connects directly to your server's virtual screen and keyboard — no SSH involved. You log in with your normal **root password** (the one you set in the provider's panel when the server was created — not the SSH password, the provider account password).
+
+Provider quick links:
+
+- **Contabo** → Customer Control Panel → Your VPS → **VNC Console** (sometimes labelled "Console" or "Remote Console").
+- **Hetzner** → Cloud Console → your server → **Console** (top right).
+- **DigitalOcean** → Droplet → **Access → Launch Recovery Console** or **Console**.
+- **Linode** → Linode → **Launch LISH Console**.
+- **AWS Lightsail / EC2** → "Connect using SSH" → falls back to browser-based **EC2 Instance Connect** or **Session Manager**.
+
+Once you have a console shell, the recovery is short:
+
+```bash
+# 1. Make sure you're root (or sudo to root)
+sudo -i
+
+# 2. Add your NEW public key to authorized_keys
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+echo "ssh-ed25519 AAAA…YOUR_NEW_PUBLIC_KEY… you@laptop" >> /root/.ssh/authorized_keys
+chmod 600 /root/.ssh/authorized_keys
+
+# 3. (Optional) Temporarily re-enable password auth as a backup
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+systemctl restart ssh
+```
+
+Now test the new key over SSH from your laptop, and once it works, flip `PasswordAuthentication` back to `no` and restart `ssh` again.
+
+> The web console expects you to know the **root password** that was set when the server was provisioned. If you never set one (or never recorded it), use Recovery Option 2.
+
+### Recovery option 2 — Reset the root password from the provider panel
+
+If you don't remember the root password, every major provider lets you **reset it from outside the VM**, then power-cycle the server so the new password takes effect:
+
+- **Contabo** → VPS → **Reset Password** (sends the new root password to your account email).
+- **Hetzner** → Server → **Reset root password** (returns the new password in the panel).
+- **DigitalOcean** → Droplet → **Access → Reset root password** (emails it to you).
+- **Linode** → Linode → **Settings → Reset Root Password**.
+
+After the reset, **reboot the VM** from the panel. Wait two minutes, then open the web console and log in with the new password. From there, follow the same three commands as Recovery Option 1 (add new key, optional password-auth toggle, restart ssh).
+
+### Recovery option 3 — Rescue / single-user boot (for tougher cases)
+
+If the password reset doesn't work (rare, but happens when the VM's filesystem is in a weird state), boot the VPS into **rescue mode**. This boots a small live Linux image with your disk mounted as a regular partition — you become root automatically and can edit any file.
+
+The rough flow on most providers:
+
+1. In the provider panel, click **Rescue** / **Boot from rescue ISO** / **Single user mode**.
+2. Reboot the VPS. You're dropped into the rescue shell.
+3. Mount your real disk:
+   ```bash
+   # Usually /dev/sda1 or /dev/vda1 — `lsblk` shows you the layout
+   mount /dev/sda1 /mnt
+   ```
+4. Edit SSH config to re-enable passwords (so you can get back in normally afterwards):
+   ```bash
+   sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /mnt/etc/ssh/sshd_config
+   ```
+5. Or append your new public key directly:
+   ```bash
+   mkdir -p /mnt/root/.ssh
+   echo "ssh-ed25519 AAAA…NEW_KEY…" >> /mnt/root/.ssh/authorized_keys
+   chmod 700 /mnt/root/.ssh
+   chmod 600 /mnt/root/.ssh/authorized_keys
+   ```
+6. Reboot back to normal mode from the panel.
+
+### Recovery option 4 — Cloud-init / metadata SSH key injection
+
+Newer VPS images ship with **cloud-init**, which re-reads the SSH keys configured in the provider panel on every boot. On these images you can:
+
+1. In the provider panel, **add a new SSH key** to your account / project.
+2. Attach it to the server (DigitalOcean, Linode, Hetzner all support this).
+3. Reboot the VPS.
+
+cloud-init will read the metadata service on boot and write the new key into `/root/.ssh/authorized_keys` for you. This works without ever opening a console.
+
+Not all images support this (older Ubuntu Minimal or custom-built images may not have cloud-init). If you don't see your panel-managed SSH keys appearing on the server, fall back to Option 1.
+
+### Recovery option 5 — Contact provider support
+
+The last resort if nothing above works (rare). All paid VPS providers have support tickets that can get you back in. Mention you've lost SSH access and provide proof of account ownership.
+
+### Prevention is cheaper than recovery
+
+Before you ever need this section:
+
+- **Always keep at least two named SSH keys** registered with each server (e.g. `myapp-vps_ed25519` on your laptop **and** a `backup_ed25519` stored on a second machine or encrypted USB).
+- **Back up your `~/.ssh/` directory** to a password-protected archive — Bitwarden's secure attachments, an encrypted ZIP on cloud storage, or [age](https://age-encryption.org/) into your password manager.
+- **Record the provider root password** in your password manager the day you create the VPS. The web console is your fail-safe — don't lose the key to the fail-safe.
+- **Document recovery steps for each server** in a private repo or vault — provider, control-panel URL, web-console path. When you need it, you'll be panicking; the doc removes the thinking.
+- **Test the web console once** on a non-critical server. Five minutes of practice now beats an hour of fumbling at 2am.
+
+If you do all of the above, losing a laptop is an annoyance, not a crisis.
 
 ---
 
