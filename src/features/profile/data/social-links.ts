@@ -60,4 +60,18 @@ export const TOOLS_LINKS: SocialLink[] = [
       "An interactive sandbox with a code editor, file explorer, and live preview for Next.js.",
     href: "/sandbox",
   },
+  {
+    icon: "/github.webp",
+    title: "Vibekit",
+    description:
+      "Open-source Next.js dev toolkit — curated UI components, patterns, and starter templates for shipping production apps fast. Live demo at vibekit.desishub.com.",
+    href: "https://vibekit.desishub.com",
+  },
+  {
+    icon: "/github.webp",
+    title: "Vibekit Native",
+    description:
+      "Open-source Expo + React Native toolkit — the mobile sibling of Vibekit. Batteries-included components and starters for shipping native iOS and Android apps.",
+    href: "https://native.desishub.com",
+  },
 ];

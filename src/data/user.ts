@@ -88,7 +88,8 @@ In 2026, I built several open source projects I'm especially proud of:
 - **[Orbita](https://github.com/MUKE-coder/orbita)** — A self-hosted Platform-as-a-Service (PaaS) built in Go that enables developers to manage multiple isolated client organizations on a single VPS, with multi-tenancy, RBAC, Docker deployment, database management, and cron job scheduling.
 - **[Pulse](https://github.com/MUKE-coder/pulse)** — A self-hosted observability and performance monitoring SDK for Go applications. Provides request tracing, database query analysis, runtime metrics, error tracking, and a real-time dashboard with zero external dependencies.
 - **[Grit CMS](https://github.com/MUKE-coder/gritcms)** — A modern, batteries-included content management system built on the Grit Framework. Designed to power websites, blogs, and marketing sites with a clean admin UI and flexible content modeling.
-- **[Vibe Kit](https://github.com/MUKE-coder/vibekit)** — A developer toolkit for shipping beautiful, production-ready apps faster. Bundles curated UI components, patterns, and starter templates for modern fullstack projects.
+- **[Vibekit](https://vibekit.desishub.com)** ([GitHub](https://github.com/MUKE-coder/vibekit)) — A developer toolkit for shipping beautiful, production-ready Next.js apps faster. Curated UI components, patterns, and starter templates for modern fullstack projects.
+- **[Vibekit Native](https://native.desishub.com)** ([GitHub](https://github.com/MUKE-coder/vibekit-native)) — The mobile sibling of Vibekit. A React Native + Expo toolkit with batteries-included components and starters for shipping native iOS and Android apps fast.
 
 ### Current Projects
 
