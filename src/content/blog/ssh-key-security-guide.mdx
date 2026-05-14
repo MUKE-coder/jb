@@ -549,6 +549,124 @@ sshd -T | grep passwordauthentication
 
 > ⚠️ **Before you disable passwords, read [Part 6 — Recovery: what to do if you lose your SSH key](#part-6--recovery-what-to-do-if-you-lose-your-ssh-key) below.** Once `PasswordAuthentication no` is set and your key is gone, SSH is no longer an option — you have to recover through the VPS console.
 
+#### Step 6 — How to copy your existing SSH key so you can back it up
+
+Once everything works, you should immediately **back up the private key** to a safe place (password manager, encrypted USB, secure cloud vault). Here's how to view and copy any key you have on disk — whether it's the default `~/.ssh/id_ed25519` or a named one like `~/.ssh/grit_managed_deploy`.
+
+> 🔐 **Private key handling rules.** The private key (the file **without** `.pub`) is the secret. Treat it like a password:
+>
+> - **Never** paste a private key into chat, Slack, Discord, email, ChatGPT, GitHub Issues, or a public gist.
+> - **Never** commit it to a git repo.
+> - The matching `.pub` file is **safe to share** — that's the one that goes onto servers.
+
+**1. List what keys you actually have:**
+
+```bash
+ls -la ~/.ssh/
+```
+
+You'll see pairs like `id_ed25519` + `id_ed25519.pub`, or `grit_managed_deploy` + `grit_managed_deploy.pub`. The file **without** `.pub` is the private key; the one **with** `.pub` is the public key.
+
+**2. View a key in your terminal (so you can read it):**
+
+```bash
+# Private key — KEEP SECRET
+cat ~/.ssh/grit_managed_deploy
+
+# Public key — safe to share
+cat ~/.ssh/grit_managed_deploy.pub
+```
+
+A private Ed25519 key looks like this (truncated):
+
+```
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+...
+-----END OPENSSH PRIVATE KEY-----
+```
+
+**3. Copy a key straight to your clipboard:**
+
+The cleanest way to back up a key is to copy it to the system clipboard, then paste it into your password manager (Bitwarden, 1Password, KeePassXC — all support secure notes / attachments).
+
+**macOS:**
+
+```bash
+# Private key → clipboard
+pbcopy < ~/.ssh/grit_managed_deploy
+
+# Public key → clipboard
+pbcopy < ~/.ssh/grit_managed_deploy.pub
+```
+
+**Linux (most distros, requires `xclip` or `wl-clipboard`):**
+
+```bash
+# X11
+xclip -selection clipboard < ~/.ssh/grit_managed_deploy
+
+# Wayland
+wl-copy < ~/.ssh/grit_managed_deploy
+```
+
+If neither is installed: `sudo apt install xclip` (Debian/Ubuntu) or `sudo dnf install wl-clipboard` (Fedora).
+
+**Windows (PowerShell):**
+
+```powershell
+# Replace the filename with whatever key you want
+Get-Content $HOME\.ssh\grit_managed_deploy | Set-Clipboard
+```
+
+**Windows (Git Bash / WSL):**
+
+```bash
+cat ~/.ssh/grit_managed_deploy | clip.exe
+```
+
+**4. Make a portable encrypted backup:**
+
+If you'd rather copy the file itself somewhere (USB drive, Nextcloud, Dropbox), **encrypt it first** so a lost drive doesn't equal a lost key. Two good options:
+
+**Option A — `age` (modern, simple, recommended):**
+
+```bash
+# Install once: brew install age   |   sudo apt install age
+age -p ~/.ssh/grit_managed_deploy > grit_managed_deploy.age
+# You'll be prompted for a passphrase — pick a strong one and store it in your password manager.
+
+# To restore later:
+age -d grit_managed_deploy.age > ~/.ssh/grit_managed_deploy
+chmod 600 ~/.ssh/grit_managed_deploy
+```
+
+**Option B — `gpg`:**
+
+```bash
+gpg --symmetric --cipher-algo AES256 ~/.ssh/grit_managed_deploy
+# Produces grit_managed_deploy.gpg — safe to upload anywhere.
+
+# To restore later:
+gpg --decrypt grit_managed_deploy.gpg > ~/.ssh/grit_managed_deploy
+chmod 600 ~/.ssh/grit_managed_deploy
+```
+
+**5. (Recommended) Save the matching public key as a separate note**
+
+You'll need the `.pub` content to add the key to a new server later. Just `cat` it and save the text to your password manager alongside the encrypted private key. Public keys are not secret.
+
+**6. Tell yourself what you backed up**
+
+In the password-manager note alongside the encrypted backup, write:
+
+- Which key this is (e.g. "grit_managed_deploy")
+- Which servers/services it's authorised on
+- When it was created
+- The passphrase to decrypt it (if different from the SSH passphrase)
+
+When future-you needs to recover, this note is the difference between "5 minutes" and "two hours of guessing".
+
 ---
 
 ### Protection 2 — Fail2Ban (Critical)
