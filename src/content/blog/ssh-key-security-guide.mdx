@@ -1,0 +1,1153 @@
+---
+title: "The Complete Linux Server Security Guide: SSH Keys, Fail2Ban & Beyond"
+description: "A real-world Linux server hardening guide written from an actual server compromise and recovery on a Contabo VPS. SSH key authentication, Fail2Ban, iptables firewall, compromise detection, forensic cleanup, and a master checklist — every command tested on Ubuntu 24.04."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfZItTXOU9C3gHFdyzTE0q7PpDnjchu6XsKk1l
+category: tutorial
+createdAt: 2026-05-07
+updatedAt: 2026-05-07
+---
+
+# The Complete Linux Server Security Guide: SSH Keys, Fail2Ban & Beyond
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — written after a real Contabo VPS compromise and forensic cleanup.**
+
+**A real-world hardening guide — written from an actual server compromise and recovery.**
+
+---
+
+## Table of Contents
+
+1. [Real World Incident Report](#real-world-incident-report)
+2. [How the Attack Happened](#how-the-attack-happened)
+3. [The Takedown Strategy](#the-takedown-strategy)
+4. [Part 1 — Security Checklist: Is Your Server Safe Right Now?](#part-1--security-checklist-is-your-server-safe-right-now)
+5. [Part 2 — Protection Setup: How to Harden Your Server](#part-2--protection-setup-how-to-harden-your-server)
+6. [Part 3 — Is Your Local Machine Compromised?](#part-3--is-your-local-machine-compromised)
+7. [Part 4 — Ongoing Monitoring Habits](#part-4--ongoing-monitoring-habits)
+8. [Part 5 — Emergency Response Playbook](#part-5--emergency-response-playbook)
+9. [Master Security Checklist](#master-security-checklist)
+
+---
+
+## Real World Incident Report
+
+This guide was born from a real server compromise. Here is exactly what happened.
+
+### The Setup
+
+A Cloud VPS running Ubuntu 24 was provisioned with default password-based SSH authentication. The server hosted a Node.js application, several Docker containers, a PostgreSQL database, and a Redis cache — a typical production stack.
+
+### The Abuse Report
+
+Two weeks after provisioning, the hosting provider (Contabo) sent an abuse complaint. The server's IP (213.136.89.197) had been detected launching FTP brute-force attacks against over **160 other servers**, attempting to guess passwords using usernames like `admin`, `feinisnack`, and `octeniderm` — running almost continuously for over 10 hours.
+
+The server was suspended.
+
+### What the Forensic Investigation Found
+
+After regaining access, a full investigation revealed a **professional multi-stage hacking operation** had been running on the server:
+
+**1. Perl IRC Botnet**
+A Perl script disguised as `/sbin/syslogd` had been running since May 1st — 13 days. It was connected to an IRC command-and-control server at `192.253.248.9` on port `6667`. The attacker was sending commands through an IRC channel, instructing the server to attack targets. The script had deleted itself after launching to avoid detection, leaving no file on disk — only a running process.
+
+**2. FTP Brute-Force Toolkit**
+Hidden directories `/tmp/.dar` and `/tmp/.eroz` contained:
+
+- Compiled Go executables named `bomb` and `brute`
+- Hundreds of millions of target IP addresses across multiple text files
+- Lists of successfully compromised FTP credentials
+- Password lists used for the attacks
+
+This was the toolkit that caused the Contabo abuse complaint.
+
+**3. WHM/cPanel Cracking Operation**
+Hidden in `/tmp/.ad/fastwhm`:
+
+- A Go-based tool targeting WHM hosting control panels
+- A 54MB list of hosting domains to attack
+- `GOOD.TXT` — a file of successfully hacked cPanel accounts
+- An `upload` executable for deploying shells to compromised websites
+
+**4. Root Backdoor Account**
+An account named `mtab` had been created with full root privileges (UID 0), disguised to look like a system file reference. This gave the attacker a persistent backdoor even if the SSH password was changed.
+
+### The Scale of Damage
+
+The server had been used to:
+
+- Attack **160+ servers** via FTP brute force
+- Attempt to compromise **millions of IP addresses**
+- Crack **WHM/cPanel hosting panels** across hundreds of domains
+- Store **gigabytes of stolen credentials**
+
+All of this was running silently in the background while the legitimate application continued working normally.
+
+---
+
+## How the Attack Happened
+
+The attack chain followed a classic sequence:
+
+```
+Internet Scanner
+      │
+      ▼
+Found port 22 open
+      │
+      ▼
+Brute-forced root password (default/weak)
+      │
+      ▼
+Gained root access
+      │
+      ▼
+Downloaded attack toolkit to /tmp (hidden directories)
+      │
+      ▼
+Launched Perl IRC bot (disguised as syslogd)
+      │
+      ▼
+Created backdoor user 'mtab' with UID 0
+      │
+      ▼
+Received commands via IRC → launched FTP attacks
+      │
+      ▼
+Collected stolen credentials → cracked cPanel panels
+      │
+      ▼
+Server suspended by hosting provider for abuse
+```
+
+The entire compromise was enabled by one thing: **password-based SSH authentication on port 22 with no brute-force protection.**
+
+---
+
+## The Takedown Strategy
+
+Here is the exact step-by-step strategy used to identify, neutralize, and clean the compromised server.
+
+### Phase 1 — Reconnaissance (Know Before You Act)
+
+Before touching anything, assess the full situation:
+
+```bash
+# Who is currently logged in?
+w
+who -a
+
+# What processes are consuming the most CPU?
+ps aux --sort=-%cpu | head -20
+
+# What outgoing connections does the server have?
+ss -tnp
+
+# What failed login attempts have there been?
+lastb | head -30
+```
+
+**Key find:** `ps aux` revealed `/sbin/syslogd` using 99.7% CPU — a process that shouldn't exist.
+
+### Phase 2 — Identify the Threat
+
+```bash
+# The binary doesn't exist on disk — deleted after launch
+ls -la /sbin/syslogd
+# Result: No such file or directory
+
+# But we can find the real binary through /proc
+ls -la /proc/2074135/exe
+# Result: /proc/2074135/exe -> /usr/bin/perl
+
+# Read the full command
+cat /proc/2074135/cmdline | tr '\0' ' '
+
+# Check its network connections
+ss -tnp | grep 2074135
+# Result: ESTAB 213.136.89.197:59086 → 192.253.248.9:6667
+```
+
+Port 6667 = IRC. This confirmed a Perl IRC botnet phoning home to an attacker's server.
+
+### Phase 3 — Cut the Connection First
+
+Before killing the process, block the attacker's server permanently:
+
+```bash
+iptables -A OUTPUT -d 192.253.248.9 -j DROP
+```
+
+### Phase 4 — Kill the Malware
+
+```bash
+kill -9 2074135
+ps aux | grep syslogd  # Verify it's gone
+```
+
+### Phase 5 — Hunt the Toolkit
+
+```bash
+# Check all temp directories for hidden folders
+ls -la /tmp/
+ls -la /var/tmp/
+
+# Investigate every hidden directory
+ls -laR /tmp/.ad
+ls -laR /tmp/.dar
+ls -laR /tmp/.eroz
+ls -laR /tmp/.popo
+
+# Read any scripts
+find /tmp/.ad /tmp/.dar /tmp/.eroz /tmp/.popo -type f | xargs cat 2>/dev/null
+```
+
+**Found:** Four hidden directories containing the complete attack toolkit.
+
+### Phase 6 — Destroy the Toolkit
+
+```bash
+rm -rf /tmp/.ad /tmp/.dar /tmp/.eroz /tmp/.popo
+```
+
+### Phase 7 — Find and Remove the Backdoor
+
+```bash
+# Check for unexpected user accounts
+cat /etc/passwd | grep -v nologin | grep -v false
+
+# Found: mtab:x:0:1000::/home/mtab:/bin/sh
+# UID 0 = full root access
+
+# Remove it directly from passwd and shadow
+sed -i '/^mtab:/d' /etc/passwd
+sed -i '/^mtab:/d' /etc/shadow
+userdel -r mtab 2>/dev/null
+rm -rf /home/mtab
+```
+
+### Phase 8 — Harden and Lock Down
+
+Install all protections (covered in detail in Part 2):
+
+```bash
+# SSH keys, disable passwords, Fail2Ban, firewall
+```
+
+### Phase 9 — Verify and Reboot
+
+```bash
+# Verify no suspicious processes remain
+ps aux --sort=-%cpu | head -10
+
+# Verify no outgoing connections to attacker
+ss -tnp | grep -v "127.0.0.1\|YOUR_IP"
+
+# Reboot to apply kernel updates
+reboot
+```
+
+### Phase 10 — Post-Reboot Verification
+
+```bash
+id mtab               # Should return: no such user
+fail2ban-client status sshd
+iptables -L -n | head -15
+ss -tnp
+```
+
+**Result:** Clean server. Fail2Ban immediately began banning new attackers upon reboot.
+
+---
+
+## Part 1 — Security Checklist: Is Your Server Safe Right Now?
+
+Run through every item below. Each command should return the expected green result. Any red result needs immediate attention.
+
+---
+
+### 🔍 Check 1 — Who Is Currently Logged In?
+
+```bash
+w
+who -a
+```
+
+**✅ Green:** Only your own IP addresses appear in active sessions.
+**🔴 Red:** Unknown IPs or unknown usernames — someone else may be on your server.
+
+---
+
+### 🔍 Check 2 — Are There Suspicious Processes Running?
+
+```bash
+ps aux --sort=-%cpu | head -20
+```
+
+**✅ Green:** Only known processes — your app, docker, nginx, postgres, etc.
+**🔴 Red:** Any of the following are serious red flags:
+
+- Unknown process consuming high CPU
+- Process names that sound like system tools but feel wrong (syslogd, kworker variants)
+- `perl`, `python`, `bash` running as root with no clear purpose
+
+Investigate any suspicious process:
+
+```bash
+ls -la /proc/PROCESS_ID/exe
+cat /proc/PROCESS_ID/cmdline | tr '\0' ' '
+ss -tnp | grep PROCESS_ID
+```
+
+---
+
+### 🔍 Check 3 — Are There Outgoing Connections to Unknown Servers?
+
+```bash
+ss -tnp
+```
+
+**✅ Green:** Only connections to known services (your database, APIs, etc.)
+**🔴 Red:** Any ESTABLISHED connection to an unknown IP, especially on ports:
+
+- `6667` = IRC botnet command and control
+- `4444`, `1234`, `31337` = classic backdoor ports
+- Any connection your app should not be making
+
+---
+
+### 🔍 Check 4 — Are There Failed Login Attempts?
+
+```bash
+lastb | head -30
+```
+
+**✅ Green:** Few or no entries — or Fail2Ban is already banning the attackers.
+**🔴 Red:** Hundreds of failed attempts from multiple IPs — active brute force attack in progress.
+
+---
+
+### 🔍 Check 5 — Are There Hidden Files in /tmp?
+
+```bash
+ls -la /tmp/
+ls -la /var/tmp/
+```
+
+**✅ Green:** Only system directories (systemd-private-\*, snap-private-tmp, cloud-init).
+**🔴 Red:** Any hidden directory (starting with `.`) that isn't a system directory — especially ones with names like `.ad`, `.dar`, `.popo`, `.x`, `.cache` containing executables.
+
+Check contents of anything suspicious:
+
+```bash
+ls -laR /tmp/.suspicious_dir
+file /tmp/.suspicious_dir/*
+```
+
+---
+
+### 🔍 Check 6 — Are There Unexpected User Accounts?
+
+```bash
+cat /etc/passwd | grep -v nologin | grep -v false
+```
+
+**✅ Green:**
+
+```
+root:x:0:0:root:/root:/bin/bash
+sync:x:4:65534:sync:/bin:/bin/sync
+```
+
+Plus any accounts you personally created.
+
+**🔴 Red:** Any unknown account, especially one with:
+
+- UID 0 (root privileges)
+- A shell like `/bin/bash` or `/bin/sh`
+- A name that looks like a system file (`mtab`, `syslog`, `daemon2`)
+
+---
+
+### 🔍 Check 7 — Are SSH Authorized Keys Clean?
+
+```bash
+cat /root/.ssh/authorized_keys
+```
+
+**✅ Green:** Only your own public key(s) — ones you recognise.
+**🔴 Red:** Any key you did not add. Remove it immediately:
+
+```bash
+nano /root/.ssh/authorized_keys
+# Delete the unknown key line, save and exit
+```
+
+---
+
+### 🔍 Check 8 — Are Cron Jobs Clean?
+
+```bash
+crontab -l
+cat /etc/crontab
+ls -la /etc/cron.d/
+ls -la /etc/cron.hourly/
+ls -la /etc/cron.daily/
+cat /etc/cron.hourly/*
+cat /etc/cron.daily/*
+```
+
+**✅ Green:** Only standard system jobs (logrotate, apt-compat, man-db, sysstat).
+**🔴 Red:** Any cron job running a script from `/tmp`, `/var/tmp`, or running `perl`, `python`, `wget`, `curl` downloading from unknown URLs.
+
+---
+
+### 🔍 Check 9 — Is SSH Password Authentication Disabled?
+
+```bash
+sshd -T | grep passwordauthentication
+```
+
+**✅ Green:** `passwordauthentication no`
+**🔴 Red:** `passwordauthentication yes` — see Part 2 to fix this.
+
+---
+
+### 🔍 Check 10 — Is Fail2Ban Running?
+
+```bash
+fail2ban-client status sshd
+```
+
+**✅ Green:** Shows active monitoring with `Currently failed` and `Banned IP list`.
+**🔴 Red:** Command not found or service not running — see Part 2 to install it.
+
+---
+
+### 🔍 Check 11 — Is the Firewall Active?
+
+```bash
+iptables -L -n | head -20
+```
+
+**✅ Green:** Shows INPUT rules with specific ACCEPT rules and a final DROP rule.
+**🔴 Red:** Empty output or `Chain INPUT (policy ACCEPT)` with no DROP rule — all ports are open to the world.
+
+---
+
+### 🔍 Check 12 — Are System Binaries Intact?
+
+```bash
+dpkg --verify
+```
+
+**✅ Green:** No output (all packages verified).
+**🔴 Red:** Lines starting with `??5??????` indicate a modified system binary — this suggests a rootkit.
+
+---
+
+### 🔍 Check 13 — Were Any Files Recently Modified?
+
+```bash
+find / -type f -mtime -7 2>/dev/null \
+  | grep -v /proc \
+  | grep -v /sys \
+  | grep -v /run \
+  | grep -v /dev \
+  | grep -v /usr/lib/python3 \
+  | grep -v ".pyc"
+```
+
+**✅ Green:** Only log files, your application files, and system update files.
+**🔴 Red:** Modified system binaries in `/bin`, `/sbin`, `/usr/bin`, or unknown files in `/tmp`.
+
+---
+
+## Part 2 — Protection Setup: How to Harden Your Server
+
+### Protection 1 — SSH Key Authentication (Critical)
+
+**Why:** Eliminates password brute-force attacks entirely.
+
+**Step 1 — Generate key on your local machine:**
+
+```bash
+ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+
+**Step 2 — Copy to server:**
+
+```bash
+ssh-copy-id root@your_server_ip
+```
+
+**Step 3 — Test in a NEW terminal window:**
+
+```bash
+ssh -i ~/.ssh/id_ed25519 root@your_server_ip
+```
+
+**Step 4 — Only after confirming key works, disable passwords:**
+
+```bash
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/^#*ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+systemctl restart ssh
+```
+
+**Verify:**
+
+```bash
+sshd -T | grep passwordauthentication
+# Expected: passwordauthentication no
+```
+
+---
+
+### Protection 2 — Fail2Ban (Critical)
+
+**Why:** Automatically bans IPs that repeatedly fail login attempts.
+
+```bash
+apt update && apt install fail2ban -y
+```
+
+Create strict config:
+
+```bash
+nano /etc/fail2ban/jail.local
+```
+
+```ini
+[DEFAULT]
+bantime  = 86400
+findtime = 600
+maxretry = 3
+
+[sshd]
+enabled  = true
+port     = ssh
+logpath  = %(sshd_log)s
+backend  = %(sshd_backend)s
+maxretry = 3
+bantime  = 86400
+```
+
+```bash
+systemctl enable fail2ban
+systemctl restart fail2ban
+fail2ban-client status sshd
+```
+
+**Useful commands:**
+
+```bash
+# See banned IPs
+fail2ban-client status sshd
+
+# Unban yourself if locked out
+fail2ban-client set sshd unbanip YOUR_IP
+
+# Watch live bans
+tail -f /var/log/fail2ban.log
+```
+
+---
+
+### Protection 3 — Firewall with iptables (Critical)
+
+**Why:** Blocks all traffic except what your server specifically needs.
+
+```bash
+# Allow established connections first (prevents lockout)
+iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# Allow SSH
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+
+# Allow HTTP and HTTPS
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+
+# Allow loopback
+iptables -A INPUT -i lo -j ACCEPT
+
+# Drop everything else
+iptables -A INPUT -j DROP
+
+# Make rules permanent
+apt install iptables-persistent -y
+netfilter-persistent save
+```
+
+**Verify:**
+
+```bash
+iptables -L -n --line-numbers
+```
+
+---
+
+### Protection 4 — Keep System Updated (Important)
+
+**Why:** Unpatched vulnerabilities are a primary attack vector.
+
+```bash
+apt update && apt upgrade -y
+```
+
+Enable automatic security updates:
+
+```bash
+apt install unattended-upgrades -y
+dpkg-reconfigure --priority=low unattended-upgrades
+```
+
+Always reboot when a kernel update is available:
+
+```bash
+# Check if reboot is needed
+cat /var/run/reboot-required 2>/dev/null
+```
+
+---
+
+### Protection 5 — Block Known Attacker IPs (Important)
+
+If you identify an attacker's IP or C&C server:
+
+```bash
+# Block all outgoing connections to attacker
+iptables -A OUTPUT -d ATTACKER_IP -j DROP
+
+# Block all incoming connections from attacker
+iptables -A INPUT -s ATTACKER_IP -j DROP
+
+# Save
+netfilter-persistent save
+```
+
+---
+
+### Protection 6 — Change Default SSH Port (Recommended)
+
+**Why:** Eliminates the vast majority of automated scanning noise.
+
+```bash
+nano /etc/ssh/sshd_config
+```
+
+Change:
+
+```bash
+Port 22
+```
+
+To:
+
+```bash
+Port 2299
+```
+
+Allow the new port and restart:
+
+```bash
+iptables -A INPUT -p tcp --dport 2299 -j ACCEPT
+systemctl restart ssh
+```
+
+Connect going forward:
+
+```bash
+ssh -p 2299 root@your_server_ip
+```
+
+---
+
+### Protection 7 — Create a Non-Root Sudo User (Recommended)
+
+**Why:** Running everything as root means any compromise = full access.
+
+```bash
+adduser yourusername
+usermod -aG sudo yourusername
+
+# Copy SSH key to new user
+mkdir -p /home/yourusername/.ssh
+cp /root/.ssh/authorized_keys /home/yourusername/.ssh/
+chown -R yourusername:yourusername /home/yourusername/.ssh
+chmod 700 /home/yourusername/.ssh
+chmod 600 /home/yourusername/.ssh/authorized_keys
+```
+
+Test login as new user in a new terminal, then disable root login:
+
+```bash
+sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+systemctl restart ssh
+```
+
+---
+
+### Protection 8 — Regular Audit Script (Recommended)
+
+Save this script on your server and run it weekly:
+
+```bash
+nano /root/security-audit.sh
+```
+
+```bash
+#!/bin/bash
+echo "======================================"
+echo " SERVER SECURITY AUDIT - $(date)"
+echo "======================================"
+
+echo ""
+echo "--- LOGGED IN USERS ---"
+w
+
+echo ""
+echo "--- TOP CPU PROCESSES ---"
+ps aux --sort=-%cpu | head -10
+
+echo ""
+echo "--- ACTIVE OUTGOING CONNECTIONS ---"
+ss -tnp | grep ESTAB
+
+echo ""
+echo "--- FAIL2BAN STATUS ---"
+fail2ban-client status sshd
+
+echo ""
+echo "--- USER ACCOUNTS WITH SHELLS ---"
+grep -E "/bin/bash|/bin/sh|/bin/zsh" /etc/passwd
+
+echo ""
+echo "--- SSH AUTHORIZED KEYS ---"
+cat /root/.ssh/authorized_keys
+
+echo ""
+echo "--- HIDDEN FILES IN /tmp ---"
+ls -la /tmp/ | grep "^\."
+
+echo ""
+echo "--- RECENT FAILED LOGINS (last 10) ---"
+lastb | head -10
+
+echo ""
+echo "--- FIREWALL STATUS ---"
+iptables -L INPUT -n | head -10
+
+echo ""
+echo "--- SUSPICIOUS PROCESSES ---"
+ps aux | grep -E "hydra|medusa|ncrack" | grep -v grep
+
+echo ""
+echo "======================================"
+echo " AUDIT COMPLETE"
+echo "======================================"
+```
+
+```bash
+chmod +x /root/security-audit.sh
+```
+
+Run anytime:
+
+```bash
+bash /root/security-audit.sh
+```
+
+---
+
+## Part 3 — Is Your Local Machine Compromised?
+
+Your server is only as safe as the machine you connect from. If your local machine is compromised, attackers can steal your SSH private key.
+
+### Check 1 — Are There Unknown Processes Running?
+
+**On Windows:**
+
+```powershell
+# Open Task Manager and check CPU/Network usage
+# Or in PowerShell:
+Get-Process | Sort-Object CPU -Descending | Select-Object -First 20
+```
+
+**On macOS/Linux:**
+
+```bash
+ps aux --sort=-%cpu | head -20
+```
+
+**🔴 Red flags:** Unknown processes using high CPU or network, especially at night.
+
+---
+
+### Check 2 — Are There Unknown Network Connections?
+
+**On Windows (PowerShell as Administrator):**
+
+```powershell
+netstat -ano | findstr ESTABLISHED
+```
+
+**On macOS/Linux:**
+
+```bash
+ss -tnp
+# or
+netstat -tnp
+```
+
+Look up any unknown IP at https://ipinfo.io/IP_ADDRESS
+
+**🔴 Red flag:** Connections to unknown IPs, especially on ports 6667 (IRC), 4444, or 1337.
+
+---
+
+### Check 3 — Is Your SSH Private Key Safe?
+
+```bash
+# Check permissions on your private key (should be 600)
+ls -la ~/.ssh/id_ed25519
+# Expected: -rw------- (600)
+
+# If wrong, fix immediately:
+chmod 600 ~/.ssh/id_ed25519
+```
+
+**On Windows:** Right-click the key file → Properties → Security → ensure only your user has access.
+
+**🔴 Red flag:** Key file permissions are too open, or the file was recently modified without your knowledge.
+
+---
+
+### Check 4 — Check Your SSH Known Hosts
+
+```bash
+cat ~/.ssh/known_hosts
+```
+
+**🔴 Red flag:** Entries you don't recognise — could indicate someone has connected from your machine to unknown servers.
+
+---
+
+### Check 5 — Check Startup Programs
+
+**On Windows:**
+
+```
+Task Manager → Startup tab
+```
+
+Or:
+
+```powershell
+Get-CimInstance Win32_StartupCommand | Select-Object Name, Command, Location
+```
+
+**On macOS:**
+
+```bash
+ls -la ~/Library/LaunchAgents/
+ls -la /Library/LaunchAgents/
+ls -la /Library/LaunchDaemons/
+```
+
+**On Linux:**
+
+```bash
+systemctl list-units --type=service --state=running
+ls -la ~/.config/autostart/
+```
+
+**🔴 Red flag:** Unknown startup entries, especially ones running scripts or executables from temp folders.
+
+---
+
+### Check 6 — Scan for Malware
+
+**On Windows:** Run Windows Defender full scan, or install Malwarebytes (free).
+
+**On macOS:**
+
+```bash
+# Install and run ClamAV
+brew install clamav
+freshclam
+clamscan -r --bell -i /Users/yourusername
+```
+
+**On Linux:**
+
+```bash
+apt install clamav -y
+freshclam
+clamscan -r /home /tmp /var/tmp
+```
+
+---
+
+### Check 7 — Verify Your SSH Key Hasn't Been Stolen
+
+If you suspect your private key was compromised:
+
+1. Generate a new key pair immediately:
+
+```bash
+ssh-keygen -t ed25519 -C "new_key_$(date +%Y%m%d)"
+```
+
+2. Add the new public key to all your servers:
+
+```bash
+ssh-copy-id -i ~/.ssh/new_key.pub root@your_server_ip
+```
+
+3. Remove the old key from all servers:
+
+```bash
+nano ~/.ssh/authorized_keys  # on each server
+# Delete the old key line
+```
+
+4. Delete the compromised old key pair from your local machine.
+
+---
+
+## Part 4 — Ongoing Monitoring Habits
+
+Security is not a one-time setup — it requires ongoing habits.
+
+### Daily (takes 2 minutes)
+
+```bash
+# Quick health check
+fail2ban-client status sshd
+ss -tnp | grep -v "127.0.0.1"
+```
+
+### Weekly
+
+```bash
+# Run full audit
+bash /root/security-audit.sh
+
+# Check for system updates
+apt update && apt list --upgradeable
+```
+
+### Monthly
+
+```bash
+# Full system update
+apt update && apt upgrade -y
+
+# Review all user accounts
+cat /etc/passwd | grep -v nologin | grep -v false
+
+# Review SSH authorized keys
+cat /root/.ssh/authorized_keys
+
+# Review firewall rules
+iptables -L -n --line-numbers
+
+# Check system binary integrity
+dpkg --verify
+
+# Review cron jobs
+crontab -l
+cat /etc/crontab
+ls -la /etc/cron.*
+```
+
+### After Any Incident or Suspicion
+
+1. Run the full audit script immediately
+2. Check all user accounts
+3. Check all authorized SSH keys
+4. Check all outgoing network connections
+5. Review processes by CPU usage
+6. Check /tmp and /var/tmp for hidden directories
+7. Review recent file modifications
+
+---
+
+## Part 5 — Emergency Response Playbook
+
+If you suspect your server is compromised right now, follow this exact sequence:
+
+### Step 1 — Don't Panic, Don't Reboot Yet
+
+Rebooting destroys evidence. Investigate first.
+
+### Step 2 — Capture the Evidence
+
+```bash
+# Save process list
+ps aux --sort=-%cpu > /root/incident_processes.txt
+
+# Save network connections
+ss -tnp > /root/incident_connections.txt
+
+# Save user accounts
+cat /etc/passwd > /root/incident_passwd.txt
+
+# Save running process details
+for pid in $(ps aux | awk '{print $2}' | tail -n +2); do
+    echo "=== PID $pid ===" >> /root/incident_proc_details.txt
+    ls -la /proc/$pid/exe 2>/dev/null >> /root/incident_proc_details.txt
+done
+```
+
+### Step 3 — Identify the Threat
+
+```bash
+# Find high CPU processes
+ps aux --sort=-%cpu | head -5
+
+# For each suspicious PID, find the real binary
+ls -la /proc/SUSPICIOUS_PID/exe
+cat /proc/SUSPICIOUS_PID/cmdline | tr '\0' ' '
+ss -tnp | grep SUSPICIOUS_PID
+```
+
+### Step 4 — Cut the Attacker Off
+
+```bash
+# Block attacker's C&C server immediately
+iptables -A OUTPUT -d ATTACKER_IP -j DROP
+```
+
+### Step 5 — Kill the Malware
+
+```bash
+kill -9 MALWARE_PID
+```
+
+### Step 6 — Search and Destroy
+
+```bash
+# Hidden toolkit directories
+ls -la /tmp/ /var/tmp/
+find /tmp /var/tmp -type d -name ".*"
+
+# Remove everything suspicious
+rm -rf /tmp/.suspicious_dir
+
+# Find and remove backdoor accounts
+cat /etc/passwd | grep -v nologin | grep -v false
+sed -i '/^suspicious_user:/d' /etc/passwd
+sed -i '/^suspicious_user:/d' /etc/shadow
+```
+
+### Step 7 — Harden Immediately
+
+```bash
+# Install Fail2Ban if not present
+apt install fail2ban -y
+systemctl start fail2ban
+
+# Disable password SSH if not done
+sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+systemctl restart ssh
+```
+
+### Step 8 — Reboot and Verify
+
+```bash
+reboot
+```
+
+After reboot:
+
+```bash
+id suspicious_user      # Should say: no such user
+ps aux --sort=-%cpu | head -10
+ss -tnp
+fail2ban-client status sshd
+```
+
+---
+
+## Master Security Checklist
+
+### 🔍 Server Health Checks
+
+- [ ] `w` — Only my IPs in active sessions
+- [ ] `ps aux --sort=-%cpu` — No unknown high-CPU processes
+- [ ] `ss -tnp` — No unknown outgoing connections
+- [ ] `lastb | head -20` — Brute force attempts are being handled by Fail2Ban
+- [ ] `ls -la /tmp/ /var/tmp/` — No hidden directories with attack tools
+- [ ] `cat /etc/passwd | grep -v nologin | grep -v false` — No unknown user accounts
+- [ ] `cat /root/.ssh/authorized_keys` — Only my own SSH keys
+- [ ] `crontab -l && cat /etc/crontab` — No malicious cron jobs
+- [ ] `sshd -T | grep passwordauthentication` — Returns `no`
+- [ ] `fail2ban-client status sshd` — Active and banning attackers
+- [ ] `iptables -L -n | head -20` — Firewall rules are in place
+- [ ] `dpkg --verify` — No modified system binaries
+
+### 🛡️ Protection Setup
+
+- [ ] SSH key pair generated with ed25519
+- [ ] Public key deployed to server
+- [ ] SSH key login tested and working
+- [ ] Password authentication disabled
+- [ ] Fail2Ban installed and configured (3 retries, 24h ban)
+- [ ] iptables firewall configured and persistent
+- [ ] System packages fully updated
+- [ ] Automatic security updates enabled
+- [ ] Non-root sudo user created
+- [ ] Root login disabled
+- [ ] SSH port changed from default 22
+- [ ] Server added to local `~/.ssh/config`
+- [ ] Private key backed up securely (encrypted)
+- [ ] Weekly audit script installed
+
+### 💻 Local Machine Checks
+
+- [ ] No unknown processes running at high CPU
+- [ ] No unknown outgoing network connections
+- [ ] SSH private key permissions are `600`
+- [ ] No unknown startup programs
+- [ ] Antivirus/malware scan completed
+- [ ] SSH known_hosts only contains servers I've connected to
+
+### 📅 Ongoing Habits
+
+- [ ] Daily — check Fail2Ban status and outgoing connections
+- [ ] Weekly — run full audit script
+- [ ] Monthly — full system update and account review
+- [ ] Immediately after any incident — full forensic audit
+
+---
+
+## Quick Reference — Commands to Memorise
+
+```bash
+# Am I being attacked right now?
+lastb | head -20 && fail2ban-client status sshd
+
+# Is anything suspicious running?
+ps aux --sort=-%cpu | head -10
+
+# Is anything connecting out to unknown servers?
+ss -tnp
+
+# Who is on my server?
+w
+
+# Is my firewall working?
+iptables -L -n | head -10
+
+# Run full audit
+bash /root/security-audit.sh
+```
+
+---
+
+_This guide was written following a real server compromise and recovery. Every command was tested on Ubuntu 24.04. The incident resulted in a professional-grade forensic cleanup and a complete server hardening — all documented here so you never have to go through the same experience._
+
+_Stay paranoid. Stay patched. Stay safe._
