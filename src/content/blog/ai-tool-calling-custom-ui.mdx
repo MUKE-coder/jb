@@ -1,0 +1,525 @@
+---
+title: "AI Tool Calling with Custom UI Components — Build a Conversational Shop with Vercel AI SDK"
+description: "How to wire AI tool calls to bespoke React components so your chatbot doesn't just talk — it renders category pickers, product cards, address forms, and order receipts inline. Real pattern from chat-shop using streamText, message.parts type discriminators, Zod-typed tools, and a Zustand cart."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfZ1KTaEU9C3gHFdyzTE0q7PpDnjchu6XsKk1l
+category: tutorial
+createdAt: 2026-05-18
+updatedAt: 2026-05-18
+---
+
+# AI Tool Calling with Custom UI Components — Build a Conversational Shop with Vercel AI SDK
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — pattern lifted directly from [github.com/MUKE-coder/chat-shop](https://github.com/MUKE-coder/chat-shop).**
+
+Most AI chat tutorials end at "the model streams text back." That's fine for a Q&A bot. It falls apart the moment your assistant needs to actually **do** something — show product cards, collect a delivery address, confirm an order. Plain text can't render a button.
+
+This guide shows the pattern I keep reaching for: **AI tool calls that render real React components inline in the chat**. The model decides _which_ tool to call. Your UI decides _how_ to render the result. Every reply is part text, part interactive component — exactly how WhatsApp Business catalogs feel, except your AI is driving it.
+
+The reference implementation is [`chat-shop`](https://github.com/MUKE-coder/chat-shop) — a full e-commerce assistant where the agent registers the user, fetches categories, searches products, collects a delivery address, and processes the order. Five tools, five custom components, one chat thread.
+
+---
+
+## TL;DR — what you're getting
+
+- A chat UI that renders **custom React components inline** based on which tool the AI called.
+- A typed contract via **Zod** between the model and your tools.
+- A `message.parts` switch that maps `tool-{name}` → `<YourComponent />`.
+- Persistent state across the conversation using a **Zustand store + cookie session**.
+- The same architecture works for booking flows, support agents, onboarding wizards — anything that needs structured UI mid-conversation.
+
+The whole thing runs on the [Vercel AI Gateway](/blog/vercel-ai-gateway-guide) so you can swap Claude for GPT or Gemini by changing one string.
+
+---
+
+## The mental model
+
+A normal chatbot reply is one chunk of text. A **tool-using** chatbot reply is a list of "parts" — some text, some tool calls, each with its own state (`input-available`, `output-available`, `error`).
+
+The AI SDK v4+ exposes this as `message.parts`. Every tool you register shows up as a part with type `tool-{toolName}`. Your render loop just switches on the type:
+
+```tsx
+{
+  message.parts.map((part, i) => {
+    switch (part.type) {
+      case "text":
+        return <ReactMarkdown>{part.text}</ReactMarkdown>;
+      case "tool-getCategories":
+        return part.state === "output-available" ? (
+          <CategoryList categories={part.output.categories} />
+        ) : (
+          <ToolLoading label="Fetching categories…" />
+        );
+      // …one case per tool
+    }
+  });
+}
+```
+
+That's the whole trick. The model talks _and_ paints UI in the same stream.
+
+---
+
+## Architecture overview
+
+```
+Browser (ChatUI.tsx)
+   │  useChat() from @ai-sdk/react
+   ▼
+POST /api/chat
+   │  streamText({ model, messages, tools })
+   ▼
+Vercel AI Gateway → anthropic/claude-sonnet-4.6
+   │
+   │ Model decides which tool(s) to call
+   ▼
+Tool execute() runs server-side (Prisma, Stripe, Resend)
+   │
+   ▼ Streams back: text parts + tool-{name} parts
+Browser switches on part.type → renders custom React component
+```
+
+The key insight: **the server only returns data**. The browser owns the rendering. Same tool output can look completely different on web vs. mobile vs. a Slack bot.
+
+---
+
+## Stack
+
+- **Next.js 15** App Router (front + API routes in one repo)
+- **Vercel AI SDK** (`ai` package) + `@ai-sdk/react` for `useChat`
+- **Vercel AI Gateway** — one key, swap models freely. See the [full setup guide](/blog/vercel-ai-gateway-guide).
+- **Claude Sonnet 4.6** as the brain (best at tool selection)
+- **Zod** for tool schemas (the contract between model and your code)
+- **Prisma + PostgreSQL** for users, products, orders
+- **Zustand** with `persist()` for client-side cart state
+- **Stripe** for checkout, **Resend** for confirmation emails
+
+---
+
+## Step 1 — Define your tools as a typed contract
+
+Tools live in [`/lib/agent/tools.ts`](https://github.com/MUKE-coder/chat-shop/blob/main/lib/agent/tools.ts). Each tool has a `description`, a Zod `inputSchema`, and an `execute` that returns plain JSON.
+
+```ts
+// lib/agent/tools.ts
+import { tool } from "ai";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+
+export const getCategoriesTool = tool({
+  description:
+    "Fetch all product categories. Call this when the user wants to browse or asks 'what do you sell'.",
+  inputSchema: z.object({}),
+  execute: async () => {
+    const categories = await prisma.category.findMany({
+      select: { id: true, slug: true, name: true, imageUrl: true },
+    });
+    return { categories };
+  },
+});
+
+export const searchProductsTool = tool({
+  description:
+    "Search products by category slug or free-text query. Use when user picks a category or names a product.",
+  inputSchema: z.object({
+    categorySlug: z.string().optional(),
+    query: z.string().optional(),
+    limit: z.number().min(1).max(20).default(8),
+  }),
+  execute: async ({ categorySlug, query, limit }) => {
+    const products = await prisma.product.findMany({
+      where: {
+        ...(categorySlug && { category: { slug: categorySlug } }),
+        ...(query && {
+          OR: [
+            { name: { contains: query, mode: "insensitive" } },
+            { description: { contains: query, mode: "insensitive" } },
+          ],
+        }),
+      },
+      take: limit,
+    });
+    return { products };
+  },
+});
+
+export const saveProductSelectionTool = tool({
+  description:
+    "Persist the user's chosen products and quantities to the session. Call after they confirm what they want to buy.",
+  inputSchema: z.object({
+    items: z.array(
+      z.object({
+        productId: z.string(),
+        quantity: z.number().min(1),
+      })
+    ),
+  }),
+  execute: async ({ items }) => {
+    // upsert into Session.cart
+    return { savedItems: items, needsAddress: true };
+  },
+});
+```
+
+> 💡 **The `description` is the most important field.** It's how the model decides _when_ to call your tool. Be specific about the trigger ("when the user asks X") and the side effect ("this writes to the database").
+
+Two more tools — `registerUserTool` (creates a user record + session cookie) and `processOrderTool` (creates an Order, charges Stripe, sends a Resend email) — follow the exact same shape.
+
+---
+
+## Step 2 — Wire the route handler
+
+The API route is a one-liner around `streamText`. Pass the model, the message history, and your tool bag:
+
+```ts
+// app/api/chat/route.ts
+import { streamText, convertToModelMessages } from "ai";
+
+import {
+  registerUserTool,
+  getCategoriesTool,
+  searchProductsTool,
+  saveProductSelectionTool,
+  processOrderTool,
+} from "@/lib/agent/tools";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const result = streamText({
+    model: "anthropic/claude-sonnet-4.6",
+    system: `You are a friendly shopping assistant for a small grocery store.
+Always greet the user, then help them register, browse categories, pick products,
+confirm a delivery address, and complete checkout.
+Call tools — never make up product data. Wait for tool output before replying.`,
+    messages: convertToModelMessages(messages),
+    tools: {
+      register: registerUserTool,
+      getCategories: getCategoriesTool,
+      searchProducts: searchProductsTool,
+      saveSelection: saveProductSelectionTool,
+      processOrder: processOrderTool,
+    },
+    stopWhen: "tool-and-text", // keep going until model writes plain text
+  });
+
+  return result.toUIMessageStreamResponse();
+}
+```
+
+The key names you pass under `tools` (`register`, `getCategories`, …) are exactly what shows up in `part.type` as `tool-register`, `tool-getCategories`, etc. on the client. Match them precisely.
+
+> Set the env var once: `AI_GATEWAY_API_KEY=vck_…`. No Anthropic SDK install needed — the Gateway handles it. Full setup in [this guide](/blog/vercel-ai-gateway-guide).
+
+---
+
+## Step 3 — Build the part-renderer switch (the heart of it)
+
+This is `/components/ChatUI.tsx`. Each message has `parts: ChatPart[]`. We map over them and render either text or the custom component for that tool.
+
+```tsx
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+import ReactMarkdown from "react-markdown";
+
+import { CategoryList } from "./tool-ui/CategoryList";
+import { ProductList } from "./tool-ui/ProductList";
+import { RegisterResponseCard } from "./tool-ui/RegisterResponseCard";
+import { SelectionConfirmation } from "./tool-ui/SelectionConfirmation";
+import { OrderCard } from "./tool-ui/OrderCard";
+import { ToolLoading } from "./tool-ui/ToolLoading";
+
+export function ChatUI() {
+  const { messages, sendMessage, status } = useChat({ api: "/api/chat" });
+
+  return (
+    <div className="flex h-screen flex-col">
+      <div className="flex-1 space-y-6 overflow-y-auto p-4">
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            className={
+              m.role === "user" ? "ml-auto max-w-md" : "mr-auto max-w-2xl"
+            }
+          >
+            {m.parts.map((part, i) => {
+              switch (part.type) {
+                case "text":
+                  return <ReactMarkdown key={i}>{part.text}</ReactMarkdown>;
+
+                case "tool-register":
+                  return part.state === "output-available" ? (
+                    <RegisterResponseCard key={i} data={part.output} />
+                  ) : (
+                    <ToolLoading key={i} label="Creating your account…" />
+                  );
+
+                case "tool-getCategories":
+                  return part.state === "output-available" ? (
+                    <CategoryList
+                      key={i}
+                      categories={part.output.categories}
+                      onSelect={(slug) => sendMessage({ text: `Show ${slug}` })}
+                    />
+                  ) : (
+                    <ToolLoading key={i} label="Loading categories…" />
+                  );
+
+                case "tool-searchProducts":
+                  return part.state === "output-available" ? (
+                    <ProductList key={i} products={part.output.products} />
+                  ) : (
+                    <ToolLoading key={i} label="Searching products…" />
+                  );
+
+                case "tool-saveSelection":
+                  return part.state === "output-available" ? (
+                    <SelectionConfirmation
+                      key={i}
+                      data={part.output}
+                      onConfirmLocation={(addr) =>
+                        sendMessage({ text: `Deliver to ${addr}` })
+                      }
+                    />
+                  ) : (
+                    <ToolLoading key={i} label="Saving your selection…" />
+                  );
+
+                case "tool-processOrder":
+                  return part.state === "output-available" ? (
+                    <OrderCard key={i} data={part.output} />
+                  ) : (
+                    <ToolLoading key={i} label="Placing your order…" />
+                  );
+
+                default:
+                  return null;
+              }
+            })}
+          </div>
+        ))}
+      </div>
+
+      <ChatInput sendMessage={sendMessage} disabled={status === "streaming"} />
+    </div>
+  );
+}
+```
+
+**That switch _is_ the architecture.** Each `case` is a contract: "when the model calls tool X, render component Y with the tool's output as props." Add a new tool? Add a new case.
+
+The `part.state` machine has three useful values:
+
+- `input-available` — the model has decided to call this tool, you can show a skeleton or "calling…" indicator
+- `output-available` — the tool returned, here's the JSON
+- `output-error` — execute threw, render an error chip
+
+---
+
+## Step 4 — The custom components themselves
+
+These are just normal React components. They receive the tool's JSON output as props. No magic.
+
+### `CategoryList.tsx`
+
+```tsx
+type Props = {
+  categories: { id: string; slug: string; name: string; imageUrl: string }[];
+  onSelect: (slug: string) => void;
+};
+
+export function CategoryList({ categories, onSelect }: Props) {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {categories.map((c) => (
+        <button
+          key={c.id}
+          onClick={() => onSelect(c.slug)}
+          className="rounded-2xl border bg-white p-3 text-left shadow-sm transition hover:border-emerald-500 hover:shadow-md"
+        >
+          <img
+            src={c.imageUrl}
+            alt={c.name}
+            className="h-20 w-full rounded-lg object-cover"
+          />
+          <p className="mt-2 text-sm font-medium">{c.name}</p>
+        </button>
+      ))}
+    </div>
+  );
+}
+```
+
+When the user taps a category card, `onSelect` calls `sendMessage({ text: "Show vegetables" })` — that goes back through the LLM, which then calls `searchProductsTool({ categorySlug: "vegetables" })`. The chat continues, but the user only ever tapped a card.
+
+### `ProductList.tsx`, `OrderCard.tsx`, etc.
+
+Same shape: receive JSON from the tool, render whatever feels right (carousel, modal, sticky cart drawer). The model never knows or cares — it just gave you data.
+
+---
+
+## Step 5 — Keep client state across turns (Zustand cart)
+
+The model is stateless between turns. The browser is not. Put the cart in Zustand with `persist()` so it survives reloads:
+
+```ts
+// lib/store/cart-store.ts
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+
+type CartItem = {
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+};
+
+type CartState = {
+  items: CartItem[];
+  add: (item: CartItem) => void;
+  remove: (productId: string) => void;
+  clear: () => void;
+  total: () => number;
+};
+
+export const useCart = create<CartState>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      add: (item) =>
+        set((s) => {
+          const existing = s.items.find((i) => i.productId === item.productId);
+          if (existing) {
+            return {
+              items: s.items.map((i) =>
+                i.productId === item.productId
+                  ? { ...i, quantity: i.quantity + item.quantity }
+                  : i
+              ),
+            };
+          }
+          return { items: [...s.items, item] };
+        }),
+      remove: (productId) =>
+        set((s) => ({
+          items: s.items.filter((i) => i.productId !== productId),
+        })),
+      clear: () => set({ items: [] }),
+      total: () =>
+        get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+    }),
+    { name: "chat-shop-cart" }
+  )
+);
+```
+
+Your `<ProductList />` component calls `useCart().add(...)` when the user taps "Add to cart". When they say "checkout", the model calls `saveProductSelectionTool` which reads the cart from the session cookie + Zustand mirror, then `processOrderTool` finishes the deal.
+
+Pair Zustand with a server-side **session cookie** (just a UUID written by `registerUserTool`) so the model can also read the same cart by ID. That gives you graceful handoff if the user refreshes mid-checkout.
+
+---
+
+## Step 6 — The system prompt that makes it work
+
+Custom UI tooling fails fast if the model isn't told **the rules of engagement**. The system prompt is non-negotiable. Mine looks like:
+
+```
+You are a shopping assistant for ChatShop.
+
+RULES:
+- Always greet the user and ask for their name + phone if not registered.
+- Once registered, ALWAYS call getCategories before showing products.
+- When user picks a category, call searchProducts with the slug.
+- Only call saveSelection AFTER the user has confirmed quantities.
+- Only call processOrder AFTER you have a delivery address.
+- Never invent products, prices, or stock — always read from tool output.
+- After every tool call, write a short natural-language sentence so the user knows what happened.
+- Reply in the user's language (English / Luganda / Swahili).
+```
+
+> 🎯 **The single most common failure mode** is the model trying to be helpful by generating fake product data instead of calling `searchProducts`. The line "Never invent products — always read from tool output" fixes 90% of it.
+
+---
+
+## Step 7 — Deployment notes
+
+- **Edge runtime works.** Set `export const runtime = "edge"` in your route handler if you want lower TTFB. The AI Gateway is edge-friendly.
+- **Stream all the way through.** Don't `await` the full response on the server — return `result.toUIMessageStreamResponse()` so parts arrive incrementally. The whole "components render as the model decides" UX depends on it.
+- **Set a max-tokens cap per tool.** Defensive — stops a runaway `searchProducts` returning 10,000 rows.
+- **Add a Stripe webhook** for `payment_intent.succeeded` to mark orders as paid out-of-band — don't trust the model's say-so for money.
+- **Send the Resend confirmation email** from the tool itself, not the model's text reply — emails should not depend on the LLM remembering to do them.
+
+---
+
+## Use cases this pattern unlocks
+
+| Domain                     | What the AI does       | What the UI renders                                  |
+| -------------------------- | ---------------------- | ---------------------------------------------------- |
+| **E-commerce** (chat-shop) | Browse, pick, checkout | Category cards, product cards, address form, receipt |
+| **Booking**                | "Book me Friday 3pm"   | Calendar slot picker, confirmation modal             |
+| **Support**                | "Track my order"       | Order status timeline, return-label button           |
+| **HR / Internal tools**    | "File a leave request" | Date range picker, manager dropdown, submit summary  |
+| **Finance**                | "Send 50k to Mary"     | Recipient confirmation, biometric prompt, receipt    |
+| **Healthcare**             | "Book a checkup"       | Doctor cards, slot picker, intake form               |
+
+If your app has any flow today that's "click → form → confirm → result", you can rebuild it as a single chat with custom-UI tools and the user will never need to learn your navigation.
+
+---
+
+## Frequently asked questions
+
+### Do I need Claude specifically, or can I use GPT / Gemini?
+
+Any tool-capable model works through the Vercel AI Gateway. Change `"anthropic/claude-sonnet-4.6"` to `"openai/gpt-5.4"` or `"google/gemini-3-flash-preview"` — the rest of the code is identical. In my testing Claude Sonnet picks tools most reliably, GPT-5.4 is close, Gemini Flash is fastest and cheapest. Match the model to the route — see the [provider mix guide](/blog/vercel-ai-gateway-guide).
+
+### How do I show a loading state while a tool is running?
+
+Check `part.state === "input-available"`. The model has decided to call the tool but the `execute` hasn't returned yet. Render a skeleton, spinner, or "Searching products…" line.
+
+### What if the model calls a tool with wrong arguments?
+
+Zod throws automatically and the AI SDK sends an `output-error` back to the model so it can self-correct. You don't need to write retry logic — the model usually fixes its own call on the next turn.
+
+### Can the user interact with one component while the model is still streaming?
+
+Yes. Each component is just normal React — the chat surface around it keeps streaming text into a separate part. Just don't put a `disabled` on your input while waiting for a tool unless you really need to lock the flow.
+
+### Does this work with the `useChat` v3 API?
+
+This guide is written for AI SDK v5 (`@ai-sdk/react` v2). v3 used a single `message.content` string instead of `message.parts` — it can't render custom-UI tool calls. Upgrade.
+
+### Where does the session live — cookie, Redis, or LLM context?
+
+All three: an HTTP-only **cookie** holds a session ID (set by `registerUserTool`), the **Zustand store** mirrors cart state for fast UI, and the LLM gets a minimal summary (just user name + cart count) in the system prompt so it stays cheap. Don't dump the full cart into every model call — it's wasteful and slow.
+
+---
+
+## Related reading
+
+- [Vercel AI Gateway complete setup guide](/blog/vercel-ai-gateway-guide) — the underlying provider routing this is built on
+- [Building an AI-Powered E-commerce Chatbot — concept walkthrough](/blog/ai-shop-assistant) — higher-level architecture overview
+- [How to turn a Next.js CRUD app into an MCP server](/blog/build-mcp-server-from-crud) — when you want _other_ AIs (Claude Desktop, Cursor) to call your tools
+- [Building a multi-tenant RAG agent platform](/blog/rag-agent-platform) — when your tools need knowledge-base context
+- [Multi-model AI content pipelines](/blog/multi-model-ai-content-pipeline) — when one chat needs Claude for text + Gemini for images at the same time
+- [Complete Guide to AI Integration with Vercel AI SDK](/blog/ai-integration-guide)
+
+---
+
+## Need help shipping a tool-calling chat in your product?
+
+I build conversational AI features for production apps — custom-UI tools, MCP servers, RAG-backed agents, multi-model pipelines.
+
+- 📞 **[Book a session](/book)** — 1-on-1 design or code review. Sessions from UGX 50,000.
+- 💼 **Hire Desishub** for full builds — [desishub.com](https://desishub.com)
+- 📺 **YouTube** — practical AI tutorials at [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- 💻 **Source**: [github.com/MUKE-coder/chat-shop](https://github.com/MUKE-coder/chat-shop)
+
+---
+
+## Resources
+
+- **Vercel AI SDK — Tools**: [sdk.vercel.ai/docs/foundations/tools](https://sdk.vercel.ai/docs/foundations/tools)
+- **`useChat` hook**: [sdk.vercel.ai/docs/reference/ai-sdk-ui/use-chat](https://sdk.vercel.ai/docs/reference/ai-sdk-ui/use-chat)
+- **AI SDK message parts spec**: [sdk.vercel.ai/docs/ai-sdk-ui/messages](https://sdk.vercel.ai/docs/ai-sdk-ui/messages)
+- **Zod**: [zod.dev](https://zod.dev)
+- **Zustand persist middleware**: [zustand.docs.pmnd.rs/integrations/persisting-store-data](https://zustand.docs.pmnd.rs/integrations/persisting-store-data)

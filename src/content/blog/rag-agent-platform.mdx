@@ -1,0 +1,557 @@
+---
+title: "Building a Multi-Tenant RAG Agent Platform with Go, Qdrant & the Vercel AI Gateway"
+description: "How Nexora ingests PDFs, DOCX, websites and Q&A pairs, chunks and embeds them with OpenAI's text-embedding-3-small, stores 1536-dim vectors per-agent in Qdrant, and streams grounded answers via SSE. Real architecture: Go + Gin + GORM + Asynq workers + Vercel AI Gateway."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfZ1KTaEU9C3gHFdyzTE0q7PpDnjchu6XsKk1l
+category: tutorial
+createdAt: 2026-05-18
+updatedAt: 2026-05-18
+---
+
+# Building a Multi-Tenant RAG Agent Platform with Go, Qdrant & the Vercel AI Gateway
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — architecture lifted from the [Nexora](https://github.com/MUKE-coder/nexora) repo I shipped this year.**
+
+A SaaS RAG platform isn't "stuff documents into a vector DB and call OpenAI". It's a half-dozen background jobs, three storage layers, careful tenant isolation, and a streaming response that's actually grounded in the right chunks. Get any one of those wrong and you ship a chatbot that hallucinates customer-support answers.
+
+This guide is the full architecture behind [**Nexora**](https://github.com/MUKE-coder/nexora) — a multi-tenant RAG agent builder where every customer gets their own agents, their own knowledge bases, and their own per-workspace vector collections. Go + Gin on the backend, Qdrant for vectors, Asynq for jobs, and the [Vercel AI Gateway](/blog/vercel-ai-gateway-guide) so the model layer is one config flip away from Claude → Gemini → GPT.
+
+If you've read the [Vercel AI Gateway setup](/blog/vercel-ai-gateway-guide) and want to know what a real production RAG looks like sitting on top of it, this is the post.
+
+---
+
+## TL;DR — what you're getting
+
+- A **multi-tenant** RAG architecture: per-agent Qdrant collections, workspace-scoped APIs, credit-metered ingestion.
+- **Ingestion pipeline** that handles PDF, DOCX, CSV, XLSX, URLs (crawled), and direct Q&A pairs.
+- **Chunking** at 2048 chars with 200-char overlap on sentence boundaries.
+- **Embeddings** via `openai/text-embedding-3-small` (1536 dims, cosine), batched 20 at a time.
+- **Streaming answers** over SSE with a `session → chunks → message → done` event sequence.
+- **Background jobs** in [Asynq](https://github.com/hibiken/asynq) so ingestion never blocks the API.
+- The whole model layer goes through the Vercel AI Gateway — swap providers with one string.
+
+---
+
+## The big picture
+
+```
+                ┌─────────────────────┐
+                │  Admin UI (Next.js) │  upload PDF, paste URL, add Q&A
+                └──────────┬──────────┘
+                           │ POST /api/agents/:id/sources
+                           ▼
+                ┌─────────────────────┐
+                │   Gin HTTP API (Go) │  validates, persists KnowledgeSource(status=PENDING)
+                └──────────┬──────────┘
+                           │ enqueue("ingest:source:123")
+                           ▼
+                ┌─────────────────────┐
+                │  Asynq Worker (Go)  │
+                │   1. download/parse │
+                │   2. chunk          │
+                │   3. embed (batch)  │
+                │   4. upsert Qdrant  │
+                │   5. mark READY     │
+                └─────────────────────┘
+
+                ┌─────────────────────┐
+End-user chat → │  POST /chat (SSE)   │
+                │   1. embed query    │
+                │   2. Qdrant top-K   │
+                │   3. streamText()   │
+                │   4. emit events    │
+                └─────────────────────┘
+```
+
+The split matters: **ingestion is async**, chat is sync-streaming. They share Qdrant but never block each other.
+
+---
+
+## Stack
+
+| Layer       | Choice                                                                        | Why                                                          |
+| ----------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| API         | Go + [Gin](https://gin-gonic.com)                                             | Type-safe, deploys as a single binary, easy to ship to a VPS |
+| ORM         | [GORM](https://gorm.io) on PostgreSQL                                         | Migrations + tenant scoping                                  |
+| Vectors     | [Qdrant](https://qdrant.tech)                                                 | Per-tenant collections, cheap cloud tier, gRPC + REST        |
+| Jobs        | [Asynq](https://github.com/hibiken/asynq) on Redis                            | Retries, schedulers, dashboard                               |
+| Embeddings  | `openai/text-embedding-3-small` via Vercel AI Gateway                         | 1536 dims, cheapest mainstream embed                         |
+| Chat models | `anthropic/claude-sonnet-4.6` (default), `openai/gpt-5.4-nano` (cheap routes) | Mix per workspace                                            |
+| Parsing     | `ledongthuc/pdf` (PDF), `xuri/excelize` (XLSX), `gocolly/colly` (URL)         | Battle-tested Go libs                                        |
+| Auth        | JWT (15m access / 7d refresh) + Google/GitHub OAuth                           | Cookie-based, httpOnly                                       |
+| Hosting     | Contabo VPS + Docker via Dokploy                                              | Cheap, simple, full control                                  |
+
+---
+
+## Step 1 — The data model
+
+```go
+// models/agent.go
+type Agent struct {
+    ID          string    `gorm:"primaryKey"`
+    WorkspaceID string    `gorm:"index"`
+    Name        string
+    Model       string    // e.g. "anthropic/claude-sonnet-4.6"
+    SystemPrompt string
+    Temperature float32
+    CreatedAt   time.Time
+}
+
+type KnowledgeSource struct {
+    ID         string `gorm:"primaryKey"`
+    AgentID    string `gorm:"index"`
+    Type       SourceType   // PDF | DOCX | URL | QNA | CSV | XLSX
+    Name       string
+    Size       int64
+    Status     SourceStatus // PENDING | PROCESSING | READY | FAILED
+    StatusStep string       // "downloading" | "chunking" | "embedding" | "indexing"
+    Error      *string
+    ChunkCount int
+    CreatedAt  time.Time
+}
+
+type Workspace struct {
+    ID       string
+    Plan     PlanTier // FREE | STARTER | GROWTH | AGENCY
+    Credits  int      // ingestion credits
+    StorageBytes int64
+}
+```
+
+The `Status` + `StatusStep` enums are the single source of truth the UI polls. Don't try to be clever — your users want to see "Chunking page 12 of 88" not a spinner.
+
+---
+
+## Step 2 — Per-agent Qdrant collections (the tenancy boundary)
+
+When an agent is created, **immediately create a Qdrant collection for it**:
+
+```go
+// services/qdrant_service.go
+func (s *QdrantService) EnsureAgentCollection(ctx context.Context, agentID string) error {
+    name := fmt.Sprintf("agent_%s", agentID)
+    return s.client.CreateCollection(ctx, &qdrant.CreateCollection{
+        CollectionName: name,
+        VectorsConfig: qdrant.NewVectorsConfig(&qdrant.VectorParams{
+            Size:     1536,           // text-embedding-3-small
+            Distance: qdrant.Distance_Cosine,
+        }),
+    })
+}
+```
+
+> 🎯 **Why one collection per agent, not one collection per workspace with metadata filters?** Because filters scan, but collection lookups are O(1). At 100k chunks per agent and dozens of agents per workspace, the metadata-filter approach gets 10× slower. Pay the per-collection overhead once; query fast forever.
+
+Tenant isolation comes for free — collection name carries the agent ID, no way to accidentally bleed between customers.
+
+---
+
+## Step 3 — The ingestion job (the part that does the work)
+
+User POSTs a source → API saves `KnowledgeSource{status:PENDING}` and enqueues an Asynq task. The worker picks it up:
+
+```go
+// jobs/workers.go
+func (w *IngestWorker) Handle(ctx context.Context, t *asynq.Task) error {
+    var p IngestPayload
+    if err := json.Unmarshal(t.Payload(), &p); err != nil {
+        return err
+    }
+
+    src, err := w.repo.GetSource(p.SourceID)
+    if err != nil {
+        return err
+    }
+
+    // Hard 5-minute deadline so a stuck job doesn't poison the queue
+    ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+    defer cancel()
+
+    // 1. Download / read content
+    w.markStep(src, "downloading")
+    text, err := w.parser.Extract(ctx, src)
+    if err != nil {
+        return w.fail(src, fmt.Errorf("extract: %w", err))
+    }
+
+    // 2. Chunk
+    w.markStep(src, "chunking")
+    chunks := w.chunker.Chunk(text, 2048, 200) // size, overlap
+
+    // 3. Embed (batches of 20)
+    w.markStep(src, "embedding")
+    vectors := make([][]float32, 0, len(chunks))
+    for i := 0; i < len(chunks); i += 20 {
+        end := min(i+20, len(chunks))
+        batchCtx, cancelB := context.WithTimeout(ctx, 60*time.Second)
+        embs, err := w.embedder.EmbedBatch(batchCtx, chunks[i:end])
+        cancelB()
+        if err != nil {
+            return w.fail(src, fmt.Errorf("embed batch %d: %w", i, err))
+        }
+        vectors = append(vectors, embs...)
+    }
+
+    // 4. Upsert into the agent's collection
+    w.markStep(src, "indexing")
+    if err := w.qdrant.UpsertPoints(ctx, src.AgentID, chunks, vectors, src.ID); err != nil {
+        return w.fail(src, fmt.Errorf("upsert: %w", err))
+    }
+
+    // 5. Done
+    return w.repo.MarkReady(src.ID, len(chunks))
+}
+```
+
+Asynq handles retries, exponential backoff, and dead-lettering. Heavy lifting stays off the API thread.
+
+---
+
+## Step 4 — The chunker (the part everyone underestimates)
+
+Bad chunking is the #1 cause of "the answers are wrong even though the docs are loaded." The rule: **chunks should be self-contained but overlap enough to not split a sentence.**
+
+```go
+// services/chunker.go
+func (c *Chunker) Chunk(text string, size, overlap int) []string {
+    sentences := splitSentences(text) // regex on . ! ? + capital
+    var chunks []string
+    var current strings.Builder
+    var currentSentences []string
+
+    flush := func() {
+        if current.Len() == 0 {
+            return
+        }
+        chunks = append(chunks, strings.TrimSpace(current.String()))
+        // overlap: keep last few sentences for the next chunk
+        keep := []string{}
+        keptLen := 0
+        for i := len(currentSentences) - 1; i >= 0; i-- {
+            if keptLen+len(currentSentences[i]) > overlap {
+                break
+            }
+            keep = append([]string{currentSentences[i]}, keep...)
+            keptLen += len(currentSentences[i])
+        }
+        current.Reset()
+        currentSentences = nil
+        for _, s := range keep {
+            current.WriteString(s + " ")
+            currentSentences = append(currentSentences, s)
+        }
+    }
+
+    for _, s := range sentences {
+        if current.Len()+len(s) > size {
+            flush()
+        }
+        current.WriteString(s + " ")
+        currentSentences = append(currentSentences, s)
+    }
+    flush()
+    return chunks
+}
+```
+
+**2048 chars + 200 char overlap** is the sweet spot for `text-embedding-3-small`. Smaller chunks fragment context; larger chunks dilute the embedding. The 200-char overlap means a paragraph spanning two chunks shows up in both, so a query that lands on the boundary still retrieves both.
+
+For **Q&A pairs** I skip chunking entirely — `"Q: ${q}\nA: ${a}"` is one chunk, embed as-is. For **URLs**, Colly crawls one page, extracts main content (no nav, no footer), then runs the same chunker on the result.
+
+---
+
+## Step 5 — Embeddings via the Vercel AI Gateway
+
+The Go service hits the Gateway's OpenAI-compatible endpoint — no client SDK needed:
+
+```go
+// services/embedding_service.go
+type embedReq struct {
+    Model string   `json:"model"`
+    Input []string `json:"input"`
+}
+
+func (e *EmbeddingService) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+    body, _ := json.Marshal(embedReq{
+        Model: "openai/text-embedding-3-small",
+        Input: texts,
+    })
+
+    req, _ := http.NewRequestWithContext(ctx, "POST",
+        "https://ai-gateway.vercel.sh/v1/embeddings",
+        bytes.NewReader(body))
+    req.Header.Set("Authorization", "Bearer "+os.Getenv("AI_GATEWAY_API_KEY"))
+    req.Header.Set("Content-Type", "application/json")
+
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    var out struct {
+        Data []struct {
+            Embedding []float32 `json:"embedding"`
+        } `json:"data"`
+    }
+    if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+        return nil, err
+    }
+    vectors := make([][]float32, len(out.Data))
+    for i, d := range out.Data {
+        vectors[i] = d.Embedding
+    }
+    return vectors, nil
+}
+```
+
+That's the _only_ OpenAI integration. Need to swap to Cohere embeddings? Change one string to `"cohere/embed-english-v3.0"` (and the dim count to match). The Gateway abstracts the rest.
+
+> 📚 If you haven't set up the Vercel AI Gateway yet, [read the setup guide first](/blog/vercel-ai-gateway-guide) — it covers the `AI_GATEWAY_API_KEY`, billing, and provider routing this whole platform stands on.
+
+---
+
+## Step 6 — The chat handler (where the magic feels like magic)
+
+```go
+// handlers/agent_chat.go
+func (h *ChatHandler) Stream(c *gin.Context) {
+    var req ChatRequest
+    if err := c.BindJSON(&req); err != nil {
+        c.JSON(400, err)
+        return
+    }
+
+    // SSE headers
+    c.Writer.Header().Set("Content-Type", "text/event-stream")
+    c.Writer.Header().Set("Cache-Control", "no-cache")
+    c.Writer.Header().Set("Connection", "keep-alive")
+    c.Writer.Header().Set("X-Accel-Buffering", "no") // disable nginx buffering
+
+    flusher, _ := c.Writer.(http.Flusher)
+
+    agent, _ := h.repo.GetAgent(req.AgentID)
+    convo, _ := h.repo.GetOrCreateConversation(req.ConversationID, req.AgentID)
+
+    // 1. emit session
+    fmt.Fprintf(c.Writer, "event: session\ndata: %s\n\n",
+        toJSON(map[string]string{"conversationId": convo.ID}))
+    flusher.Flush()
+
+    // 2. embed query → retrieve top-K
+    qVec, _ := h.embedder.EmbedBatch(c, []string{req.Message})
+    hits, _ := h.qdrant.Search(c, agent.ID, qVec[0], 8)
+
+    // 3. emit retrieved chunks (for citations UI)
+    fmt.Fprintf(c.Writer, "event: chunks\ndata: %s\n\n", toJSON(hits))
+    flusher.Flush()
+
+    // 4. assemble prompt
+    contextBlock := strings.Builder{}
+    for i, h := range hits {
+        fmt.Fprintf(&contextBlock, "[%d] %s\n\n", i+1, h.Text)
+    }
+
+    messages := []ChatMessage{
+        {Role: "system", Content: agent.SystemPrompt + `
+
+Use ONLY the context below to answer. If the answer is not in the context, say "I don't have that information".
+Cite chunks by their [number] when you use them.
+
+CONTEXT:
+` + contextBlock.String()},
+    }
+    messages = append(messages, convo.History...)
+    messages = append(messages, ChatMessage{Role: "user", Content: req.Message})
+
+    // 5. stream from Gateway
+    err := h.llm.StreamChat(c, agent.Model, messages, func(token string) {
+        fmt.Fprintf(c.Writer, "event: message\ndata: %s\n\n",
+            toJSON(map[string]string{"token": token}))
+        flusher.Flush()
+    })
+    if err != nil {
+        fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", err.Error())
+        return
+    }
+
+    fmt.Fprintf(c.Writer, "event: done\ndata: {}\n\n")
+    flusher.Flush()
+}
+```
+
+The four event types are the contract with the frontend:
+
+- `session` — here's your conversation ID, store it
+- `chunks` — here are the retrieved sources, render as citation chips
+- `message` — token-by-token streaming
+- `done` — wrap up, persist conversation
+
+Putting **chunks before tokens** is a UX win: users see citations appear instantly, then the answer streams in. Feels grounded even before the answer arrives.
+
+---
+
+## Step 7 — The system prompt that makes RAG actually grounded
+
+Models love to fall back on training data. The system prompt fights that:
+
+```
+You are {agent.name}, a knowledge agent for {workspace.name}.
+
+RULES (non-negotiable):
+1. Use ONLY the information in the CONTEXT block below.
+2. If the context does not contain the answer, reply:
+   "I don't have that information in my current knowledge base."
+3. NEVER invent product names, prices, policies, dates, or people.
+4. Cite the chunk number in brackets like [1], [3] whenever you use it.
+5. If the user's question is off-topic for the agent's purpose, politely redirect.
+
+CONTEXT:
+[1] {chunk 1 text}
+[2] {chunk 2 text}
+...
+```
+
+That single "ONLY the context" line plus the explicit "I don't have that information" out reduces hallucinations dramatically. The citation requirement is also a forcing function — a model that has to cite [n] is far less likely to make things up.
+
+---
+
+## Step 8 — Plans, credits, and tenancy
+
+Free-tier users can't be allowed to upload a 500MB PDF and burn $40 of embeddings. Two enforcement points:
+
+```go
+// services/credits.go
+const (
+    EmbedCostPerKB = 1 // 1 credit per KB of source text
+)
+
+func (s *CreditService) ChargeForIngestion(ws *Workspace, src *KnowledgeSource) error {
+    cost := int(src.Size/1024) * EmbedCostPerKB
+    if ws.Credits < cost {
+        return ErrInsufficientCredits
+    }
+    ws.Credits -= cost
+    return s.repo.Save(ws)
+}
+```
+
+| Plan    | Monthly credits | Per-source size cap | Concurrent agents |
+| ------- | --------------- | ------------------- | ----------------- |
+| Free    | 50              | 25 KB               | 1                 |
+| Starter | 1,000           | 1 MB                | 3                 |
+| Growth  | 10,000          | 10 MB               | 10                |
+| Agency  | Unlimited       | 100 MB              | Unlimited         |
+
+Charge **before** ingestion starts, refund on `FAILED`. That way users can't game it by uploading and aborting.
+
+---
+
+## Step 9 — Production lessons (the painful ones)
+
+### 1. SSE breaks behind Cloudflare with caching on
+
+Set `Cache-Control: no-cache` _and_ a Cloudflare page rule "Bypass cache" for the chat endpoint, _and_ `X-Accel-Buffering: no` for any Nginx in the chain. Miss any one and you get a 30-second hang followed by the entire answer dumped at once.
+
+### 2. Qdrant collection creation is not atomic
+
+If you create the collection lazily on first ingest, two concurrent uploads will race and one will 409. Create the collection **eagerly when the agent is created**.
+
+### 3. PDF extraction is dirty work
+
+`ledongthuc/pdf` works for ~85% of PDFs. For scanned PDFs you'll need OCR (Tesseract or a cloud OCR service). I default to Tesseract via `gosseract` and queue it as a separate `ocr:source:id` job.
+
+### 4. URL crawls go infinite without bounds
+
+Colly will happily crawl your entire site. Cap with `MaxDepth: 2`, `Async: true`, `Parallelism: 4`, and a hard 30-second timeout per page.
+
+### 5. Embedding rate-limits hit fast
+
+`text-embedding-3-small` allows ~3000 RPM on a fresh OpenAI account, but the Vercel Gateway pools across customers and your effective limit is much higher. Even so — back off on 429s with exponential jitter, not fixed retry.
+
+### 6. Cosine vs dot product
+
+For OpenAI embeddings, both work because the vectors are normalised. **Stick with cosine** in Qdrant — it's the documented contract and any future model swap is more likely to be cosine-compatible.
+
+### 7. Conversation history compresses
+
+Don't dump 50 turns of `convo.History` into every prompt. Keep the last 10 verbatim, summarise older turns into one system message, and re-summarise every 20 turns. Costs nothing, accuracy way up.
+
+---
+
+## Use cases this pattern unlocks
+
+| Vertical               | Knowledge sources                     | What the agent does                                 |
+| ---------------------- | ------------------------------------- | --------------------------------------------------- |
+| **Customer support**   | Help docs, past tickets, product FAQs | Auto-answer L1, escalate L2 with context            |
+| **Internal IT**        | Wiki, runbooks, Slack history         | "How do I get VPN access?" → answer + links         |
+| **Sales enablement**   | Pitch decks, case studies, pricing    | Reps query "Show me healthcare wins under $50k MRR" |
+| **Legal / compliance** | Contracts, policies                   | "Is this clause GDPR-compliant?" with citations     |
+| **Education**          | Course materials, past Q&A            | Tutor agent grounded in the syllabus                |
+| **Real estate**        | Listings, neighbourhood guides        | "3 bed in Ntinda under $300k with parking"          |
+
+Anywhere your team currently CTRL-F's through a Notion / Confluence / Drive folder is a candidate.
+
+---
+
+## Frequently asked questions
+
+### Why Go for the backend? Doesn't Next.js / Python do this fine?
+
+Go for the API and workers because (a) the workers are long-running and CPU-heavy (chunking, parsing PDFs), (b) a single binary deploys cleanly to a VPS without dependency hell, and (c) goroutines let me parallelise embedding batches trivially. The frontend is still Next.js. Best tool per layer.
+
+### Why Qdrant over Pinecone / Weaviate / pgvector?
+
+Qdrant Cloud's free tier covers small dev workspaces, the self-hosted Docker image is one container, and per-collection isolation is first-class. Pinecone is fine but more expensive and harder to self-host. pgvector works at small scale but doesn't compete on recall once you're past ~500k vectors per tenant.
+
+### Can I use Claude instead of OpenAI for embeddings?
+
+Claude doesn't publish an embeddings endpoint. The Gateway routes embedding requests through providers that do — OpenAI, Cohere, Voyage. For chat generation you can absolutely use Claude (it's my default for agent answers).
+
+### How do I deduplicate ingested content?
+
+Hash each chunk (`sha256(chunk.text)`) and skip upsert if the hash already exists in the agent's collection. Cheap, no false positives, handles re-uploads gracefully.
+
+### How do I handle very long documents (500+ pages)?
+
+Stream-parse the PDF instead of loading it into memory, chunk as you go, embed in 20-chunk batches as you produce them, and persist incremental progress. Don't try to hold the whole document in RAM — a 1000-page PDF can blow past 2GB after parsing.
+
+### What's the cheapest end-to-end setup for a side project?
+
+- Qdrant: self-host on a $5/mo VPS (1GB RAM handles ~100k vectors)
+- Vercel AI Gateway: pay-per-token, no minimums
+- Postgres + Redis: same VPS via Docker
+- Dokploy to orchestrate
+
+Total: ~$10/mo + actual AI usage. Same architecture as Nexora's production setup, just denser packing.
+
+---
+
+## Related reading
+
+- [Vercel AI Gateway complete setup guide](/blog/vercel-ai-gateway-guide) — the model & embedding layer underneath
+- [AI Tool Calling with Custom UI Components](/blog/ai-tool-calling-custom-ui) — bolt tool calls onto your RAG agent for actions, not just answers
+- [From CRUD to MCP Server](/blog/build-mcp-server-from-crud) — expose your RAG as MCP tools so Claude Desktop can query your knowledge base
+- [Multi-model AI content pipelines](/blog/multi-model-ai-content-pipeline) — orchestrating multiple models in one workflow
+- [Complete Guide to AI Integration with Vercel AI SDK](/blog/ai-integration-guide)
+
+---
+
+## Need help shipping a RAG agent platform?
+
+I build RAG-backed agents for SaaS, internal tooling, and customer-support automation — ingestion pipelines, vector infra, streaming chat, tenancy.
+
+- 📞 **[Book a session](/book)** — design / code review / setup. Sessions from UGX 50,000.
+- 💼 **Hire Desishub** — full RAG platform builds: [desishub.com](https://desishub.com)
+- 📺 **YouTube** — practical AI engineering: [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- 💻 **Reference repo**: [github.com/MUKE-coder/nexora](https://github.com/MUKE-coder/nexora)
+
+---
+
+## Resources
+
+- **Vercel AI Gateway**: [vercel.com/docs/ai-gateway](https://vercel.com/docs/ai-gateway)
+- **Qdrant docs**: [qdrant.tech/documentation](https://qdrant.tech/documentation)
+- **Asynq**: [github.com/hibiken/asynq](https://github.com/hibiken/asynq)
+- **OpenAI embeddings**: [platform.openai.com/docs/guides/embeddings](https://platform.openai.com/docs/guides/embeddings)
+- **Colly (Go web scraper)**: [go-colly.org](https://go-colly.org)
+- **Gin web framework**: [gin-gonic.com](https://gin-gonic.com)

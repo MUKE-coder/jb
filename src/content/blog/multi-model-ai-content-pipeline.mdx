@@ -1,0 +1,633 @@
+---
+title: "Multi-Model AI Content Pipelines — Claude for Prompts, Gemini for Images, GPT for Bulk, All Through One Gateway"
+description: "How JB AI generates 11-slide carousels + article + quote + images in one fire-and-forget request. The exact orchestration pattern: Claude Sonnet 4.6 drafts image prompts, Gemini 3.1 Flash Image renders them in batches of 2 with retry, Gemini 2.0 Flash returns structured JSON for the text, all behind a single Vercel AI Gateway API key."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfZ1KTaEU9C3gHFdyzTE0q7PpDnjchu6XsKk1l
+category: tutorial
+createdAt: 2026-05-18
+updatedAt: 2026-05-18
+---
+
+# Multi-Model AI Content Pipelines — Claude for Prompts, Gemini for Images, GPT for Bulk
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — architecture lifted from [JB AI](https://github.com/MUKE-coder/jbai).**
+
+There's a common mistake when people first build AI content tools: they pick **one model** and try to do everything with it. The reasoning model writes the JSON, draws the image, picks the font, edits the photo, drafts the caption — and the result is mediocre at every step.
+
+The right move is the opposite: **route each step to the model that's actually best at it**. Claude Sonnet 4.6 for nuanced text and prompt drafting. Gemini 3.1 Flash Image for the actual image generation (it's the fastest and cheapest). Gemini 2.0 Flash for structured JSON returns. GPT nano for cheap classification. All routed through one [Vercel AI Gateway](/blog/vercel-ai-gateway-guide) key — same SDK, same code shape, just a different model string per call.
+
+This guide is the full orchestration pattern behind [**JB AI**](https://github.com/MUKE-coder/jbai) — a tool that turns one topic into an **11-slide carousel + article + quote post + cover images** in a single API call. Fire-and-forget. Three models talking to each other under the hood.
+
+---
+
+## TL;DR — what you're getting
+
+- A **multi-stage pipeline** where each stage runs on the model that's best at it.
+- Concrete pattern: **Claude drafts the image prompt** → Gemini renders it → Claude reviews the result → done.
+- **Fire-and-forget** background generation so the API responds in milliseconds.
+- **Batched image generation** (BATCH_SIZE=2) with exponential-backoff retry (1s / 2s / 4s).
+- **Cloudflare R2 storage** with deterministic keys (`posts/{postId}/{slide}.png`).
+- **Quotas** that count tokens AND image generations separately.
+
+---
+
+## The mental model: model-as-tool
+
+Stop thinking "which model do I pick?" Start thinking "**which model do I pick for this specific step?**"
+
+| Step                                             | Model                                 | Why                                                |
+| ------------------------------------------------ | ------------------------------------- | -------------------------------------------------- |
+| Generate 11-slide carousel JSON                  | `google/gemini-2.0-flash-exp`         | Cheap, fast, returns clean JSON-structured outputs |
+| Draft a high-quality image prompt for each slide | `anthropic/claude-sonnet-4.6`         | Best at visual / artistic phrasing                 |
+| Render the image                                 | `google/gemini-3-flash-image-preview` | Fastest image generation, cheapest per render      |
+| Review the image (vision)                        | `anthropic/claude-sonnet-4.6`         | Best multimodal reasoning                          |
+| Refine image based on review (edit-in-place)     | `google/gemini-3-flash-image-preview` | Native image editing                               |
+| Caption / metadata                               | `openai/gpt-5.4-nano`                 | Cheapest model that returns clean short text       |
+
+Through the Gateway, each is literally one string change. The pipeline code is the same shape end-to-end.
+
+---
+
+## The high-level flow
+
+```
+POST /api/generate/full-post  { topic: "DevOps for Junior Engineers" }
+    │
+    ▼  Respond 200 instantly with { postId }
+    │
+    │  (fire-and-forget background pipeline)
+    ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Stage 1 — Gemini 2.0 Flash                                  │
+│   generateObject({ schema: CarouselSchema })                 │
+│   → { slides: [...11], article: {...}, quote: {...} }        │
+├──────────────────────────────────────────────────────────────┤
+│  Stage 2 — Claude Sonnet 4.6 (parallel × 11)                 │
+│   For each slide: draftImagePrompt(slide.title + theme)      │
+│   → "A futuristic neon-lit terminal with…"                   │
+├──────────────────────────────────────────────────────────────┤
+│  Stage 3 — Gemini 3.1 Flash Image (batched × 2, retry × 3)   │
+│   generateImage({ prompt }) → R2 upload                      │
+├──────────────────────────────────────────────────────────────┤
+│  Stage 4 — Mark post.status = READY, notify user             │
+└──────────────────────────────────────────────────────────────┘
+```
+
+The whole thing happens behind a single env var: `AI_GATEWAY_API_KEY`. No `@ai-sdk/anthropic`, no `@ai-sdk/google`, no `@ai-sdk/openai`.
+
+---
+
+## Stack
+
+- **Next.js 15** App Router
+- **Vercel AI SDK** (`ai`) — `generateText`, `generateObject`, `experimental_generateImage`
+- **Vercel AI Gateway** — single API key, all providers
+- **Claude Sonnet 4.6** for prompt drafting + vision
+- **Gemini 2.0 Flash** for structured JSON outputs
+- **Gemini 3.1 Flash Image** for image generation + image editing
+- **Cloudflare R2** for image storage (S3-compatible, zero egress)
+- **Prisma + PostgreSQL** for posts, slides, articles, usage logs
+- **Better Auth** for email/password + Google OAuth + OTP
+
+---
+
+## Step 1 — Fire-and-forget the request
+
+The user's experience is "click generate → instant confirmation → check back in 30 seconds." Make the HTTP request return immediately:
+
+```ts
+// app/api/generate/full-post/route.ts
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
+import { prisma } from "@/lib/prisma";
+import { generateFullPost } from "@/lib/generation-pipeline";
+import { getUser, chargeQuota } from "@/lib/billing";
+
+const BodySchema = z.object({
+  topic: z.string().min(3).max(200),
+  tone: z
+    .enum(["educational", "punchy", "story", "promo"])
+    .default("educational"),
+});
+
+export async function POST(req: Request) {
+  const user = await getUser(req);
+  if (!user)
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+
+  const body = BodySchema.parse(await req.json());
+
+  // Atomically reserve quota — refunded if pipeline fails
+  await chargeQuota(user.id, { posts: 1 });
+
+  const post = await prisma.post.create({
+    data: {
+      userId: user.id,
+      topic: body.topic,
+      tone: body.tone,
+      status: "GENERATING",
+    },
+  });
+
+  // Fire and forget — DO NOT await
+  generateFullPost({ postId: post.id }).catch((err) => {
+    console.error("pipeline failed", err);
+    prisma.post.update({
+      where: { id: post.id },
+      data: { status: "FAILED", error: String(err) },
+    });
+  });
+
+  return NextResponse.json({ postId: post.id, status: "GENERATING" });
+}
+```
+
+> 🎯 **`.catch()` is non-negotiable** on a fire-and-forget. An unhandled promise rejection in a Next.js route can take down the whole process on some hosts.
+
+---
+
+## Step 2 — Stage 1: Generate the carousel JSON (Gemini 2.0 Flash)
+
+`generateObject` + a Zod schema = structured output that's guaranteed to parse. Gemini 2.0 Flash is fast, cheap, and great at JSON.
+
+```ts
+// lib/generation-pipeline.ts
+import { generateObject } from "ai";
+import { z } from "zod";
+
+const CarouselSchema = z.object({
+  hook: z.string().describe("Attention-grabbing first line"),
+  slides: z
+    .array(
+      z.object({
+        title: z.string(),
+        body: z.string(),
+        imageTheme: z
+          .string()
+          .describe("One short phrase: 'minimal terminal' etc"),
+      })
+    )
+    .length(11),
+  article: z.object({
+    title: z.string(),
+    intro: z.string(),
+    sections: z.array(z.object({ heading: z.string(), body: z.string() })),
+    conclusion: z.string(),
+  }),
+  quote: z.object({
+    text: z.string().max(200),
+    author: z.string(),
+  }),
+});
+
+export async function generateCarouselContent({
+  topic,
+  tone,
+}: {
+  topic: string;
+  tone: string;
+}) {
+  const { object } = await generateObject({
+    model: "google/gemini-2.0-flash-exp",
+    schema: CarouselSchema,
+    prompt: `Create an 11-slide LinkedIn carousel + a 600-word article + a quote post
+on the topic: "${topic}".
+
+Tone: ${tone}.
+
+For each slide give:
+- a punchy title (max 8 words)
+- 1-2 sentence body (max 30 words)
+- an imageTheme that's a short visual concept
+
+The carousel must teach something concrete and end with a CTA on slide 11.`,
+  });
+
+  return object;
+}
+```
+
+Why `generateObject` and not `generateText` + manual JSON.parse? Because the SDK retries automatically when the model returns invalid JSON. You always get a typed, parsed object or a thrown error. Zero string-parsing code.
+
+---
+
+## Step 3 — Stage 2: Claude drafts the image prompt for each slide
+
+Gemini is great at rendering images, but its raw image prompts are mid. Claude writes much better visual descriptions — it understands lighting, composition, mood, art style.
+
+```ts
+// lib/claude-client.ts
+import { generateText } from "ai";
+
+export async function draftImagePrompt({
+  slideTitle,
+  imageTheme,
+  brandStyle,
+}: {
+  slideTitle: string;
+  imageTheme: string;
+  brandStyle: string;
+}) {
+  const { text } = await generateText({
+    model: "anthropic/claude-sonnet-4.6",
+    prompt: `You are an art director. Write a single-paragraph image generation prompt
+for an AI image model.
+
+Slide title: ${slideTitle}
+Image theme: ${imageTheme}
+Brand visual style: ${brandStyle}
+
+REQUIREMENTS:
+- Photoreal or stylized (not cartoon).
+- Include subject, setting, lighting, camera angle, mood, color palette.
+- NO text in the image (we'll overlay slide text in code).
+- 16:9 composition with safe space top-left for a 200x80 logo.
+- Output ONLY the prompt — no preamble, no "Here is the prompt:".`,
+  });
+  return text.trim();
+}
+```
+
+This pattern of **"big model writes the prompt for the small / fast model"** is one of the most underrated wins in multi-model orchestration. Cost: ~1¢ per slide for Claude. Result: image quality up dramatically.
+
+---
+
+## Step 4 — Stage 3: Gemini renders the images, batched + retried
+
+Image generation is slow (3–8 seconds per image) and rate-limited. Run all 11 sequentially: 88 seconds. Run them with infinite parallelism: get rate-limited and fail half. The sweet spot is **batches of 2 with retry**.
+
+```ts
+// lib/gemini.ts
+import { experimental_generateImage as generateImage } from "ai";
+
+import { uploadToR2 } from "./r2";
+
+const BATCH_SIZE = 2;
+const MAX_RETRIES = 3;
+
+async function generateOneImage(prompt: string, attempt = 1): Promise<Buffer> {
+  try {
+    const { image } = await generateImage({
+      model: "google/gemini-3-flash-image-preview",
+      prompt,
+      size: "1024x576", // 16:9
+    });
+    return Buffer.from(image.uint8Array);
+  } catch (err) {
+    if (attempt >= MAX_RETRIES) throw err;
+    const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+    await new Promise((r) => setTimeout(r, delay));
+    return generateOneImage(prompt, attempt + 1);
+  }
+}
+
+export async function renderSlideImages({
+  postId,
+  prompts,
+}: {
+  postId: string;
+  prompts: string[];
+}) {
+  const urls: string[] = [];
+  for (let i = 0; i < prompts.length; i += BATCH_SIZE) {
+    const batch = prompts.slice(i, i + BATCH_SIZE);
+    const batchUrls = await Promise.all(
+      batch.map(async (prompt, j) => {
+        const buf = await generateOneImage(prompt);
+        const key = `posts/${postId}/${i + j}.png`;
+        return uploadToR2(key, buf, "image/png");
+      })
+    );
+    urls.push(...batchUrls);
+  }
+  return urls;
+}
+```
+
+> 🎯 **Exponential backoff with jitter** is the correct retry pattern. Gemini's rate-limiter coalesces simultaneous retries — without backoff you create a thundering herd that makes the problem worse.
+
+---
+
+## Step 5 — Putting the pipeline together
+
+```ts
+// lib/generation-pipeline.ts
+import { prisma } from "@/lib/prisma";
+
+import { generateCarouselContent } from "./carousel";
+import { draftImagePrompt } from "./claude-client";
+import { renderSlideImages } from "./gemini";
+
+export async function generateFullPost({ postId }: { postId: string }) {
+  const post = await prisma.post.findUnique({ where: { id: postId } });
+  if (!post) throw new Error("post not found");
+
+  // Stage 1 — JSON
+  const carousel = await generateCarouselContent({
+    topic: post.topic,
+    tone: post.tone,
+  });
+
+  await prisma.carouselSlide.createMany({
+    data: carousel.slides.map((s, i) => ({
+      postId,
+      order: i,
+      title: s.title,
+      body: s.body,
+      imageTheme: s.imageTheme,
+    })),
+  });
+  await prisma.article.create({ data: { postId, ...carousel.article } });
+  await prisma.quotePost.create({ data: { postId, ...carousel.quote } });
+
+  // Stage 2 — image prompts in parallel
+  const prompts = await Promise.all(
+    carousel.slides.map((s) =>
+      draftImagePrompt({
+        slideTitle: s.title,
+        imageTheme: s.imageTheme,
+        brandStyle: "minimal dark, electric blue accents, photoreal",
+      })
+    )
+  );
+
+  // Stage 3 — render in batches
+  const imageUrls = await renderSlideImages({ postId, prompts });
+
+  // Persist
+  await Promise.all(
+    imageUrls.map((url, i) =>
+      prisma.carouselSlide.update({
+        where: { postId_order: { postId, order: i } },
+        data: { imageUrl: url },
+      })
+    )
+  );
+
+  await prisma.post.update({
+    where: { id: postId },
+    data: { status: "READY", completedAt: new Date() },
+  });
+}
+```
+
+The user's frontend polls `GET /api/posts/{id}` every few seconds and updates the UI as slides come in. Or you wire WebSockets / Server-Sent Events for live progress — the pipeline already writes incrementally.
+
+---
+
+## Step 6 — The Ad pipeline (a smaller variant of the same pattern)
+
+Same 3-stage shape, just for a single ad creative instead of 11 slides:
+
+```ts
+// lib/ad-pipeline.ts
+
+// 1. Claude drafts a detailed ad image prompt from the user's text brief
+export async function draftAdPrompt(brief: string) {
+  const { text } = await generateText({
+    model: "anthropic/claude-sonnet-4.6",
+    prompt: `Write an image generation prompt for an ad creative based on this brief:
+${brief}
+
+Output ONLY the prompt, single paragraph, no preamble.`,
+  });
+  return text.trim();
+}
+
+// 2. Gemini renders it
+export async function generateAdImage(prompt: string) {
+  const { image } = await generateImage({
+    model: "google/gemini-3-flash-image-preview",
+    prompt,
+    size: "1080x1080",
+  });
+  return Buffer.from(image.uint8Array);
+}
+
+// 3. Refine — Gemini edit-in-place using the user's natural-language tweak
+export async function refineAdImage({
+  imageUrl,
+  instruction,
+}: {
+  imageUrl: string;
+  instruction: string;
+}) {
+  const { image } = await generateImage({
+    model: "google/gemini-3-flash-image-preview",
+    prompt: instruction,
+    image: imageUrl, // edit existing image
+  });
+  return Buffer.from(image.uint8Array);
+}
+```
+
+Same three providers, totally different product surface. The Gateway is the only piece both pipelines share — and that's the point.
+
+---
+
+## Step 7 — Storage layout (Cloudflare R2)
+
+R2 is S3-compatible, zero-egress, ridiculously cheap. The key trick: **deterministic keys** so retries idempotently overwrite.
+
+```
+posts/{postId}/{slide_index}.png      // carousel images
+posts/{postId}/article-cover.png      // article hero
+posts/{postId}/quote.png              // quote graphic
+ads/{adId}/{timestamp}.png            // ad revisions (history)
+```
+
+Carousel slides use the index as the key so a retry overwrites cleanly. Ad revisions use a timestamp so the user can scroll through edit history.
+
+```ts
+// lib/r2.ts
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+
+const r2 = new S3Client({
+  region: "auto",
+  endpoint: process.env.R2_ENDPOINT, // https://<account>.r2.cloudflarestorage.com
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+  },
+});
+
+export async function uploadToR2(
+  key: string,
+  body: Buffer,
+  contentType: string
+) {
+  await r2.send(
+    new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    })
+  );
+  return `${process.env.R2_PUBLIC_URL}/${key}`;
+}
+```
+
+Plug a Cloudflare custom domain in front of the bucket and your image URLs are `https://cdn.your-domain.com/posts/abc/0.png` — fast, free, no S3 bill ever.
+
+---
+
+## Step 8 — Quotas that count text AND images
+
+Mixed pipelines burn two different cost dimensions. Track both:
+
+```ts
+// lib/billing.ts
+
+type Plan = "free" | "creator" | "pro" | "business";
+
+const LIMITS: Record<Plan, { posts: number; adsPerMonth: number }> = {
+  free: { posts: 3, adsPerMonth: 5 },
+  creator: { posts: 50, adsPerMonth: 100 },
+  pro: { posts: 200, adsPerMonth: 500 },
+  business: { posts: Infinity, adsPerMonth: Infinity },
+};
+
+export async function chargeQuota(
+  userId: string,
+  cost: { posts?: number; ads?: number }
+) {
+  const usage = await prisma.usageLog.findFirstOrThrow({
+    where: { userId, month: currentMonth() },
+  });
+  const plan = await getUserPlan(userId);
+  if (usage.posts + (cost.posts ?? 0) > LIMITS[plan].posts) {
+    throw new Error("quota_exceeded:posts");
+  }
+  if (usage.ads + (cost.ads ?? 0) > LIMITS[plan].adsPerMonth) {
+    throw new Error("quota_exceeded:ads");
+  }
+  await prisma.usageLog.update({
+    where: { id: usage.id },
+    data: {
+      posts: { increment: cost.posts ?? 0 },
+      ads: { increment: cost.ads ?? 0 },
+    },
+  });
+}
+```
+
+I count **posts**, not raw tokens, because that's what the user's mental model is. Internally I also log per-stage token + image counts to `UsageLog` so I can debug "why did this user's last post cost $1.40" — but the user only sees "you've used 12 of 50 posts this month".
+
+---
+
+## Step 9 — Production lessons (jbai edition)
+
+### 1. Image generation is your biggest cost — meter it
+
+Per-call cost: text generation is fractions of a cent, image generation is **5–20¢ each**. An 11-slide carousel = $1+ in images alone. Cap aggressively, especially on free tiers.
+
+### 2. Always store, never re-generate
+
+Once you've generated an image, store it permanently. Never recompute. R2 storage is nothing; image generation is everything.
+
+### 3. Use `generateObject` for any structured output
+
+Manual JSON parsing of LLM output is a footgun. `generateObject` retries automatically on bad JSON. Free reliability win.
+
+### 4. Validate every image post-generation
+
+Sometimes the model returns a blank image, a watermarked image, or an image that completely ignores the prompt. Send it back through Claude vision with "Does this image match this prompt?" and regenerate if no. Adds a second per image, saves you bad output.
+
+### 5. Stage progress in the DB, not memory
+
+Write `post.status` to "GENERATING_TEXT" → "GENERATING_IMAGES" → "READY" as you go. The frontend polls and the user sees real progress. Even better: write per-slide `status` so the UI can render slides as they finish.
+
+### 6. Fire-and-forget needs a watchdog
+
+A pipeline that hangs forever silently is the worst bug. Run a cron every 5 minutes that marks any `GENERATING` post older than 10 minutes as `FAILED`, refunds quota, and pings the user.
+
+### 7. Cache prompt-to-image hashes for re-runs
+
+If the user re-runs the same brief, the image prompt Claude drafts will often be identical — and so will the image. Hash the prompt, cache the resulting URL. Free re-runs.
+
+---
+
+## Use cases this pattern unlocks
+
+| Product                             | Stages                                            | Models                                |
+| ----------------------------------- | ------------------------------------------------- | ------------------------------------- |
+| **Social content generator** (jbai) | Outline → image prompts → render                  | Gemini Flash + Claude + Gemini Image  |
+| **Personalised email at scale**     | Segment classification → body draft → subject A/B | nano + Claude + nano                  |
+| **AI design tool** (Canva-style)    | Layout JSON → element prompts → render            | Claude + Gemini Image                 |
+| **Video summary tool**              | Transcript → highlight reel script → thumbnail    | Gemini Flash + Claude + Gemini Image  |
+| **Product photography**             | Brief → prompt → render → vision QA → refine      | Claude + Gemini Image + Claude vision |
+| **News brief generator**            | Fetch articles → summarise each → write digest    | Perplexity + nano + Claude            |
+
+If your product has more than one AI-shaped step, you almost certainly want more than one model.
+
+---
+
+## Frequently asked questions
+
+### Why not just use Claude for everything?
+
+Claude is excellent at text but doesn't generate images. Gemini Flash returns structured JSON faster and cheaper. GPT nano is cheaper for short classifications. Picking one model means paying premium for tasks where a cheaper model is indistinguishable, _and_ giving up capabilities entirely (no image gen).
+
+### Why not just use Gemini for everything?
+
+Gemini's image generation is the fastest on the Gateway, but its long-form text and prompt drafting trail Claude meaningfully. Mixing wins on both quality and cost.
+
+### How do I A/B test models in the pipeline?
+
+Pass `model` as a config parameter, log which variant was used, and let users rate output. The Gateway gives you usage by model in the dashboard for free — combine with your rating data to know if Claude Sonnet 4.6 actually beats Haiku for your prompts. (Sometimes it doesn't.)
+
+### What's the latency profile?
+
+For an 11-slide post:
+
+- Stage 1 (Gemini 2.0 Flash JSON): ~3–5s
+- Stage 2 (Claude × 11 in parallel): ~4–6s
+- Stage 3 (Gemini image × 11 in batches of 2): ~25–35s
+- Total: 35–45s
+
+Hence fire-and-forget — no user wants to hold their browser open for 45 seconds.
+
+### Can I run this without the Vercel AI Gateway?
+
+You can, but you'll install three SDKs, juggle three API keys, write three error-handling shapes, and lose automatic fallback. The Gateway is essentially free (no markup) and removes all that friction. [Set it up first](/blog/vercel-ai-gateway-guide).
+
+### What's the smallest viable version of this pattern?
+
+One model + image prompt drafting: Gemini 2.0 Flash writes the prompt _and_ generates the image. Mediocre output, but a real end-to-end pipeline in 30 lines. Use as a baseline, then upgrade Stage 2 to Claude once you see the prompt quality is the bottleneck.
+
+### How do I handle NSFW / safety blocks from Gemini?
+
+`generateImage` throws when Gemini's safety filter rejects a prompt. Catch the error, ask Claude to "rewrite this prompt to be safer while keeping the same visual intent", and retry once. Two iterations almost always passes. If it still fails, surface "prompt was blocked, try rephrasing" to the user.
+
+---
+
+## Related reading
+
+- [Vercel AI Gateway complete setup guide](/blog/vercel-ai-gateway-guide) — the foundation this pattern stands on
+- [AI Tool Calling with Custom UI Components](/blog/ai-tool-calling-custom-ui) — when the user should drive the pipeline turn-by-turn instead of one-shot
+- [From CRUD to MCP Server](/blog/build-mcp-server-from-crud) — expose your pipeline as MCP so Claude Desktop / Cursor can trigger it
+- [Building a multi-tenant RAG agent platform](/blog/rag-agent-platform) — when the pipeline needs to read from a knowledge base too
+- [How I built an AI agent to automate an entire business](/blog/how-i-built-ai-agent-automate-entire-business) — bigger-picture orchestration
+
+---
+
+## Need help shipping a multi-model AI pipeline?
+
+I build production AI content pipelines, image generation tools, and multi-stage agent workflows for clients.
+
+- 📞 **[Book a session](/book)** — design / code review / setup. Sessions from UGX 50,000.
+- 💼 **Hire Desishub** — full pipeline builds: [desishub.com](https://desishub.com)
+- 📺 **YouTube** — practical AI engineering tutorials: [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- 💻 **Reference repo**: [github.com/MUKE-coder/jbai](https://github.com/MUKE-coder/jbai)
+
+---
+
+## Resources
+
+- **Vercel AI SDK**: [sdk.vercel.ai](https://sdk.vercel.ai)
+- **`generateObject`**: [sdk.vercel.ai/docs/foundations/generating-structured-data](https://sdk.vercel.ai/docs/foundations/generating-structured-data)
+- **`experimental_generateImage`**: [sdk.vercel.ai/docs/ai-sdk-core/image-generation](https://sdk.vercel.ai/docs/ai-sdk-core/image-generation)
+- **Gemini image models**: [ai.google.dev/gemini-api/docs/image-generation](https://ai.google.dev/gemini-api/docs/image-generation)
+- **Cloudflare R2**: [developers.cloudflare.com/r2](https://developers.cloudflare.com/r2)
+- **Zod**: [zod.dev](https://zod.dev)

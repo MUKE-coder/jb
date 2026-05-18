@@ -1,10 +1,10 @@
 ---
 title: "How to Use the Vercel AI Gateway with Anthropic, Gemini & OpenAI — Complete Setup Guide"
-description: "Step-by-step guide to setting up the Vercel AI Gateway and using one API key to access Anthropic Claude for text reasoning, Gemini for image and vision, and OpenAI nano models for cost-sensitive routes. Covers API key creation, streaming, tool calling, automatic fallbacks, cost tracking, and the exact provider mix JB uses in production."
+description: "Step-by-step guide to setting up the Vercel AI Gateway and using one API key to access Anthropic Claude for text reasoning, Gemini for image and vision, and OpenAI nano models for cost-sensitive routes. Covers API key creation, streaming, tool calling with custom UI, automatic fallbacks, cost tracking, and the exact provider mix JB uses in production."
 image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwf3XoMbGWIIoG6DYfZiHgUkB8udwC12QVF4TNe
 category: tutorial
 createdAt: 2026-05-08
-updatedAt: 2026-05-08
+updatedAt: 2026-05-18
 ---
 
 # How to Use the Vercel AI Gateway with Anthropic, Gemini & OpenAI
@@ -396,6 +396,129 @@ const { text } = await generateText({
 
 Claude will decide to call `getWeather`, get the result back, then write a natural-language answer that uses the data. The Gateway abstracts the provider-specific tool-calling protocol — Anthropic's `tool_use`, OpenAI's `tools`, Gemini's `function_calling` — all the same code.
 
+### Real-world tool calling: a shopping assistant with custom UI
+
+Here's the same pattern but doing actual work — a small e-commerce assistant that registers users, finds products, and processes orders. Three tools, all backed by Prisma, all called by the model autonomously:
+
+```ts
+// app/api/chat/route.ts
+import { streamText, tool, convertToModelMessages } from "ai";
+import { z } from "zod";
+
+import { prisma } from "@/lib/prisma";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const result = streamText({
+    model: "anthropic/claude-sonnet-4.6",
+    system: `You are a shopping assistant. Always greet the user, then help them
+browse categories, pick products, and check out. Never invent products —
+always read from tool output. After every tool call, write one short sentence.`,
+    messages: convertToModelMessages(messages),
+    tools: {
+      getCategories: tool({
+        description: "Fetch all product categories.",
+        parameters: z.object({}),
+        execute: async () => {
+          const categories = await prisma.category.findMany();
+          return { categories };
+        },
+      }),
+      searchProducts: tool({
+        description: "Search products by category slug or free-text query.",
+        parameters: z.object({
+          categorySlug: z.string().optional(),
+          query: z.string().optional(),
+        }),
+        execute: async ({ categorySlug, query }) => {
+          const products = await prisma.product.findMany({
+            where: {
+              ...(categorySlug && { category: { slug: categorySlug } }),
+              ...(query && { name: { contains: query, mode: "insensitive" } }),
+            },
+            take: 8,
+          });
+          return { products };
+        },
+      }),
+      processOrder: tool({
+        description: "Place the order after delivery address is confirmed.",
+        parameters: z.object({
+          items: z.array(
+            z.object({ productId: z.string(), quantity: z.number() })
+          ),
+          address: z.string(),
+        }),
+        execute: async ({ items, address }) => {
+          const order = await prisma.order.create({
+            data: { address, items: { create: items } },
+          });
+          // …stripe payment intent, resend confirmation email…
+          return { orderId: order.id, status: "PLACED" };
+        },
+      }),
+    },
+    stopWhen: "tool-and-text",
+  });
+
+  return result.toUIMessageStreamResponse();
+}
+```
+
+On the client you don't just render text — you render **custom React components for each tool**. The AI SDK exposes `message.parts`, and your switch statement maps `tool-{name}` to the right component:
+
+```tsx
+"use client";
+import { useChat } from "@ai-sdk/react";
+
+export function Chat() {
+  const { messages, sendMessage } = useChat({ api: "/api/chat" });
+
+  return messages.map((m) => (
+    <div key={m.id}>
+      {m.parts.map((part, i) => {
+        switch (part.type) {
+          case "text":
+            return <p key={i}>{part.text}</p>;
+          case "tool-getCategories":
+            return part.state === "output-available" ? (
+              <CategoryGrid
+                key={i}
+                categories={part.output.categories}
+                onSelect={(slug) => sendMessage({ text: `Show ${slug}` })}
+              />
+            ) : null;
+          case "tool-searchProducts":
+            return part.state === "output-available" ? (
+              <ProductList key={i} products={part.output.products} />
+            ) : null;
+          case "tool-processOrder":
+            return part.state === "output-available" ? (
+              <OrderReceipt key={i} data={part.output} />
+            ) : null;
+        }
+      })}
+    </div>
+  ));
+}
+```
+
+Now the model decides _which tool_ to call. Your UI decides _how to render_ the result. The chat is part text, part interactive cards — exactly how WhatsApp Business catalogs feel.
+
+> 📚 **Full deep-dive on this pattern:** [AI Tool Calling with Custom UI Components](/blog/ai-tool-calling-custom-ui) — full repo walkthrough with the 5-tool chat-shop reference, Zustand cart, Stripe checkout, and the production patterns I always apply.
+
+### Same tools, different surfaces
+
+The beauty of this pattern is the same tools can be called from totally different surfaces:
+
+- Your own React chat UI (as above)
+- An MCP server exposed to Claude Desktop, Cursor, Windsurf — see [From CRUD to MCP](/blog/build-mcp-server-from-crud)
+- A RAG-backed agent that uses retrieval _and_ tools — see [Building a multi-tenant RAG agent platform](/blog/rag-agent-platform)
+- A multi-stage content pipeline where each step calls a tool then hands off — see [Multi-model AI content pipelines](/blog/multi-model-ai-content-pipeline)
+
+One tool definition, infinite frontends.
+
 ### Provider-executed tools (web search, etc.)
 
 Some providers run tools server-side. OpenAI's web search, for example:
@@ -552,7 +675,21 @@ I build production AI features and agents for clients — Vercel AI Gateway, Cla
 - 📞 **[Book a session](/book)** — 1-on-1 setup help, code review, or architecture consult. Sessions from UGX 50,000.
 - 💼 **Hire Desishub** for full AI feature builds — [desishub.com](https://desishub.com)
 - 📺 **YouTube** — practical AI integration tutorials at [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
-- 📚 **Related**: [Complete Guide to AI Integration with Vercel AI SDK](/blog/ai-integration-guide), [Building an AI-Powered E-commerce Chatbot](/blog/ai-shop-assistant), [Building a Production-Ready MCP Server](/blog/building-mcp-server-contacts)
+
+### Real-world use cases built on this Gateway
+
+The four guides below are deep dives into production apps I've shipped on top of this exact Gateway setup — each one shows a different shape of AI feature:
+
+- **[AI Tool Calling with Custom UI Components](/blog/ai-tool-calling-custom-ui)** — turn the model into an agent that renders product cards, address forms, and order receipts inline in chat. Reference: [chat-shop](https://github.com/MUKE-coder/chat-shop).
+- **[From CRUD to MCP Server](/blog/build-mcp-server-from-crud)** — expose your existing Next.js + Prisma app to Claude Desktop, Cursor, and Windsurf via the Model Context Protocol. Reference: [contact-mcp](https://github.com/MUKE-coder/contact-mcp).
+- **[Building a Multi-Tenant RAG Agent Platform](/blog/rag-agent-platform)** — ingest PDFs/DOCX/URLs, embed with `text-embedding-3-small`, stream grounded answers via SSE. Go + Qdrant + Asynq. Reference: [nexora](https://github.com/MUKE-coder/nexora).
+- **[Multi-Model AI Content Pipelines](/blog/multi-model-ai-content-pipeline)** — Claude drafts image prompts, Gemini renders them, Gemini Flash returns structured JSON. Fire-and-forget 11-slide carousel generation. Reference: [jbai](https://github.com/MUKE-coder/jbai).
+
+### Other related guides
+
+- [Complete Guide to AI Integration with Vercel AI SDK](/blog/ai-integration-guide)
+- [Building an AI-Powered E-commerce Chatbot](/blog/ai-shop-assistant)
+- [Building a Production-Ready MCP Server (beginner-friendly walkthrough)](/blog/building-mcp-server-contacts)
 
 ---
 

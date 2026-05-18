@@ -1,0 +1,418 @@
+---
+title: "From CRUD to MCP — Turn Any Next.js + Prisma App into a Model Context Protocol Server"
+description: "A focused tutorial on converting a vanilla Next.js + Prisma CRUD into an MCP server that Claude Desktop, Cursor, Windsurf, and ChatGPT custom GPTs can call directly. Built around the contact-mcp reference repo — adds @modelcontextprotocol/sdk, exposes typed tools, secures with bearer auth, and runs locally or on Vercel."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfZ1KTaEU9C3gHFdyzTE0q7PpDnjchu6XsKk1l
+category: tutorial
+createdAt: 2026-05-18
+updatedAt: 2026-05-18
+---
+
+# From CRUD to MCP — Turn Any Next.js + Prisma App into a Model Context Protocol Server
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — based on the [contact-mcp](https://github.com/MUKE-coder/contact-mcp) reference repo.**
+
+You already have a Next.js + Prisma CRUD app. It works — REST routes for `GET /api/contacts`, `POST /api/contacts`, `DELETE /api/contacts/[id]`. Your frontend talks to it, your team talks to it, and it stays useful forever.
+
+What if **Claude Desktop, Cursor, Windsurf, and your own AI agents** could talk to it too?
+
+That's what the **Model Context Protocol (MCP)** unlocks. It's a standard published by Anthropic in 2024 that lets any MCP-aware AI client call _your_ tools as if they were built-in. You don't write per-client integrations. You write the tools once. Every MCP client gets them.
+
+This guide takes the [`contact-mcp`](https://github.com/MUKE-coder/contact-mcp) repo — a plain Next.js + Prisma contacts CRUD — and converts it into a production MCP server in about an hour.
+
+> If you've never seen MCP before, I also wrote a **longer beginner-friendly walkthrough** here: [Building a Production-Ready MCP Server with Next.js 16, Prisma & Vercel](/blog/building-mcp-server-contacts). This post is the focused "convert your existing app" version.
+
+---
+
+## TL;DR — what you're getting
+
+- A working MCP server that exposes `list_contacts`, `create_contact`, and `delete_contact` to any MCP client.
+- A single `/api/[transport]/route.ts` file that handles the MCP protocol on top of your existing Prisma layer.
+- **Bearer-token auth** so only your AI clients can call destructive tools.
+- A drop-in `claude_desktop_config.json` snippet your users paste once.
+- The exact pattern scales to dozens of tools — invoices, orders, schedules, anything you already CRUD.
+
+---
+
+## What changes (and what doesn't)
+
+| Layer                                        | Before (CRUD)                                | After (MCP)                                              |
+| -------------------------------------------- | -------------------------------------------- | -------------------------------------------------------- |
+| Prisma schema                                | ✅ Same                                      | ✅ Same                                                  |
+| Prisma client (`lib/prisma.ts`)              | ✅ Same                                      | ✅ Same                                                  |
+| Service functions (`services/contact.ts`)    | ✅ Same                                      | ✅ Reused as tool bodies                                 |
+| REST routes (`app/api/contacts/route.ts`)    | ✅ Keep — still useful for your own frontend | ✅ Keep                                                  |
+| **New file**: `app/api/[transport]/route.ts` | —                                            | ✅ MCP handler                                           |
+| `package.json`                               | —                                            | ➕ Add `@modelcontextprotocol/sdk`, `mcp-handler`, `zod` |
+
+The MCP server **lives alongside** your existing REST API. They share the same Prisma layer. You're not rewriting — you're adding a second protocol on top.
+
+---
+
+## Step 1 — Start from the existing CRUD
+
+If you're following along with [`contact-mcp`](https://github.com/MUKE-coder/contact-mcp), the starting state has:
+
+```prisma
+// prisma/schema.prisma
+model Contact {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+```
+
+A Prisma client at `lib/prisma.ts`:
+
+```ts
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+```
+
+And service functions at `lib/services/contact.ts` — `listContacts()`, `createContact()`, `deleteContactByEmail()`. **Don't touch any of this.** The MCP server is just a new entry point.
+
+---
+
+## Step 2 — Install the MCP SDK
+
+```bash
+pnpm add @modelcontextprotocol/sdk mcp-handler zod
+```
+
+- `@modelcontextprotocol/sdk` — the official MCP types and helpers
+- `mcp-handler` — the convenience wrapper for Next.js / Vercel that handles transport (HTTP-streamable or SSE)
+- `zod` — used everywhere AI SDKs use schemas, including MCP
+
+---
+
+## Step 3 — Add the MCP route handler
+
+Create `app/api/[transport]/route.ts`. This is the entire MCP server:
+
+```ts
+// app/api/[transport]/route.ts
+import { createMcpHandler } from "mcp-handler";
+import { z } from "zod";
+
+import { prisma } from "@/lib/prisma";
+
+const handler = createMcpHandler(
+  (server) => {
+    server.tool(
+      "list_contacts",
+      "List all contacts in the database. Returns name, email, and phone.",
+      {},
+      async () => {
+        const contacts = await prisma.contact.findMany({
+          orderBy: { createdAt: "desc" },
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(contacts, null, 2),
+            },
+          ],
+        };
+      }
+    );
+
+    server.tool(
+      "create_contact",
+      "Create a new contact. Email must be unique.",
+      {
+        name: z.string().min(1).describe("Full name"),
+        email: z.string().email().describe("Email address (unique)"),
+        phone: z.string().optional().describe("Phone number with country code"),
+      },
+      async ({ name, email, phone }) => {
+        try {
+          const contact = await prisma.contact.create({
+            data: { name, email, phone },
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Created contact ${contact.id} — ${contact.name} <${contact.email}>`,
+              },
+            ],
+          };
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          return {
+            isError: true,
+            content: [{ type: "text", text: `Failed: ${msg}` }],
+          };
+        }
+      }
+    );
+
+    server.tool(
+      "delete_contact",
+      "Delete a contact by email. Returns the deleted contact, or an error if not found.",
+      {
+        email: z.string().email(),
+      },
+      async ({ email }) => {
+        const existing = await prisma.contact.findUnique({ where: { email } });
+        if (!existing) {
+          return {
+            isError: true,
+            content: [
+              { type: "text", text: `No contact found with email ${email}` },
+            ],
+          };
+        }
+        await prisma.contact.delete({ where: { email } });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Deleted ${existing.name} <${existing.email}>`,
+            },
+          ],
+        };
+      }
+    );
+  },
+  {},
+  { basePath: "/api" }
+);
+
+export { handler as GET, handler as POST, handler as DELETE };
+```
+
+That's the entire MCP server. The `[transport]` in the route name lets `mcp-handler` serve both the modern **streamable HTTP transport** and the legacy **SSE transport** from one file — Claude Desktop uses streamable HTTP, older clients still use SSE.
+
+> 🎯 **Tool naming matters.** Use `snake_case` and verbs like `list_`, `create_`, `delete_`, `search_`. The model reads the name first, the description second. Bad names produce bad tool selection.
+
+---
+
+## Step 4 — Add bearer-token auth
+
+Without auth, **anyone on the internet** can delete your contacts. Wrap the handler:
+
+```ts
+// app/api/[transport]/route.ts
+import { createMcpHandler, withMcpAuth } from "mcp-handler";
+
+// …createMcpHandler call as above…
+
+const authedHandler = withMcpAuth(
+  handler,
+  async (req: Request) => {
+    const header = req.headers.get("authorization") ?? "";
+    const token = header.replace(/^Bearer\s+/i, "");
+    if (!token || token !== process.env.MCP_API_KEY) {
+      return null; // mcp-handler will reject with 401
+    }
+    return {
+      // anything you want attached to the request context
+      clientId: "muke-claude-desktop",
+    };
+  },
+  { required: true }
+);
+
+export { authedHandler as GET, authedHandler as POST, authedHandler as DELETE };
+```
+
+Add to `.env`:
+
+```env
+MCP_API_KEY=mcp_live_replace_with_a_long_random_string
+```
+
+Use `openssl rand -hex 32` (or `crypto.randomBytes(32).toString("hex")`) to generate it. Treat it like a password — one per environment, never commit.
+
+---
+
+## Step 5 — Test locally with `curl`
+
+Start your dev server (`pnpm dev`), then:
+
+```bash
+curl -X POST http://localhost:3000/api/mcp \
+  -H "Authorization: Bearer $MCP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list"
+  }'
+```
+
+You should see your three tools listed back with their schemas. If you get `401`, your bearer token is wrong. If you get `404`, your route file isn't at `app/api/[transport]/route.ts`.
+
+Call a tool:
+
+```bash
+curl -X POST http://localhost:3000/api/mcp \
+  -H "Authorization: Bearer $MCP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "create_contact",
+      "arguments": {
+        "name": "JB",
+        "email": "jb@desishub.com",
+        "phone": "+256762063160"
+      }
+    }
+  }'
+```
+
+If that returns `Created contact …`, your MCP server is live.
+
+---
+
+## Step 6 — Wire it into Claude Desktop
+
+This is what your users / teammates do. Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) or `%APPDATA%/Claude/claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "contacts": {
+      "url": "https://contacts.your-domain.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer mcp_live_…your_key…"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop. You'll see a 🔌 icon at the bottom of the input — click it, and `contacts` will be in the list. Now you can type:
+
+> "Add a new contact for Sarah Mukasa, sarah@example.com, phone +256 700 123 456."
+
+Claude will call `create_contact` with the right arguments. You'll see the tool call in the UI before it finishes. Same for `list_contacts` ("show me everyone whose phone starts with +256") and `delete_contact`.
+
+---
+
+## Step 7 — Deploy
+
+The MCP route is just a Next.js route — deploy wherever you already deploy. A few notes:
+
+- **Vercel**: Works out of the box. Streamable HTTP transport is fully supported on Vercel functions. Add `MCP_API_KEY` and `DATABASE_URL` to env. **Make sure your function timeout is at least 30s** in `vercel.json` if you have any slow tools — defaults to 10s on Hobby.
+- **Dokploy / Coolify / VPS**: Standard Next.js standalone build. Make sure your reverse proxy (Caddy/Nginx) does **not** buffer responses — MCP streams. For Nginx: `proxy_buffering off;`.
+- **Cloudflare Workers**: Works with `mcp-handler` v0.4+. Note the 30s CPU limit — heavy tools should be queued.
+
+---
+
+## Patterns I always apply in production
+
+### 1. Read-only tools first, destructive tools last
+
+Ship `list_*` and `get_*` tools first. Let real users hit them for a week. Only then add `create_*`, `update_*`, `delete_*`. The blast radius of a buggy destructive tool is huge — an AI confidently deleting all your customers is not a hypothetical.
+
+### 2. Idempotency keys on writes
+
+`create_contact` should accept an optional `idempotencyKey` so a model that retries doesn't double-insert. Same pattern Stripe uses.
+
+### 3. Soft delete, not hard delete
+
+`delete_contact` should set `deletedAt` instead of removing the row. Trivial to undo if the AI gets it wrong.
+
+### 4. Per-tool rate limits
+
+`list_contacts` returning 50k rows on every call will tank your DB. Cap at `take: 100` and require a `cursor` for pagination. The model can paginate just fine if you say so in the description.
+
+### 5. Log every tool call
+
+Add a `McpAuditLog` table — `clientId`, `tool`, `args` (truncated), `success`, `latencyMs`. You'll thank yourself the first time you debug "why is the model calling delete_contact at 3am".
+
+### 6. One server per domain, not one server for everything
+
+Build separate MCP servers per business domain — `contacts`, `invoices`, `calendar` — even if they share a backend. Easier to evolve, easier to revoke, easier for users to enable selectively.
+
+---
+
+## Use cases this pattern unlocks
+
+| App you already have      | What MCP unlocks                                                           |
+| ------------------------- | -------------------------------------------------------------------------- |
+| **CRM** (contacts, deals) | "Find every lead I haven't followed up with this week and draft an email." |
+| **Project tracker**       | "Move all my P1 issues blocked on design into the design column."          |
+| **Internal admin**        | "Refund order #4421 and send the customer a 10% off code."                 |
+| **Booking system**        | "Reschedule all my Tuesday appointments to next Friday."                   |
+| **Newsletter**            | "List subscribers who haven't opened in 30 days and export to CSV."        |
+| **HR app**                | "Show me everyone on PTO this week and their manager."                     |
+
+Anything you currently click through a dashboard for is a candidate for an MCP tool.
+
+---
+
+## Frequently asked questions
+
+### Do I have to throw away my REST API?
+
+No. The REST routes still serve your frontend. The MCP route is just a second entry point that AI clients use. Same database, same business logic, two protocols.
+
+### Can my existing SaaS users hit the MCP server with their own login?
+
+Yes — instead of a single `MCP_API_KEY`, validate per-user API keys in the `withMcpAuth` callback. Return the user ID from the auth callback and use it inside each tool's `execute` to scope the Prisma query.
+
+### Does this work with Cursor, Windsurf, ChatGPT?
+
+Cursor and Windsurf: yes, exact same config shape as Claude Desktop. ChatGPT: as of May 2026 they support MCP via Custom GPTs — same URL + bearer token. The protocol is the win.
+
+### Can the AI call multiple tools in one turn?
+
+Yes. Claude / GPT will frequently call `list_contacts` then `delete_contact` in the same response, looking at the list first to find the right ID. You don't have to do anything — the MCP client orchestrates it.
+
+### What's the difference between MCP and a regular REST API?
+
+MCP is **self-describing**. The client asks the server "what tools do you have?" and gets back tool names, descriptions, and JSON schemas for arguments. The AI doesn't need OpenAPI specs, docs, or per-app integration code. It just discovers and uses.
+
+### How is this different from the OpenAI Custom GPT "Actions" feature?
+
+Actions are OpenAI-only. MCP is open and client-agnostic — Claude, Cursor, Windsurf, and now ChatGPT all speak it. Write your server once; reach every AI client. If you've already built an Action, the conversion is mostly renaming.
+
+### Can I use this with the Vercel AI SDK for my own agents?
+
+Yes. The AI SDK can attach an MCP server as a tool source — `experimental_createMCPClient`. Your in-app AI assistant can call the same tools Claude Desktop calls. One source of truth.
+
+---
+
+## Related reading
+
+- [Vercel AI Gateway complete setup guide](/blog/vercel-ai-gateway-guide) — the unified provider this pattern is built on
+- [Building a Production-Ready MCP Server — beginner-friendly walkthrough](/blog/building-mcp-server-contacts) — longer-form, more step-by-step
+- [AI Tool Calling with Custom UI Components](/blog/ai-tool-calling-custom-ui) — when you want the model to call tools inside _your_ app instead of a third-party client
+- [Building a multi-tenant RAG agent platform](/blog/rag-agent-platform) — MCP + retrieval = answers grounded in your docs
+- [Multi-model AI content pipelines](/blog/multi-model-ai-content-pipeline) — combining tool calls with image generation
+- [Atlas CRM MCP server](/blog/building-atlas-crm-mcp-server) — full real-world example
+
+---
+
+## Need help shipping an MCP server for your product?
+
+I build MCP servers for SaaS apps so AI agents and Claude Desktop can drive the product directly.
+
+- 📞 **[Book a session](/book)** — design / code review / setup. Sessions from UGX 50,000.
+- 💼 **Hire Desishub** — full MCP server builds: [desishub.com](https://desishub.com)
+- 📺 **YouTube** — practical tutorials at [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- 💻 **Reference repo**: [github.com/MUKE-coder/contact-mcp](https://github.com/MUKE-coder/contact-mcp)
+
+---
+
+## Resources
+
+- **MCP spec**: [modelcontextprotocol.io](https://modelcontextprotocol.io)
+- **@modelcontextprotocol/sdk**: [github.com/modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk)
+- **`mcp-handler`**: [github.com/vercel/mcp-handler](https://github.com/vercel/mcp-handler)
+- **Claude Desktop config docs**: [modelcontextprotocol.io/quickstart/user](https://modelcontextprotocol.io/quickstart/user)
+- **Vercel deploying MCP servers**: [vercel.com/docs/mcp](https://vercel.com/docs/mcp)
