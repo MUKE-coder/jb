@@ -763,6 +763,114 @@ Each card has a small green dot indicating "connected/active" status. Cards are 
 **Aspect ratio:** 16:9 (1280x720)
 **Style:** Premium dev course cover — dark minimal SaaS aesthetic, architectural corner accents, noise texture. Think Vercel meets African fintech. Professional, trustworthy, high-value.`,
   },
+  {
+    id: "jb-blog-thumbnail-ai-tool-calling",
+    title: "JB Blog Thumbnail — AI Tool Calling with Custom UI",
+    category: "Thumbnails & Banners",
+    howToUse:
+      "Paste into Gemini Image / Midjourney / DALL-E at 16:9. For best text fidelity, generate the iso-3D illustration only and overlay the typography in Figma using the jb.desishub.com template.",
+    body: `A 16:9 dark editorial blog thumbnail, 1920x1080, matching the jb.desishub.com tutorial style:
+
+BACKGROUND: Deep near-black navy (#08090F) with a very subtle dotted grid pattern across the entire canvas, faint radial glow from center.
+
+TOP-LEFT (small): tiny light-gray monospace text "jb.desishub.com ~12px monospace"
+
+TOP-RIGHT (decorative): an isometric cluster of 3 translucent glass cubes floating in mid-air, edges glowing with cyan-blue light (#22D3EE), small particle dust around them.
+
+LEFT HALF (visual): a glowing translucent dark chat bubble with soft cyan neon outline, floating in mid-air. Emerging FROM the chat bubble: three small holographic UI components materializing in mid-render — a product card, a button labeled "Order", and a category-grid widget — each connected to the chat by thin animated cyan light trails. Around the bubble, three floating hex-shaped tool icons in violet-blue with a soft glow ring (like a radar) connecting them. Depth-of-field bokeh.
+
+RIGHT HALF (typography area):
+  - Top: small all-caps gray text "TUTORIAL · STEP-BY-STEP GUIDE"
+  - Title (HUGE, bold white sans-serif): "AI Tool Calling"
+  - Accent line (cyan #22D3EE, condensed bold): "Chat → Tools → Real UI" with a thin underline beneath it
+  - Subtitle (white, regular): "Render React components inline."
+
+BOTTOM-RIGHT: a row of 5 small dark rounded-square icons (chat bubble, Anthropic A, Vercel triangle, Zod shield, TS badge) with soft glow.
+
+Style: dark editorial, premium developer-magazine, cinematic glow, photoreal 3D with soft cyan/violet rim light. Color palette: deep navy black, electric cyan, soft violet accents, pure white text. NO other text inside the illustration beyond what is overlaid.`,
+  },
+  {
+    id: "jb-blog-thumbnail-crud-to-mcp",
+    title: "JB Blog Thumbnail — CRUD to MCP Server",
+    category: "Thumbnails & Banners",
+    howToUse:
+      "Paste into Gemini Image / Midjourney / DALL-E at 16:9. For best text fidelity, generate the iso-3D illustration only and overlay the typography in Figma using the jb.desishub.com template.",
+    body: `A 16:9 dark editorial blog thumbnail, 1920x1080, matching the jb.desishub.com tutorial style:
+
+BACKGROUND: Deep near-black (#08090F) with a faint dotted grid and a soft radial cyan glow behind the central illustration.
+
+TOP-LEFT (small): tiny light-gray monospace text "jb.desishub.com ~12px monospace"
+
+TOP-RIGHT (decorative): a single floating isometric Prisma-style hex prism in translucent dark glass with bright cyan edge glow, surrounded by a few small light particles.
+
+CENTER VISUAL: A side-by-side iso-3D scene — LEFT: a translucent glass cube labeled with faint "API · /contacts" hint, representing a Next.js + Prisma CRUD server, glowing soft violet from within. RIGHT: a clean stylized Claude Desktop app window outline floating in the air. BETWEEN them: a glowing thick cyan "plug-and-cable" connector pulsing with light particles, clearly labeled "MCP" in the middle on a small floating chip. Both ends crackle with soft electric arcs.
+
+LEFT TYPOGRAPHY OVERLAY (over a slightly darkened gradient):
+  - Top: small all-caps gray text "AI ERA GUIDE · MCP TUTORIAL"
+  - Title (HUGE, bold white, stacked): "CRUD → MCP"
+  - Accent (cyan #22D3EE bold with underline): "Next.js · Prisma · Claude"
+  - Tagline (white, regular): "Let Claude Desktop drive your app."
+
+BOTTOM-RIGHT: a row of 5 small dark rounded-square icons (Next.js, Prisma, Anthropic A, Cursor, Windsurf) with soft glow.
+
+Style: cinematic, dark editorial, photoreal iso-3D, deep depth-of-field bokeh, cyan + violet rim lighting on glass surfaces, premium developer magazine cover aesthetic. NO text inside the illustration beyond the "MCP" chip and what is overlaid on the left.`,
+  },
+  {
+    id: "jb-blog-thumbnail-rag-agent-platform",
+    title: "JB Blog Thumbnail — RAG Agent Platform",
+    category: "Thumbnails & Banners",
+    howToUse:
+      "Paste into Gemini Image / Midjourney / DALL-E at 16:9. For best text fidelity, generate the iso-3D illustration only and overlay the typography in Figma using the jb.desishub.com template.",
+    body: `A 16:9 dark editorial blog thumbnail, 1920x1080, matching the jb.desishub.com tutorial style:
+
+BACKGROUND: Deep midnight blue-black (#070C18) with a faint dotted grid and a soft volumetric cyan haze behind the central visual.
+
+TOP-LEFT (small): tiny light-gray monospace text "jb.desishub.com ~12px monospace"
+
+TOP-RIGHT (decorative): a small isometric Qdrant-style glass cube cluster (3 cubes stacked) glowing cyan, with tiny floating dot particles around.
+
+RIGHT-HALF VISUAL (iso-3D scene): A large translucent dark glass sphere floating in mid-air, filled with hundreds of small luminous cyan dots arranged in a swarm — clearly representing vector embeddings in 3D space. A bright cyan beam of light enters the sphere from the left (a query), converges on a small cluster of brighter dots (the top-K retrieved chunks), and a soft cyan answer glow exits from the right. Around the sphere, four small floating glass icons in a radar arrangement: a PDF page, a DOCX file, a URL link chain, and a Q&A speech bubble — each connected to the sphere by thin flowing light streams.
+
+LEFT TYPOGRAPHY OVERLAY:
+  - Top: small all-caps gray text "TUTORIAL · STEP-BY-STEP GUIDE"
+  - Title (HUGE, bold white, stacked): "RAG Agent\\nPlatform"
+  - Accent (cyan #22D3EE bold with underline): "Go · Qdrant · Vercel AI Gateway"
+  - Tagline (white, regular): "Multi-tenant. Streaming. Grounded."
+
+BOTTOM-RIGHT: a row of 5 small dark rounded-square icons (Go gopher silhouette, Qdrant, Postgres elephant, Redis, Vercel triangle) with soft glow.
+
+Style: cinematic, atmospheric, dense, photoreal iso-3D with glowing particles, deep midnight blue + electric cyan palette, premium developer magazine cover. NO text inside the illustration beyond what is overlaid.`,
+  },
+  {
+    id: "jb-blog-thumbnail-multi-model-pipelines",
+    title: "JB Blog Thumbnail — Multi-Model AI Pipelines",
+    category: "Thumbnails & Banners",
+    howToUse:
+      "Paste into Gemini Image / Midjourney / DALL-E at 16:9. For best text fidelity, generate the iso-3D illustration only and overlay the typography in Figma using the jb.desishub.com template.",
+    body: `A 16:9 dark editorial blog thumbnail, 1920x1080, matching the jb.desishub.com tutorial style:
+
+BACKGROUND: Deep near-black (#08090F) with a faint dotted grid and a soft horizontal gradient glow (cyan → violet → warm orange) running left-to-right behind the central visual.
+
+TOP-LEFT (small): tiny light-gray monospace text "jb.desishub.com ~12px monospace"
+
+TOP-RIGHT (decorative): a small floating isometric tri-prism in translucent dark glass with rainbow rim glow (cyan, violet, gold), suggesting multi-provider routing.
+
+CENTER VISUAL (right half, iso-3D scene): Three translucent glass panels floating in a left-to-right pipeline, each with a distinctive colored rim glow:
+  - Panel 1 (cyan glow): stylized "C" mark with a flowing text line — represents Claude drafting prompts.
+  - Panel 2 (violet glow): a structured JSON schema visualization with glowing braces — represents Gemini Flash returning structured data.
+  - Panel 3 (warm gold glow): a beautiful generated photograph appearing mid-render with a sweeping color reveal — represents Gemini Image.
+Between the panels: glowing arrows / flowing data streams in cyan and gold particles. Soft volumetric light, depth-of-field.
+
+LEFT TYPOGRAPHY OVERLAY:
+  - Top: small all-caps gray text "AI ERA GUIDE · PIPELINE TUTORIAL"
+  - Title (HUGE, bold white, stacked): "Multi-Model\\nPipelines"
+  - Accent (cyan #22D3EE bold with underline): "Claude · Gemini · GPT"
+  - Tagline (white, regular): "Best model per step. One Gateway."
+
+BOTTOM-RIGHT: a row of 5 small dark rounded-square icons (Anthropic A, Gemini diamond, OpenAI gear, Vercel triangle, R2 cloud) with soft glow.
+
+Style: cinematic, premium, photoreal iso-3D with multi-colored rim lighting, dark editorial palette accented with cyan + violet + warm gold, magazine-cover aesthetic. NO text inside the illustration beyond what is overlaid.`,
+  },
 ];
 
 export function getPromptsByCategory(prompts: AIPrompt[]) {
