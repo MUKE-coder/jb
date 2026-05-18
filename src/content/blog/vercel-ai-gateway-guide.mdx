@@ -1,0 +1,566 @@
+---
+title: "How to Use the Vercel AI Gateway with Anthropic, Gemini & OpenAI — Complete Setup Guide"
+description: "Step-by-step guide to setting up the Vercel AI Gateway and using one API key to access Anthropic Claude for text reasoning, Gemini for image and vision, and OpenAI nano models for cost-sensitive routes. Covers API key creation, streaming, tool calling, automatic fallbacks, cost tracking, and the exact provider mix JB uses in production."
+image: /blog/vercel-ai-gateway.webp
+category: tutorial
+createdAt: 2026-05-08
+updatedAt: 2026-05-08
+---
+
+# How to Use the Vercel AI Gateway with Anthropic, Gemini & OpenAI
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — using this exact setup across every AI feature I ship.**
+
+If you've integrated AI into more than one project, you've felt the pain: each provider has its own SDK, its own API key, its own billing dashboard, its own rate-limit dance. Want to switch from GPT to Claude mid-project? Re-plumb everything. Want to compare three providers head-to-head? Three accounts, three keys, three SDKs.
+
+The **Vercel AI Gateway** kills all of that. One API key, one SDK, hundreds of models from every major provider. You change a single string to switch from OpenAI to Anthropic to Gemini. Built-in fallbacks. Unified billing. No markup. This guide walks through the full setup, the provider mix I default to in production, and every code pattern you'll need.
+
+---
+
+## TL;DR — what you're getting
+
+- **One API key** that unlocks OpenAI, Anthropic, Google (Gemini), Meta, xAI, Mistral, DeepSeek, Cohere, Perplexity and 20+ more.
+- **The same code structure** across every provider — change `"openai/gpt-5.4"` to `"anthropic/claude-sonnet-4.6"` and you're done.
+- **Automatic failover** when a provider goes down.
+- **No markup** — you pay the list price the providers charge.
+- **Unified billing and observability** — one dashboard, one invoice.
+
+For the impatient:
+
+```ts
+import { generateText } from "ai";
+
+const { text } = await generateText({
+  model: "anthropic/claude-sonnet-4.6",
+  prompt: "Explain DGateway in one paragraph.",
+});
+```
+
+That's a complete working call. No Anthropic SDK installed. No separate Anthropic API key. Just one `AI_GATEWAY_API_KEY` env var and the Vercel `ai` package.
+
+---
+
+## The provider mix I default to
+
+After shipping AI features across half a dozen production apps, I always end up with the same routing pattern. The Vercel AI Gateway makes it trivial to mix providers per-route based on what each one is actually best at.
+
+| Use case                      | Provider / model                                           | Why                                                                                                                                                              |
+| ----------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Premium text & reasoning**  | `anthropic/claude-sonnet-4.6`                              | Best long-context comprehension, tightest reasoning, cleanest tool-call output. Default for every non-trivial text feature.                                      |
+| **Image generation & vision** | `google/gemini-3-flash-preview`                            | Native multimodal, fastest image generation in the Gateway, generous quotas. My default for any image / vision pipeline.                                         |
+| **Cost-sensitive routes**     | `openai/gpt-5.4-nano` (or `deepseek/...` for even cheaper) | When a route is high-volume and the task is simple (classification, extraction, short summaries) the nano tier is 10–100× cheaper than premium reasoning models. |
+
+The beautiful thing about the Gateway pattern is **you don't have to pick one** — every route in your app can use whichever provider fits that specific job, all through one client.
+
+I'll show all three in code below.
+
+---
+
+## Part 1 — Setting up the Vercel AI Gateway
+
+### Step 1 — Create a Vercel account
+
+Skip if you already have one.
+
+1. Go to **[vercel.com/signup](https://vercel.com/signup)**.
+2. Sign up with GitHub (fastest — your repos are already there) or email.
+3. Verify your email.
+
+You don't need to deploy anything to use the AI Gateway. The account is just where the keys and billing live.
+
+### Step 2 — Generate an AI Gateway API key
+
+1. Open the Vercel dashboard.
+2. Top-right team selector → pick the team you want billing on.
+3. From the top nav: **AI Gateway** (or go directly to **[vercel.com/dashboard/ai-gateway](https://vercel.com/dashboard/ai-gateway)**).
+4. Click **API Keys** in the sidebar.
+5. **Create Key** → name it (e.g. `local-dev`, `myapp-prod`) → **Create**.
+6. **Copy the key immediately** — Vercel only shows it once. Format: starts with `vck_…`.
+
+> 💡 **Make one key per environment**, not one master key. `myapp-dev`, `myapp-staging`, `myapp-prod`. Rotating or revoking is then a one-click action instead of "what else uses this key?"
+
+### Step 3 — Add credit to your team
+
+You don't pay extra to use the Gateway — you pay the same per-token price the providers charge. But you do need a balance to draw from.
+
+1. In the AI Gateway dashboard, sidebar → **Billing**.
+2. **Add Credit** → pick an amount ($5 is plenty to start).
+3. Pay with card.
+
+> Vercel sometimes runs new-account credit promos — check **Settings → Billing** for "Free credits available" before you top up.
+
+### Step 4 — Install the AI SDK
+
+In your Next.js (or Node) project:
+
+```bash
+pnpm add ai
+# or
+npm install ai
+# or
+yarn add ai
+```
+
+That single package gives you `generateText`, `streamText`, `generateObject`, `streamObject`, and the `gateway` provider — no separate `@ai-sdk/openai`, `@ai-sdk/anthropic`, or `@ai-sdk/google` installs needed.
+
+If you want the AI Elements React components (for chat UI), also install:
+
+```bash
+pnpm add @ai-sdk/react
+```
+
+### Step 5 — Add the env var
+
+In `.env.local` (and your production env in Vercel / Dokploy / wherever you deploy):
+
+```env
+AI_GATEWAY_API_KEY=vck_your_key_from_step_2
+```
+
+That's the **only** env var you need. The `ai` package reads it automatically — no `createGateway()` call required.
+
+> If you deploy to Vercel, you can also use **OIDC authentication** instead of an API key — Vercel injects a short-lived token automatically on production deploys. For now, the API key is simpler. See the [Vercel AI Gateway docs](https://vercel.com/docs/ai-gateway) for the OIDC flow when you need it.
+
+---
+
+## Part 2 — Your first generation
+
+Create `app/api/hello-ai/route.ts`:
+
+```ts
+import { generateText } from "ai";
+
+export async function GET() {
+  const { text, usage } = await generateText({
+    model: "anthropic/claude-sonnet-4.6",
+    prompt: "Write a haiku about TypeScript.",
+  });
+
+  return Response.json({ text, usage });
+}
+```
+
+Hit `http://localhost:3000/api/hello-ai`. You should get back something like:
+
+```json
+{
+  "text": "Static types compile,\nErrors caught before runtime —\nBugs sleep, devs ship calm.",
+  "usage": { "promptTokens": 12, "completionTokens": 25, "totalTokens": 37 }
+}
+```
+
+No Anthropic SDK installed. No Anthropic API key. The Gateway routed your call through Anthropic on your behalf and billed your Vercel team.
+
+To prove the magic, change one string and re-run:
+
+```ts
+model: "openai/gpt-5.4-nano",
+```
+
+Same response shape, different provider. That's the whole pitch.
+
+---
+
+## Part 3 — Anthropic Claude for premium text (the workhorse)
+
+This is the default for anything that involves understanding, summarising, drafting, or reasoning over user content.
+
+```ts
+import { generateText } from "ai";
+
+export async function summarisePost(content: string) {
+  const { text } = await generateText({
+    model: "anthropic/claude-sonnet-4.6",
+    prompt: `Summarise this blog post in 3 bullet points:\n\n${content}`,
+  });
+
+  return text;
+}
+```
+
+For long context, Claude handles 200K+ tokens — paste in a whole codebase or transcript without chunking.
+
+### When I reach for Claude
+
+- Blog / article summaries
+- Customer support response drafting
+- Long-form content rewrites
+- Anything that involves multi-step reasoning
+- Tool-calling agents (Claude is the most reliable at tool selection)
+
+### Streaming a response (for chat UIs)
+
+```ts
+import { streamText } from "ai";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const result = streamText({
+    model: "anthropic/claude-sonnet-4.6",
+    messages,
+  });
+
+  return result.toDataStreamResponse();
+}
+```
+
+Pair that with the AI Elements React hook on the client and you have a working chat in 20 lines:
+
+```tsx
+"use client";
+import { useChat } from "@ai-sdk/react";
+
+export function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: "/api/chat",
+  });
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {messages.map((m) => (
+        <div key={m.id}>
+          <strong>{m.role}:</strong> {m.content}
+        </div>
+      ))}
+      <input value={input} onChange={handleInputChange} />
+    </form>
+  );
+}
+```
+
+---
+
+## Part 4 — Gemini for image generation & vision
+
+When the route involves images — generation, analysis, OCR — I switch to Gemini. It's natively multimodal, the Flash tier is fast, and the price-per-image is the lowest on the Gateway.
+
+### Generate an image from a text prompt
+
+```ts
+import { experimental_generateImage as generateImage } from "ai";
+
+export async function generateProductMockup(prompt: string) {
+  const { image } = await generateImage({
+    model: "google/gemini-3-flash-image-preview",
+    prompt,
+  });
+
+  // image.base64 — embed directly in <img src={`data:image/png;base64,${image.base64}`} />
+  // image.uint8Array — write to disk, upload to S3 / R2 / UploadThing
+  return image;
+}
+```
+
+### Analyse an image (vision)
+
+```ts
+import { generateText } from "ai";
+
+export async function describeImage(imageUrl: string) {
+  const { text } = await generateText({
+    model: "google/gemini-3-flash-preview",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Describe what's in this image in 2 sentences.",
+          },
+          { type: "image", image: new URL(imageUrl) },
+        ],
+      },
+    ],
+  });
+
+  return text;
+}
+```
+
+Same pattern works for OCR, product-photo tagging, accessibility alt-text generation, anything multimodal.
+
+### When I reach for Gemini
+
+- Product mockups, hero images, thumbnails
+- Vision: describe / classify / OCR
+- Anything where price-per-image matters
+- Multi-image inputs (Gemini handles many images per request cheaply)
+
+---
+
+## Part 5 — OpenAI nano for cost-sensitive routes (and DeepSeek for cheaper still)
+
+Not every AI call needs flagship-quality output. For high-volume routes — search-query rewrites, classification, basic extraction, content moderation — I default to OpenAI's nano tier. It's roughly 10–100× cheaper per token than premium reasoning models, fast, and "good enough" for the simple jobs.
+
+```ts
+import { generateText } from "ai";
+
+export async function classifySupportTicket(message: string) {
+  const { text } = await generateText({
+    model: "openai/gpt-5.4-nano",
+    prompt: `Classify this support message into one of: BILLING, BUG, FEATURE_REQUEST, OTHER.
+Reply with only the label.
+
+Message: ${message}`,
+  });
+
+  return text.trim();
+}
+```
+
+### When budget is the headline constraint, switch to DeepSeek
+
+If you're processing **millions** of cheap calls (log enrichment, batch classification, content moderation at scale), the Gateway also routes to DeepSeek which is dramatically cheaper still:
+
+```ts
+const { text } = await generateText({
+  model: "deepseek/deepseek-chat",
+  prompt: "...",
+});
+```
+
+> **My rule of thumb:** premium reasoning models (Claude Sonnet, GPT-5.4) for anything user-facing where quality is visible. Nano / DeepSeek for anything programmatic where the user never sees the raw model output — they only see the downstream effect.
+
+---
+
+## Part 6 — Automatic fallbacks (the killer feature)
+
+Providers go down. OpenAI has an outage; Anthropic gets rate-limited; Google has a region issue. Without the Gateway, that's your app down. With the Gateway, it's a one-line config:
+
+```ts
+import type { GatewayProviderOptions } from "@ai-sdk/gateway";
+import { generateText } from "ai";
+
+const { text } = await generateText({
+  model: "anthropic/claude-sonnet-4.6", // primary
+  prompt: "Summarise this customer email...",
+  providerOptions: {
+    gateway: {
+      models: [
+        "openai/gpt-5.4", // fallback #1
+        "google/gemini-3-flash-preview", // fallback #2
+      ],
+    } satisfies GatewayProviderOptions,
+  },
+});
+```
+
+If Claude fails (timeout, 5xx, rate-limit), the Gateway automatically retries with GPT-5.4. If that also fails, Gemini. You only see an error if _every_ model in the chain fails — which is essentially "the entire AI industry is down right now."
+
+### Even better: provider routing preferences
+
+You can also tell the Gateway "for any model, prefer this routing":
+
+```ts
+providerOptions: {
+  gateway: {
+    sort: "ttft", // fastest time-to-first-token
+    // or 'cost' (cheapest), or 'tps' (highest tokens-per-second)
+  },
+},
+```
+
+Use `cost` for batch jobs, `ttft` for chat UIs where latency-to-first-character matters, `tps` for long generations.
+
+---
+
+## Part 7 — Tool calling (give the model functions)
+
+Tools turn a model from "text generator" into "agent." The Gateway supports the standard AI SDK tool syntax across every provider — same code regardless of who routes the call.
+
+```ts
+import { generateText, tool } from "ai";
+import { z } from "zod";
+
+const { text } = await generateText({
+  model: "anthropic/claude-sonnet-4.6",
+  prompt: "What's the weather in Kampala? Then suggest an outfit.",
+  tools: {
+    getWeather: tool({
+      description: "Get the current weather for a location.",
+      parameters: z.object({
+        location: z.string().describe("City name"),
+      }),
+      execute: async ({ location }) => {
+        // hit your real weather API here
+        const res = await fetch(
+          `https://api.weather.example.com/${encodeURIComponent(location)}`
+        );
+        return await res.json();
+      },
+    }),
+  },
+});
+```
+
+Claude will decide to call `getWeather`, get the result back, then write a natural-language answer that uses the data. The Gateway abstracts the provider-specific tool-calling protocol — Anthropic's `tool_use`, OpenAI's `tools`, Gemini's `function_calling` — all the same code.
+
+### Provider-executed tools (web search, etc.)
+
+Some providers run tools server-side. OpenAI's web search, for example:
+
+```ts
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
+
+const { text } = await generateText({
+  model: "openai/gpt-5.4-mini",
+  prompt: "What is the Vercel AI Gateway?",
+  tools: {
+    web_search: openai.tools.webSearch({}),
+  },
+});
+```
+
+The Gateway also has its own built-in tools (`gateway.tools.perplexitySearch()`, `gateway.tools.parallelSearch()`) that work with **any** model. Great for cheap web search regardless of which provider you're routing to.
+
+---
+
+## Part 8 — Tracking usage and cost
+
+This is where the unified-billing thing pays off in practice.
+
+### Per-user usage tracking
+
+Add a `user` and `tags` to every request:
+
+```ts
+import type { GatewayProviderOptions } from "@ai-sdk/gateway";
+
+await generateText({
+  model: "anthropic/claude-sonnet-4.6",
+  prompt: "...",
+  providerOptions: {
+    gateway: {
+      user: currentUser.id, // attribute spend to this end-user
+      tags: ["feature:summary", "v2"], // categorise for filtering
+    } satisfies GatewayProviderOptions,
+  },
+});
+```
+
+Now in the Vercel dashboard you can filter spend by user, feature, or release tag. You always know exactly which user / feature is burning credits.
+
+### Query spend programmatically
+
+```ts
+import { gateway } from "ai";
+
+const report = await gateway.getSpendReport({
+  startDate: "2026-05-01",
+  endDate: "2026-05-31",
+  groupBy: "model", // or 'user', 'tag', 'provider', 'day'
+});
+
+for (const row of report.results) {
+  console.log(`${row.model}: $${row.totalCost.toFixed(4)}`);
+}
+```
+
+Build that into an admin dashboard, surface "AI credits remaining" to users, or fire alerts when a single user crosses a daily spend threshold.
+
+### Check team balance
+
+```ts
+const credits = await gateway.getCredits();
+console.log(`Balance: $${credits.balance}`);
+```
+
+I wire this into a daily Slack notification so I see balance trending down before it runs out.
+
+---
+
+## Part 9 — Production patterns I always apply
+
+After shipping this pattern in several apps, here's the checklist I run through on every project:
+
+### 1. One key per environment
+
+`local`, `preview`, `prod`. Set in `.env.local` for dev, in Vercel / Dokploy env for prod. Never share. Rotate the prod key if a teammate leaves.
+
+### 2. Set a spend cap
+
+Vercel AI Gateway → **Billing → Spend Limits**. Pick a daily and monthly cap. Better to ship with a low cap and bump it than to wake up to a $2000 bill from a runaway loop.
+
+### 3. Always pass `user` and `tags`
+
+Even for internal apps. Future-you debugging "why is my Gateway bill 3× last month" will be **so** grateful.
+
+### 4. Stream long outputs
+
+Anything over ~300 tokens of expected output, use `streamText` not `generateText`. Users perceive a streamed response as instant; a 4-second `generateText` reads as broken.
+
+### 5. Set realistic fallbacks for production routes
+
+The fallback chain pattern from Part 6 — apply it to every production route. Two extra lines, massive uptime win.
+
+### 6. Use the cheapest model that works
+
+Test your prompt against `nano` / `flash` / `haiku` tiers first. Only upgrade to Sonnet / GPT-5.4 / Pro if the cheap tier genuinely fails. I've seen teams pay 50× more for output they couldn't tell apart in a blind test.
+
+### 7. Cache aggressively for repeat prompts
+
+If the same prompt fires more than once per minute (RSS summaries, daily news digests, etc.), wrap the call in your own KV cache. The Gateway doesn't dedupe identical prompts — that's on you.
+
+### 8. Watch the dashboard the day after each release
+
+The first 24 hours after shipping a new AI feature is where usage spikes happen. Catch any cost anomalies before they become problems.
+
+---
+
+## Frequently asked questions
+
+### What does the Vercel AI Gateway actually do?
+
+It's a single API and SDK that proxies requests to 20+ AI providers — OpenAI, Anthropic, Google, Meta, xAI, Mistral, DeepSeek, Cohere, Perplexity, Amazon Bedrock and more. You get one API key, one bill, automatic fallbacks if a provider is down, and built-in spend tracking — all without writing any provider-specific glue code.
+
+### Does the Vercel AI Gateway charge a markup?
+
+**No.** You pay the same per-token price you would pay each provider directly. Vercel monetises through their hosting platform and enterprise features — the Gateway itself is at-cost for the AI calls.
+
+### Do I need to deploy to Vercel to use the AI Gateway?
+
+No. The Gateway works from anywhere — your Next.js app on Dokploy / Hetzner / Contabo, a Node script, a Lambda, a Go service via the OpenAI-compatible HTTP API. All you need is an internet connection and your `AI_GATEWAY_API_KEY`.
+
+### How is this different from OpenRouter?
+
+OpenRouter is the closest competitor. Practical differences: **Vercel doesn't add a markup** (OpenRouter charges a small platform fee on every call), **Vercel has tighter AI SDK integration** (single package, type-safe, official maintainer), and **Vercel adds automatic OIDC auth on deployments** so you don't even need a key in production. OpenRouter has a longer history and a larger free tier. Either works — pick on the integration friction with your stack.
+
+### Can I bring my own provider API keys (BYOK)?
+
+Yes. In the Gateway dashboard → **BYOK** → add your existing OpenAI / Anthropic / etc keys. The Gateway will use your accounts (and not bill you on Vercel credits) when those providers are routed. Useful if you have an enterprise contract with a specific provider but want the Gateway's routing / fallback / observability.
+
+### What happens if a provider is down?
+
+If you've configured fallbacks (`providerOptions.gateway.models = [...]`), the Gateway automatically tries the next model in the chain. You only see an error if every model in the chain fails. If you haven't configured fallbacks, you get the provider's actual error.
+
+### Which provider is cheapest for text generation in 2026?
+
+DeepSeek and the OpenAI nano tier are the cheapest mainstream options on the Gateway. For truly budget workloads (millions of small classifications), DeepSeek is hard to beat. For "small but smart enough" tasks where you want consistent quality, OpenAI nano is my default.
+
+### Which provider is best for image generation?
+
+Google Gemini's image-preview models are my default — fastest, cheapest per image, native multimodal. For higher artistic quality, the Gateway also routes to other image providers — try a few against your specific prompts and pick what looks right.
+
+---
+
+## Need help integrating AI into your app?
+
+I build production AI features and agents for clients — Vercel AI Gateway, Claude Code MCP servers, custom AI workflows, RAG pipelines, and AI-powered admin tools.
+
+- 📞 **[Book a session](/book)** — 1-on-1 setup help, code review, or architecture consult. Sessions from UGX 50,000.
+- 💼 **Hire Desishub** for full AI feature builds — [desishub.com](https://desishub.com)
+- 📺 **YouTube** — practical AI integration tutorials at [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- 📚 **Related**: [Complete Guide to AI Integration with Vercel AI SDK](/blog/ai-integration-guide), [Building an AI-Powered E-commerce Chatbot](/blog/ai-shop-assistant), [Building a Production-Ready MCP Server](/blog/building-mcp-server-contacts)
+
+---
+
+## Resources
+
+- **Vercel AI Gateway docs**: [vercel.com/docs/ai-gateway](https://vercel.com/docs/ai-gateway)
+- **AI SDK docs**: [sdk.vercel.ai](https://sdk.vercel.ai)
+- **AI Gateway provider list**: [vercel.com/docs/ai-gateway/providers](https://vercel.com/docs/ai-gateway/providers)
+- **Anthropic Claude models**: [docs.anthropic.com](https://docs.anthropic.com)
+- **Google Gemini models**: [ai.google.dev](https://ai.google.dev)
+- **OpenAI models**: [platform.openai.com/docs/models](https://platform.openai.com/docs/models)
