@@ -1,0 +1,440 @@
+---
+title: "Add Mobile Money & Card Payments to Framer Sites — The DGateway Framer Plugin"
+description: "The new DGateway Framer plugin drops 5 pre-built payment components (Pay Button, Donation Form, Product Card, Subscribe Button, Payment Link Embed) onto any Framer site. MTN Mobile Money, Airtel Money, and Stripe cards — zero backend, no API keys in the browser. Install in 2 minutes, ship in 5."
+image: /case-studies/dgateway-framer.png
+category: tutorial
+createdAt: 2026-05-19
+updatedAt: 2026-05-19
+---
+
+# Add Mobile Money & Card Payments to Framer Sites — The DGateway Framer Plugin
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — built and maintain [DGateway](https://dgateway.desispay.com) and the new [Framer plugin](https://github.com/MUKE-coder/dgateway-framer-plugin).**
+
+Framer is the best design-to-production website tool I've ever used. Drag, drop, animate, publish — done. The one thing it has never solved for African creators: **payments, especially Mobile Money.**
+
+Stripe needs a card most regional buyers don't have. Rolling your own MTN MoMo or Airtel Money flow needs a backend. Payment links work but look like generic blue text on the page.
+
+The new **DGateway Framer plugin** fixes all three. Install it once, open the plugin in the Framer editor, configure a button, copy the generated snippet, paste it onto the canvas. You're accepting Mobile Money on a Framer site in under five minutes — with no backend, no exposed API key, and no design tax.
+
+---
+
+## TL;DR — what you're getting
+
+- **5 drop-in components**: Pay Button, Donation Form, Product Card, Subscribe Button, Payment Link Embed.
+- **2 output formats** per component: Framer code component (visually editable) or HTML embed (plug-and-play).
+- **Zero backend** required. The plugin renders styled CTAs that open DGateway hosted checkout — all processing happens server-side on DGateway.
+- **No API keys in the browser** — Framer sites are static, so the plugin deliberately never embeds secrets.
+- **Mobile Money + cards** in the same checkout: MTN MoMo, Airtel Money, Stripe.
+- **Free Framer plan compatible.** Free DGateway signup — test transactions work without paying any connection fee.
+
+---
+
+## Why I built it
+
+I run [DGateway](https://dgateway.desispay.com) — a payments SaaS that unifies Mobile Money and cards behind one API for African creators and businesses. Every week I'd get the same message from someone on Framer:
+
+> "I love DGateway but I'm on Framer — how do I add a pay button without writing code?"
+
+The honest answer used to be "you can't, paste an HTML embed and style it yourself." That answer is now: **install the plugin, configure a button, copy, paste.**
+
+---
+
+## How it works (the architecture)
+
+The cleanest way to understand this plugin is: **it does not make API calls from the browser.** Ever.
+
+```
+Buyer on your Framer site
+        │
+        │ clicks Pay Button
+        ▼
+Popup opens → dgateway.desispay.com/store/<app>/p/<link>
+        │
+        │ DGateway hosted checkout handles:
+        │  • phone entry
+        │  • STK push (MTN/Airtel)
+        │  • card form (Stripe)
+        │  • status updates
+        │  • success redirect
+        ▼
+Webhook fires → your backend / Zapier / n8n
+(Framer is NOT in the webhook path)
+```
+
+The plugin's job is purely to render a styled CTA that opens the right hosted page in a popup. Every secret lives server-side on DGateway. Your Framer site stays static, fast, and safe to publish.
+
+> 🔐 **Compare with the WordPress plugin**, which holds a secret API key — that works because WordPress is PHP and runs server-side. Framer publishes static JS, so embedding a secret would leak it to anyone with browser dev tools. The Framer plugin deliberately never goes that route.
+
+---
+
+## Install the plugin (2 minutes)
+
+### Option A — Direct ZIP (recommended)
+
+1. Open the [docs page](https://dgateway.desispay.com/docs/framer) and download `dgateway-framer-plugin.zip`.
+2. Open any Framer project.
+3. Top-right toolbar → click the **puzzle icon** (Plugins) → **Add Plugin** → **Open from File**.
+4. Select the downloaded zip.
+5. The **DGateway** icon appears in your plugin tray. Click to open.
+
+> ⚠️ **"Open from File" is greyed out?** That option requires a paid Framer plan. Free-plan users can still use the marketplace listing once it ships (under review now), or paste the HTML embed format directly.
+
+### Option B — From source (development)
+
+```bash
+git clone https://github.com/MUKE-coder/dgateway-framer-plugin
+cd dgateway-framer-plugin
+npm install
+npm run dev
+```
+
+Then in Framer: **Plugins → Add Plugin → Open from URL** → paste `http://localhost:5173`. Hot reload works.
+
+### Option C — Framer Marketplace
+
+Currently under review. Once approved, it's a one-click install. Until then, the ZIP method is the way.
+
+---
+
+## First-run setup (30 seconds)
+
+The first time you open the plugin, it prompts you for your **app slug**. Find it in:
+
+> DGateway dashboard → your app → **Store Settings** → **Slug**
+
+You can find/sign up for the dashboard at [dgatewayadmin.desispay.com](https://dgatewayadmin.desispay.com/store/signup) — free, no card required to start.
+
+Paste your slug, save. The plugin remembers it across reinstalls so you only do this once.
+
+---
+
+## The 5 components
+
+### 1. Pay Button — fixed-amount checkout
+
+Best for: a single product, a course, a one-time service.
+
+| Property                     | Purpose                                                  |
+| ---------------------------- | -------------------------------------------------------- |
+| **Payment Link Slug**        | The slug from your DGateway Payment Link                 |
+| **Button Label**             | Visible CTA text (e.g. `Pay UGX 5,000`)                  |
+| **Success URL** _(optional)_ | Where the parent site redirects after successful payment |
+| **App Slug**                 | Auto-filled from settings; override per button if needed |
+
+Behind the scenes the generated component opens `https://dgateway.desispay.com/store/<app>/p/<link>` in a popup, polls it for the success redirect, then navigates your parent site.
+
+### 2. Donation Form — preset chips + custom amount
+
+Best for: tip jars, fundraisers, "pay what you want".
+
+| Property                | Purpose                                                   |
+| ----------------------- | --------------------------------------------------------- |
+| **Payment Link Slug**   | Must be a **flexible-amount** link in DGateway            |
+| **Title**               | Heading shown above the amount chips                      |
+| **Preset Amounts**      | Comma-separated values (e.g. `5000, 10000, 25000, 50000`) |
+| **Currency**            | Display label (UGX, KES, etc.)                            |
+| **Allow Custom Amount** | Adds a free-text input for any value                      |
+| **Button Label**        | Submit-button text                                        |
+
+The chosen amount is appended to the checkout URL as `?amount=N`, so DGateway opens with the right value pre-selected.
+
+### 3. Product Card — image + name + price + CTA
+
+Best for: physical products, digital downloads, services with a hero image.
+
+| Property             | Purpose                                     |
+| -------------------- | ------------------------------------------- |
+| **Product Slug**     | From **Products → slug** in DGateway        |
+| **Product Name**     | Display name                                |
+| **Image URL**        | Public URL for the cover image              |
+| **Price / Currency** | Shown on the card (also passed to checkout) |
+| **Button Label**     | CTA (e.g. `Buy now`)                        |
+
+Opens `/store/<app>/pay/<product>` — DGateway's hosted product checkout that handles inventory, variants, and delivery email.
+
+### 4. Subscribe Button — recurring billing
+
+Best for: membership sites, SaaS, monthly newsletters.
+
+| Property         | Purpose                                         |
+| ---------------- | ----------------------------------------------- |
+| **Plan ID**      | From **Subscriptions → Plans → ID** in DGateway |
+| **Button Label** | e.g. `Subscribe — UGX 10,000/mo`                |
+
+First cycle billing + recurring renewals are all handled by DGateway. Confirmation emails fire from DGateway, not Framer.
+
+### 5. Payment Link Embed — wrap any existing link
+
+Best for: when you already have a DGateway payment link and just want to style it as a card CTA instead of a raw URL.
+
+Accepts any full DGateway link URL → renders as a styled card.
+
+---
+
+## Two output formats — pick what fits the page
+
+Every component generates **both** formats so you can choose the right one per page.
+
+### Framer Code Component
+
+```tsx
+// DGatewayPayButton.tsx
+// Paste into Framer Studio: Assets → Code → New File.
+
+import * as React from "react";
+import { addPropertyControls, ControlType } from "framer";
+
+interface Props {
+  label: string;
+  paymentUrl: string;
+  successUrl?: string;
+  bg: string;
+  color: string;
+  radius: number;
+  width: number | string;
+  height: number | string;
+}
+
+export default function DGatewayPayButton(props: Props) {
+  const { label, paymentUrl, successUrl, bg, color, radius, width, height } =
+    props;
+
+  const onClick = () => {
+    const popup = window.open(paymentUrl, "dgateway", "width=520,height=720");
+    if (!popup) {
+      window.location.href = paymentUrl;
+      return;
+    }
+    if (!successUrl) return;
+    // poll the popup so we can navigate the parent site on success
+    const tick = window.setInterval(() => {
+      try {
+        if (popup.closed) return window.clearInterval(tick);
+        if (popup.location.href.startsWith(successUrl)) {
+          window.clearInterval(tick);
+          popup.close();
+          window.location.href = successUrl;
+        }
+      } catch {
+        /* cross-origin while still on DGateway — ignore */
+      }
+    }, 800);
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: bg,
+        color,
+        border: "none",
+        borderRadius: radius,
+        padding: "0 16px",
+        width,
+        height,
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+addPropertyControls(DGatewayPayButton, {
+  label: { type: ControlType.String, title: "Label" },
+  paymentUrl: { type: ControlType.String, title: "Payment URL" },
+  successUrl: { type: ControlType.String, title: "Success URL" },
+  bg: { type: ControlType.Color, title: "Background" },
+  color: { type: ControlType.Color, title: "Text Color" },
+  radius: { type: ControlType.Number, title: "Radius" },
+});
+```
+
+Drag it from Assets onto your canvas. Tweak label, color, radius from the right-side Property Controls — no code editing once it's in place.
+
+### HTML Embed
+
+```html
+<a
+  href="https://dgateway.desispay.com/store/your-app/p/my-product"
+  target="_blank"
+  rel="noopener"
+  style="
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #6c5ce7;
+    color: #fff;
+    padding: 0 16px;
+    height: 44px;
+    border-radius: 10px;
+    font: 600 14px system-ui, sans-serif;
+    text-decoration: none;
+  "
+>
+  Buy now — UGX 5,000
+</a>
+```
+
+Drag Framer's built-in **Embed** component → paste this into the HTML field → publish.
+
+### Which format should you use?
+
+| Need                                                     | Pick               |
+| -------------------------------------------------------- | ------------------ |
+| Same button on 6 pages — change once, update everywhere  | **Code Component** |
+| One-off landing page, fastest path to live               | **HTML Embed**     |
+| Need responsive resize on the canvas                     | **Code Component** |
+| Working on a free Framer plan with no code-editor access | **HTML Embed**     |
+
+My rule of thumb: **code component once, drag everywhere**. Reserve HTML embeds for one-off prototypes.
+
+---
+
+## Full 5-minute walkthrough — Pay Button
+
+1. **Create a payment link** in DGateway: dashboard → your app → **Payment Links** → **New** → set a fixed amount → save the slug.
+2. **Open the plugin** in your Framer project (top-right → Plugins → DGateway).
+3. **Pick "Pay Button"** from the home list.
+4. **Fill the fields**:
+   - Payment Link Slug: `my-product`
+   - Button Label: `Buy now — UGX 5,000`
+   - Success URL: `https://yoursite.framer.app/thanks` _(optional)_
+5. **Choose output**: tab over to "Framer Code Component" or "HTML Embed".
+6. **Click Copy snippet.**
+7. **Paste into Framer**:
+   - Code component: Assets → Code → New File → paste → save → drag onto canvas.
+   - HTML embed: drag Framer's Embed component → paste into HTML field.
+8. **Publish**. Click the button on the live URL. DGateway checkout opens in a popup. Pay with MTN/Airtel/Stripe. Success → redirect.
+
+Total: under 5 minutes for your first button. Repeat per product.
+
+---
+
+## Why this saves real time
+
+I built [a Next.js reference integration](/blog/dgateway-integration-with-nextjs-guide) for DGateway last quarter — it's a great walkthrough if you're building a custom storefront. But it's also **2-5 days of work**: API client, checkout route, status polling, UI states, currency conversion, error handling.
+
+This plugin **collapses that into 5 minutes of plugin-clicking** by trading flexibility for speed. You give up full UI control (you're using DGateway's hosted checkout). You gain: zero backend, zero key management, zero CORS headaches, and a checkout that always works because we're the ones maintaining it.
+
+For 90% of Framer use cases — course sellers, donation pages, agency landing pages, product launches — the trade is obviously worth it.
+
+---
+
+## What's NOT in v1 (and what's coming)
+
+The plugin is intentionally lean for the first release. Here's what's deferred:
+
+- **No admin dashboard inside Framer** — transactions, refunds, customer list live in the DGateway dashboard. (And probably should — Framer is a design tool, not an ops console.)
+- **No CMS auto-sync** — v1 needs you to paste product slugs manually. v2 will sync DGateway products into Framer Collections automatically.
+- **No product picker dropdown** — v1 takes slug strings; v2 will list your products in a dropdown so you pick instead of type.
+- **Dedicated Course and Event components** — coming as separate component templates in v2.
+
+If any of these block you, [WhatsApp me](https://wa.me/256762063160) — I prioritise based on real requests.
+
+---
+
+## Troubleshooting
+
+| Symptom                                         | Fix                                                                                                         |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Plugin panel is blank                           | Open browser devtools, check for console errors. Re-install the zip — usually a cache issue.                |
+| "Open from File" is greyed out                  | Requires a paid Framer plan. Use HTML embed paths until the marketplace listing lands.                      |
+| Button works on canvas but not on the live site | Republish the Framer site after pasting any code.                                                           |
+| Copy snippet button doesn't do anything         | Sandbox may be blocking the Clipboard API. Select the code manually and Ctrl/Cmd+C.                         |
+| Popup blocked                                   | The first click after page load must be a user gesture. Test in incognito with popups allowed.              |
+| "App not found" on checkout                     | Verify your app slug: plugin Settings (gear icon) → match it to DGateway dashboard → Store Settings → Slug. |
+
+---
+
+## Pricing — getting started for free
+
+- **Framer**: Free plan is enough to test and publish a single page with HTML embeds. Code components require a paid Framer plan.
+- **DGateway**: [Free signup](https://dgatewayadmin.desispay.com/store/signup), no card required. Test transactions work end-to-end without paying the activation fee, so you can have the integration live on your Framer site before spending anything.
+- **Plugin itself**: Open source ([MIT](https://github.com/MUKE-coder/dgateway-framer-plugin)), free forever.
+
+You only pay DGateway's percentage on real production transactions — same rates as the rest of DGateway, no Framer surcharge.
+
+---
+
+## Use cases I've seen this week
+
+| Builder                     | Setup                                                                                               |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Course seller (Kampala)** | One Product Card per course, Pay Button on the upsell page. Webhook → auto-enrollment in their LMS. |
+| **Church website (Mbale)**  | Donation Form with chip amounts 5k / 10k / 25k / 50k and a custom-amount input for tithes.          |
+| **Indie SaaS (Nairobi)**    | Subscribe Button on the pricing section. First cycle bills via Mobile Money, recurring via card.    |
+| **Photographer (Kigali)**   | Payment Link Embed cards for booking deposits — each session has its own link.                      |
+| **Agency (Dar es Salaam)**  | Drop-in Pay Buttons into client Framer sites — agency stays design-only, never touches a backend.   |
+
+If your Framer site has a CTA that should take money, the plugin probably already has the right component for it.
+
+---
+
+## Frequently asked questions
+
+### Does the plugin expose my DGateway API key?
+
+No. By design. Framer sites are static client-side JavaScript — any key in the bundle leaks. The plugin never makes authenticated calls from the browser. Components are pure links to DGateway's hosted checkout pages; all processing happens server-side.
+
+### What payment methods are supported?
+
+**MTN Mobile Money, Airtel Money, and Stripe (cards).** The same providers DGateway supports natively — the plugin is just a UI layer over them. As DGateway adds more providers, every component picks them up automatically.
+
+### Does it work on the Framer free plan?
+
+HTML embeds: **yes**. Code components: **paid plan required** (because the free plan doesn't let you create code files). Most users start with HTML embeds and graduate to code components when they hit "I need to update 8 buttons at once."
+
+### How are webhooks handled?
+
+Webhooks fire from DGateway to whatever URL you've configured in the DGateway dashboard — typically your own backend, Zapier, or n8n. Framer is not in the webhook path. Digital product delivery emails and subscription billing emails come from DGateway directly.
+
+### Can I customise the styling?
+
+Yes. Every code component exposes `bg`, `color`, `radius`, `width`, `height` as Framer Property Controls. For HTML embeds, edit the inline `style="..."` directly. Default brand colour is DGateway violet `#6c5ce7` — change to whatever matches your site.
+
+### Will the marketplace install be different?
+
+Functionally the same — just a one-click "Add to Framer" instead of downloading a zip. Same components, same configuration, same code output. Updates will arrive automatically via the marketplace once listed.
+
+### What's the difference between this and rolling DGateway into Next.js?
+
+The Next.js route gives you full UI control + custom checkout flows but takes days of dev work. This plugin gives you a working integration in 5 minutes at the cost of UI flexibility (you're embedding DGateway hosted checkout). Pick the plugin unless you specifically need a fully bespoke checkout. Full Next.js walkthrough: [Integrating DGateway Payments into a Next.js App](/blog/dgateway-integration-with-nextjs-guide).
+
+### Will it work outside Uganda / Kenya / Tanzania?
+
+Anywhere DGateway already supports — MTN MoMo and Airtel Money networks across East Africa, plus Stripe globally. The plugin doesn't change the geographic reach; it just makes the UI trivial.
+
+---
+
+## Related reading
+
+- [Integrating DGateway Payments into a Next.js App](/blog/dgateway-integration-with-nextjs-guide) — the custom-checkout route, for when you need full UI control.
+- [DGateway Shop Component](/blog/dgateway-shop-component) — drop-in shop component for non-Framer React apps.
+- [Accept Mobile Money across East Africa — one API](/blog/accept-mobile-money-across-east-africa-one-api) — the DGateway story.
+
+---
+
+## Need help shipping it?
+
+I built DGateway and personally maintain the Framer plugin. If you're stuck on setup, want a Framer audit, or need a custom component, reach out.
+
+- 📞 **[Book a session](/book)** — 1-on-1 plugin install, code review, or custom-component build. Sessions from UGX 50,000.
+- 💼 **Hire Desishub** for full Framer + payments builds — [desishub.com](https://desishub.com)
+- 💬 **WhatsApp JB**: [+256 762 063 160](https://wa.me/256762063160) — fastest path to a real human.
+- 💻 **Source / issues**: [github.com/MUKE-coder/dgateway-framer-plugin](https://github.com/MUKE-coder/dgateway-framer-plugin)
+- 📺 **YouTube**: [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER) for setup videos.
+
+---
+
+## Resources
+
+- **Plugin download + docs**: [dgateway.desispay.com/docs/framer](https://dgateway.desispay.com/docs/framer)
+- **Launch blog post (on DGateway)**: [dgateway.desispay.com/blog/dgateway-framer-plugin-guide](https://dgateway.desispay.com/blog/dgateway-framer-plugin-guide)
+- **Open-source repo**: [github.com/MUKE-coder/dgateway-framer-plugin](https://github.com/MUKE-coder/dgateway-framer-plugin)
+- **DGateway dashboard**: [dgatewayadmin.desispay.com](https://dgatewayadmin.desispay.com)
+- **Free signup**: [dgatewayadmin.desispay.com/store/signup](https://dgatewayadmin.desispay.com/store/signup)
+- **Framer Plugin SDK docs**: [framer.com/developers/plugins/introduction](https://www.framer.com/developers/plugins/introduction)
