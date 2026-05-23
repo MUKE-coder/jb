@@ -1,0 +1,311 @@
+---
+title: "Introducing Shoppleet — The Offline-First Desktop Business Management Platform for East African Retailers"
+description: "Shoppleet is a native desktop business management platform built for East African retailers — 9 modules covering POS, inventory, IMEI tracking, finance and reporting, with full offline-first sync. Built solo on the Grit framework, now running in 280+ shops with 1.4M+ IMEIs tracked. Here's the launch story."
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfqR4j6EgnxaXK5QskFPrNjMOTW0coEGZB2h7d
+category: product
+createdAt: 2026-05-23
+updatedAt: 2026-05-23
+---
+
+# Introducing Shoppleet — The Offline-First Desktop Business Management Platform for East African Retailers
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — sole developer and creator of [Shoppleet](https://shoppleet.com), built on the [Grit framework](https://gritframework.dev).**
+
+Most shop-management software in East Africa fails the same test: the moment WiFi drops, the till stops selling. That's an unacceptable defect when you're running a phone shop in Wandegeya at 6pm and the customer in front of you has cash in hand.
+
+I built **[Shoppleet](https://shoppleet.com)** to fix exactly that. It's a native desktop business management platform — Windows, macOS, Linux — designed around one guiding rule: **the till never waits for WiFi.** Every sale lands in local SQLite first; the cloud syncs the moment a bar of signal returns. Cashiers never see a spinner.
+
+After 18 months of building and 280+ shops running it across the region, today I'm publicly launching it.
+
+---
+
+## TL;DR — what Shoppleet is
+
+- A **native desktop app** (Windows / macOS / Linux) for East African retailers — not a packaged browser, a real binary.
+- **9 modules**: Dashboard, Sales, Purchases, Inventory, IMEI Tracking, Finance, Reports, Auditing, Administration.
+- **Offline-first** via local SQLite + sync outbox — the till works without internet.
+- **Multi-tenant + multi-branch** with strict per-tenant isolation.
+- **175+ granular permissions** across a 3-level catalog.
+- **Phone-shop-grade IMEI tracking** — dual-SIM aware, lifecycle-locked, scan-to-resolve at the POS.
+- **Permanent audit trail** + 3-12 month activity feed.
+- **Mobile companion app** (iOS + Android) for owners on the go.
+- **5 currencies**: UGX, USD, KES, TZS, RWF.
+
+---
+
+## Why I built it
+
+Every shop owner I talked to in Kampala, Nairobi, and Dar had the same complaint about their existing software:
+
+> "It works when the internet works. When it doesn't, we go back to writing on paper. Then we lose a transaction. Then the stock count is wrong by Friday."
+
+Cloud-only POS systems treat connectivity as a given. In our region, it isn't. Power flickers, fibre gets cut, MTN backbones reset, your daughter's phone hotspot dies — and your business stops earning.
+
+The technical answer was obvious — **make the app run entirely locally first, sync to the cloud opportunistically**. The hard part was building it in a way that:
+
+1. Handles **IMEI tracking** to phone-shop discipline (Uganda is a phone-retail powerhouse).
+2. Survives a multi-cashier till where people sign in and out all day.
+3. Produces **audit trails that survive cross-examination** — you can't delete a sale, only reverse it.
+4. Generates print-ready reports owners actually want — not "data exports" that need an accountant to interpret.
+5. Doesn't bankrupt the SME running on a UGX 800,000 laptop.
+
+The result is Shoppleet — currently on **v1.5.45**, running in **280+ shops** and tracking **1.4M+ IMEIs** as of May 2026.
+
+---
+
+## The "till never waits for WiFi" architecture
+
+Every other claim about Shoppleet hangs off this one engineering decision: **the database is local first, cloud second.**
+
+```
+Cashier presses F4 (save sale)
+        │
+        ▼
+Write to local SQLite (durable, instant)
+        │
+        ▼
+Enqueue to local outbox table
+        │
+        ▼
+Background worker drains outbox → api.shoppleet.com
+        │
+        ├─ Network up?    → Sync within ~2 seconds
+        │
+        └─ Network down?  → Stay queued, retry with exponential backoff
+                            (next launch resumes from where it stopped)
+```
+
+What this buys you:
+
+- **Sales work offline indefinitely.** Spend a day disconnected. Come back, the outbox drains.
+- **No "saving…" spinner at the till.** F4 returns in `<100ms` because it's writing to a file on the same machine.
+- **Crash safety.** If the laptop dies mid-sale, the next launch picks up cleanly — no lost transactions.
+- **Per-till idempotency keys** mean a queued sale that already synced never double-posts.
+
+The trade-off is **sync conflicts** — two tills selling the last unit at the same time. We resolve those with a server-authoritative stock allocator: whichever sale syncs first wins; the second gets a clear "out of stock — reverse?" prompt on its dashboard. No silent overselling.
+
+---
+
+## The 9 modules at a glance
+
+Every screen in Shoppleet lives in one of 9 numbered modules. The numbering matches what the cashier sees in the sidebar.
+
+| #   | Module             | What it owns                                                                                                          |
+| --- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Dashboard**      | Daily snapshot for owners — revenue vs yesterday, cash flow, stock value, low-stock alerts, branches behind on sync   |
+| 2   | **Sales**          | Offline-first POS — 6 keystrokes per cash sale, IMEI capture per line, returns, no deletes (only reversals)           |
+| 3   | **Purchases**      | GRN, supplier ledger, per-line IMEI capture (scan / paste / CSV), FIFO stock batches                                  |
+| 4   | **Inventory**      | Branch-aware stock balances, send→confirm transfers, IMEI-aware adjustments, 7-column daily ledger                    |
+| 5   | **IMEI Tracking**  | Dual-IMEI capture (IMEI1 + IMEI2), Luhn validation, scan-to-resolve, blacklist registry, warranty per IMEI            |
+| 6   | **Finance**        | Cash / bank / mobile money / card wallets, debtor & creditor aging, expenses, live P&L, balance sheet                 |
+| 7   | **Reports**        | Sales (general / by product / cashier / brand / size×colour), inventory, finance, audit — PDF + Excel                 |
+| 8   | **Auditing**       | Activity trail (3-12 mo) + permanent audit trail with before/after JSON and operator reasons                          |
+| 9   | **Administration** | Staff, 175+ permissions across 4 presets (Owner/Manager/Cashier/Stock Keeper), branches, tax rates, receipt templates |
+
+Each module gets its own permission tree, audit hooks, and printable reports — so a Cashier can ring sales but never view P&L, and a Stock Keeper can receive goods but never void a sale.
+
+---
+
+## The IMEI tracking story (why phone shops chose us first)
+
+Phone retail in East Africa runs on IMEIs. Without proper tracking you can't honour warranties, can't catch stolen returns, and can't reconcile when a unit "disappears" between branches. Most POS systems hand-wave this as "serial numbers" and leave shops to bodge it in Excel.
+
+Shoppleet treats IMEI as a first-class citizen:
+
+- **Dual-SIM aware** — captures IMEI1 + IMEI2 separately on every phone.
+- **Strict per-business uniqueness** — the same IMEI can't be received twice in your tenant, even across branches.
+- **Lifecycle-locked status**: `IN_STOCK → SOLD → RETURNED / DAMAGED`, never deleted.
+- **Luhn checksum validation** on manual entry to catch typos at the point of input.
+- **Paste-from-Excel + CSV upload** with duplicate detection (both within the file and against your existing stock).
+- **Auto-reject Excel-corrupted serials** like `3.5679E+14` (anyone who's done bulk IMEI imports knows this pain).
+- **Scan-to-resolve at the POS** — type or scan the IMEI, system finds the SKU automatically.
+- **Per-IMEI history page** — every state change, who did it, when, why.
+- **Stolen / recalled device blacklist** — a national registry hook so resold stock can't quietly slip back in.
+
+That last point matters more than it sounds. As of May 2026, Shoppleet has tracked **over 1.4 million IMEIs** across customer shops — and the blacklist registry has already prevented dozens of stolen-phone resales.
+
+---
+
+## The "no deletes, only reversals" doctrine
+
+Every transactional record in Shoppleet — sales, purchases, expenses, transfers, stock adjustments — is **append-only**. You can't delete a sale to make a bad day look better. You can only _reverse_ it with a required, operator-supplied reason. The reversal is itself a recorded row with `is_reversal = true`, the audit trail captures the operator, and the permanent audit log keeps the before/after JSON.
+
+This is the single biggest reason owners trust Shoppleet to leave staff unsupervised:
+
+> "Before Shoppleet I had to count cash every evening to know if my cashier was clean. Now I read the audit trail in the morning. If someone reversed a sale, I see why."
+> — Shop owner, Kampala (12-month customer)
+
+The audit-trail screen has a **financial-impact column** so you can sort by "edits that cost money" and review only the suspicious ones. Compliance officers and SACCOs love this; cashiers respect it.
+
+---
+
+## Built on Grit — the engine room
+
+Shoppleet isn't built on Rails, Django, or Next.js. It's built on **[Grit](https://gritframework.dev)** — a full-stack Go meta-framework I designed specifically to generate every layer of a multi-tenant SaaS from one schema definition.
+
+From a single Grit schema, the generator emits:
+
+- Go API models, handlers, and routes (Gin + GORM)
+- TypeScript types
+- React Query hooks
+- Desktop form scaffolds (Wails 2 + React 19)
+- Mobile screens (Expo + React Native)
+- Marketing copy stubs
+
+That's how one developer (me) ships and maintains an end-to-end product — API, desktop client, mobile companion, and marketing site — without drowning in glue code. The Grit framework _is_ my multiplier.
+
+If you've ever wondered whether a Go meta-framework can power a real production SaaS, Shoppleet is the answer in production.
+
+### Stack snapshot
+
+| Layer          | Tech                                                                        |
+| -------------- | --------------------------------------------------------------------------- |
+| API            | Go 1.22 · Gin · GORM · PostgreSQL · Redis · Asynq jobs                      |
+| Desktop app    | Wails 2 · React 19 · Vite · TanStack Router · TanStack Query · local SQLite |
+| Sync engine    | Outbox pattern · Postgres savepoints · idempotency keys                     |
+| Mobile app     | Expo · React Native · shared API contract                                   |
+| Marketing site | Vite · React 19 · GSAP · Lenis · MDX                                        |
+| Performance    | `< 80 ms` API p50 · `< 200 ms` screen-to-screen · 1000 rows/30s bulk import |
+
+---
+
+## Multi-tenant, multi-branch — without the surprise bill
+
+Shoppleet was designed multi-tenant from line one. That means:
+
+- **Strict tenant isolation** at the API layer — no cross-tenant probing, ever.
+- **Per-tenant database scope** on every query — even an admin in tenant A can't accidentally read tenant B.
+- **Multi-branch within a tenant** up to the platform-set limit — branches share customers, suppliers, and product catalogue but track stock independently.
+- **Branch-to-branch transfers** use a send→confirm flow — stock only moves on the receiving branch's confirmation, with a "missing in transit" report when math doesn't balance.
+
+For a 4-branch retailer, that means the cashier at Branch 2 sees their till's stock, sales, and dashboard — never Branch 1's. The owner sees everyone's, consolidated.
+
+---
+
+## Categories — the workflow adapts to the shop
+
+Shoppleet ships category-aware UI. Pick your category at tenant creation and the right screens appear:
+
+| Category                 | What it unlocks                                            |
+| ------------------------ | ---------------------------------------------------------- |
+| **Phones & Electronics** | IMEI-tracked serialized inventory (the active focus today) |
+| **General Merchandise**  | SKU-first inventory; variants/lots/expiry optional         |
+| **Supermarkets**         | Lots + expiry + FEFO picking + barcoded checkout           |
+| **Fashion & Apparel**    | Size × colour variant matrix + season tagging              |
+| **Auto Spare Parts**     | Vehicle-fitment lookups + OEM cross-reference              |
+
+A phone shop doesn't see size×colour matrices; a fashion boutique doesn't see IMEI fields. The workflow stays sharp regardless of vertical.
+
+---
+
+## What's NOT in v1 (be honest)
+
+Shoppleet does a lot, but here's what it deliberately doesn't do yet:
+
+- **No online storefront / e-commerce** — it's a back-office system, not a webshop builder.
+- **No online card-payment gateway** — cash, mobile money, and bank work; online card processing for buyers isn't built. (For _that_, see [DGateway](https://dgateway.desispay.com).)
+- **No Jumia / Kilimall marketplace integration** — coming, not shipped.
+- **No multi-currency on a single invoice** — one currency per tenant. (Multi-currency _across_ tenants works fine.)
+- **No QuickBooks / Xero export** — on the roadmap, not yet shipped.
+- **No full payroll** — there's a staff module, but proper payroll is separate.
+
+If any of these block you, talk to Alex on **+256 705 089 006** — we prioritise based on real customer requests.
+
+---
+
+## The numbers (as of May 2026)
+
+| Stat                       | Value                   |
+| -------------------------- | ----------------------- |
+| Shops on Shoppleet         | **280+**                |
+| IMEIs tracked (cumulative) | **1.4M+**               |
+| Modules                    | 9                       |
+| Permissions in the catalog | 175+                    |
+| Keystrokes for a cash sale | 6                       |
+| Bulk-import throughput     | ~1000 rows / 30 seconds |
+| Currencies supported       | UGX, USD, KES, TZS, RWF |
+| Trial length               | 14 days                 |
+| Idle timeout               | 30 minutes              |
+| Audit-trail retention      | Permanent               |
+| API p50 latency            | `< 80 ms`               |
+| Sync reliability           | 99.9%                   |
+
+---
+
+## Who built it
+
+Shoppleet was **designed, developed, and built solo** by me — JB (Muke Johnbaptist). Every line: backend, desktop client, mobile companion, marketing site, and the Grit framework underneath it. **[Alex Shanga](https://shoppleet.com)** supervises product direction and runs the commercial side — sales conversations, customer onboarding, support escalations.
+
+| Need                      | Who         | Reach                                                                                       |
+| ------------------------- | ----------- | ------------------------------------------------------------------------------------------- |
+| Buy / demo / pricing      | Alex Shanga | +256 705 089 006                                                                            |
+| Bug / feature / technical | JB          | [+256 762 063 160](https://wa.me/256762063160) · [jb.desishub.com](https://jb.desishub.com) |
+| General                   | —           | info@shoppleet.com                                                                          |
+
+---
+
+## How to try Shoppleet
+
+- **14-day free trial** — full functionality, no card required.
+- **Download** at [app.shoppleet.com](https://app.shoppleet.com) (Windows, macOS, Linux).
+- **Cloud-hosted by default** at `api.shoppleet.com`.
+- **Self-host option** for enterprise customers — talk to JB / Alex.
+- **Mobile companion** on the iOS App Store and Google Play (for business admins).
+
+Onboarding is hands-on for the first 30 days — Alex or one of our partners walks every new customer through their first sale, first GRN, and first end-of-day report. No drop-and-pray.
+
+---
+
+## What I learned building this
+
+A few things I wish someone had told me before I started:
+
+### 1. Offline-first is not "online + offline mode"
+
+Most "offline" software is online-first with a degraded mode. Shoppleet is the opposite — **online is the degraded mode of offline**. The database is local; the cloud is a syncing peer. Every screen was designed to never know whether the network is up.
+
+### 2. Audit trails sell themselves
+
+Owners who try to negotiate on price stop negotiating the moment you show them the audit screen. "I can see who reversed which sale and why?" is a feature so valuable in our market that I now lead every demo with it.
+
+### 3. Bulk import is 60% of customer satisfaction
+
+A new shop with 4,000 phones in stock won't type each IMEI by hand. The paste-from-Excel + CSV upload + duplicate detection + auto-reject corrupted serials path is what gets them live in a day instead of a week. **The bulk-import flow is the single most-debugged feature in Shoppleet.** It earns its complexity.
+
+### 4. One framework, many products
+
+Grit lets me ship Shoppleet, DGateway, GritCMS, Vibekit, and a half-dozen client projects without burning out. The leverage of generating instead of writing is the difference between "founder who codes" and "team of 8 still missing features".
+
+---
+
+## Related reading
+
+- [Desktop App Development in Uganda — HMK Estates Case Study](/blog/desktop-app-development-uganda-rental-manager) — another Wails-based desktop app I shipped for the Uganda market.
+- [Desktop Frameworks 2026 — Electron vs Tauri vs Wails vs Grit](/blog/desktop-frameworks-2026) — why I chose Wails for Shoppleet's desktop layer.
+- [Integrating DGateway into Next.js](/blog/dgateway-integration-with-nextjs-guide) — the unified payments product that handles mobile money + cards.
+- [DGateway Framer plugin](/blog/dgateway-framer-plugin) — drop-in payment components for Framer sites.
+- [Top Go Developers in Uganda 2026](/blog/top-go-developers-uganda-2026) — context on the Go-in-Africa scene that made Grit possible.
+
+---
+
+## Want Shoppleet running in your shop?
+
+Whether you sell 4 phones a day or run 8 supermarket branches, Shoppleet was built for you.
+
+- 📞 **Sales / demo / pricing**: **Alex on [+256 705 089 006](https://wa.me/256705089006)**
+- 💻 **Download / try free**: [app.shoppleet.com](https://app.shoppleet.com)
+- 🛠 **Technical / bugs / feature requests**: [JB on +256 762 063 160](https://wa.me/256762063160)
+- 🌐 **Marketing site**: [shoppleet.com](https://shoppleet.com)
+- 📺 **YouTube tutorials**: [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- ⚙️ **The framework underneath**: [gritframework.dev](https://gritframework.dev)
+
+---
+
+## Resources
+
+- **Marketing site**: [shoppleet.com](https://shoppleet.com)
+- **App**: [app.shoppleet.com](https://app.shoppleet.com)
+- **API**: [api.shoppleet.com](https://api.shoppleet.com)
+- **Grit framework**: [gritframework.dev](https://gritframework.dev)
+- **Wails (desktop framework)**: [wails.io](https://wails.io)
+- **Asynq (Go job queue)**: [github.com/hibiken/asynq](https://github.com/hibiken/asynq)

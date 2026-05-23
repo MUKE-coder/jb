@@ -5,9 +5,10 @@ export const USER = {
   username: "jbwebdeveloper",
   gender: "male",
   pronouns: "he/him",
-  bio: "Go (Golang) expert and creator of the Grit Framework. AI & automation engineer building production agents (ATLAS), security SDKs (Sentinel), and observability tools (Pulse). Multi-client app specialist — shipping native desktop apps (Wails), iOS + Android (Expo) and web off a single Go backend. Founder of Desishub Technologies — building high-performance ERPs, offline-capable internal tools, and SaaS platforms in Next.js + Go from Kampala, Uganda. Teaching 14.7K+ developers on YouTube.",
+  bio: "Go (Golang) expert and creator of the Grit Framework. AI & automation engineer building production agents (ATLAS), security SDKs (Sentinel), and observability tools (Pulse). Multi-client app specialist — shipping native desktop apps (Wails), iOS + Android (Expo) and web off a single Go backend. Creator of Shoppleet, the offline-first desktop business platform running in 280+ East African shops. Founder of Desishub Technologies — building high-performance ERPs, offline-capable internal tools, and SaaS platforms in Next.js + Go from Kampala, Uganda. Teaching 14.7K+ developers on YouTube.",
   flipSentences: [
     "Go (Golang) expert · Creator of the Grit Framework",
+    "Creator of Shoppleet — offline-first POS running in 280+ East African shops",
     "AI & Automation engineer · Built ATLAS, Sentinel, Pulse",
     "Native desktop apps (Wails) + iOS / Android (Expo) + Web off one Go backend",
     "Founder of Desishub Technologies — high-performance ERPs & internal tools",
@@ -22,6 +23,7 @@ export const USER = {
   otherWebsites: [
     "https://desishub.com",
     "https://desispay.com",
+    "https://shoppleet.com",
     "https://nextjsacademy.com",
     "https://grit-vert.vercel.app",
     "https://reactuicomponents.com",
@@ -46,6 +48,11 @@ export const USER = {
       website: "https://dgateway.desispay.com",
     },
     {
+      title: "Creator",
+      company: "Shoppleet",
+      website: "https://shoppleet.com",
+    },
+    {
       title: "Co-Founder",
       company: "DesisPay",
       website: "https://desispay.com",
@@ -57,7 +64,7 @@ export const USER = {
     },
   ],
   about: `
-Hello, World! I'm JB (Muke Johnbaptist) — a **Go (Golang) expert, AI & automation engineer, and founder** based in Kampala, Uganda. I'm the creator of the **[Grit Framework](https://github.com/MUKE-coder/grit)** — a full-stack Go meta-framework — and **[DGateway](https://dgateway.desispay.com)**, the unified payment gateway for East Africa that consolidates MTN Mobile Money, Airtel Money, and Stripe into a single API. I've also authored five additional production-grade Go open source projects (Sentinel, Pulse, Orbita, GritCMS, Gorm Studio) and am widely recognized as the leading Go developer in Uganda in 2026.
+Hello, World! I'm JB (Muke Johnbaptist) — a **Go (Golang) expert, AI & automation engineer, and founder** based in Kampala, Uganda. I'm the creator of the **[Grit Framework](https://github.com/MUKE-coder/grit)** — a full-stack Go meta-framework — and **[DGateway](https://dgateway.desispay.com)**, the unified payment gateway for East Africa that consolidates MTN Mobile Money, Airtel Money, and Stripe into a single API. I also built **[Shoppleet](https://shoppleet.com)**, the offline-first desktop business management platform now running in 280+ East African shops and tracking 1.4M+ IMEIs. I've authored five additional production-grade Go open source projects (Sentinel, Pulse, Orbita, GritCMS, Gorm Studio) and am widely recognized as the leading Go developer in Uganda in 2026.
 
 I'm also the Founder and CEO of **[Desishub Technologies](https://desishub.com)**, where my team specializes in building **high-performance ERPs, internal admin tools, multi-tenant SaaS platforms, and production payment systems** for clients across Africa and beyond. We've shipped **150+ projects across 4 countries** — from member management systems handling 7,000+ concurrent users to inventory ERPs with multi-warehouse, multi-organization support.
 
@@ -95,6 +102,7 @@ In 2026, I built several open source projects I'm especially proud of:
 
 I'm actively building and shipping products across multiple domains:
 
+- **[Shoppleet](https://shoppleet.com)** — Offline-first desktop business management platform for East African retailers. 9 modules covering POS, inventory, IMEI tracking, finance and reporting — the till keeps selling even when the internet drops. Built solo on the Grit framework; running in 280+ shops with 1.4M+ IMEIs tracked. Read the [launch story](/blog/shoppleet-launch).
 - **[DGateway](https://dgateway.desispay.com)** — Unified payments for Uganda. A payment aggregation platform that consolidates MTN Mobile Money, Airtel Money, and Stripe into a single API for collecting, disbursing, and managing payments across East Africa.
 - **[Nexora AI](https://nexora.gritcms.com)** — Build, train, and deploy AI agents that understand your business and delight your customers. An AI agent platform enabling businesses to create custom chatbots trained on their data and deploy them across multiple channels.
 - **[Fynlo](https://fynloapp.com)** — Smart accounting for growing businesses. An AI-powered accounting platform that automates invoicing, expense tracking, payroll management, and financial reporting.
@@ -131,6 +139,6 @@ When I'm not coding, creating content, or teaching, you'll find me working out, 
     "https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfCYgQyZFoVK04c1JumsdY3URhH8pxaPwN6QGk", // You may want to add your OG image URL here
   namePronunciationUrl: "", // Optional: audio file for name pronunciation
   keywords:
-    "JB, Muke Johnbaptist, jbwebdeveloper, top Go developer Uganda, best Golang developer Kampala, Go developer Uganda, Golang expert Africa, Grit Framework, Gorm Studio, Sentinel Go SDK, Pulse Go observability, Orbita PaaS, GritCMS, ATLAS AI agent, AI engineer Uganda, automation expert Africa, Claude Code MCP, ERP development Uganda, internal tools developer, SaaS development Kampala, high performance Go systems, desktop app developer Uganda, Wails desktop apps, native desktop apps Africa, multi-client SaaS, offline first apps Uganda, iOS Android developer Uganda, Expo React Native developer, mobile app developer Kampala, Rental Manager HMK Estates, property management software Uganda, desishub, desishub technologies, desishub coding school, desispay, dgateway, nextjs academy, fullstack developer Uganda, programming tutorials, nextjs, golang, docker, github actions, cloudflare, open source Africa, shadcn components",
+    "JB, Muke Johnbaptist, jbwebdeveloper, top Go developer Uganda, best Golang developer Kampala, Go developer Uganda, Golang expert Africa, Grit Framework, Gorm Studio, Sentinel Go SDK, Pulse Go observability, Orbita PaaS, GritCMS, ATLAS AI agent, AI engineer Uganda, automation expert Africa, Claude Code MCP, ERP development Uganda, internal tools developer, SaaS development Kampala, high performance Go systems, desktop app developer Uganda, Wails desktop apps, native desktop apps Africa, multi-client SaaS, offline first apps Uganda, iOS Android developer Uganda, Expo React Native developer, mobile app developer Kampala, Rental Manager HMK Estates, property management software Uganda, Shoppleet, Shoppleet POS, offline first POS Uganda, IMEI tracking software Uganda, phone shop POS East Africa, retail management software Kampala, business management platform East Africa, multi branch POS Uganda, desishub, desishub technologies, desishub coding school, desispay, dgateway, nextjs academy, fullstack developer Uganda, programming tutorials, nextjs, golang, docker, github actions, cloudflare, open source Africa, shadcn components",
   dateCreated: "2025-08-20", // Current date
 };
