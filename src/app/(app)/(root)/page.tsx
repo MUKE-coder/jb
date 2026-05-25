@@ -7,6 +7,7 @@ import { USER } from "@/data/user";
 import { About } from "@/features/profile/components/about";
 import { Blog } from "@/features/profile/components/blog";
 import { Experiences } from "@/features/profile/components/experiences";
+import { OpenSource } from "@/features/profile/components/opensource";
 import { Overview } from "@/features/profile/components/overview";
 import { ProfileCover } from "@/features/profile/components/profile-cover";
 import { ProfileHeader } from "@/features/profile/components/profile-header";
@@ -43,6 +44,9 @@ export default function Page() {
         <Github />
         <Separator />
         <Blog />
+        <Separator />
+
+        <OpenSource />
         <Separator />
 
         <Experiences />

@@ -47,6 +47,10 @@ export const MAIN_NAV: NavItem[] = [
     href: "/blog",
   },
   {
+    title: "Open Source",
+    href: "/opensource",
+  },
+  {
     title: "Book JB",
     href: "/book",
   },
