@@ -60,7 +60,9 @@ export function OpenSourceProjectItem({
 
       <div className="flex items-center gap-3 pt-1 text-xs text-muted-foreground">
         <span className="truncate font-mono">
-          {project.github.replace("https://github.com/", "")}
+          {project.github
+            .replace("https://github.com/", "")
+            .replace(/^https?:\/\//, "")}
         </span>
         {project.stars && (
           <span className="ml-auto inline-flex shrink-0 items-center gap-1 font-mono">

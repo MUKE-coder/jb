@@ -18,6 +18,87 @@ import type {
  * 3-5 use cases the reader can immediately picture.
  */
 export const OPENSOURCE_PROJECTS: OpenSourceProject[] = [
+  // ── Latest additions (May 27, 2026) ──────────────────────────────────
+  {
+    slug: "awesome-scalability",
+    title: "Awesome Scalability",
+    github: "https://github.com/binhnguyennus/awesome-scalability",
+    description:
+      "Curated reading list documenting patterns of scalable, reliable, and performant large-scale systems — articles by prominent engineers plus battle-tested case studies. The single best resource if you're prepping for system-design interviews or actually designing one.",
+    useCases: [
+      "System design interviews",
+      "Distributed systems",
+      "Database scaling",
+      "Reliability patterns",
+    ],
+    category: "Learning",
+    addedAt: "2026-05-27",
+    stars: "71k+",
+  },
+  {
+    slug: "free-programming-books",
+    title: "Free Programming Books",
+    github: "https://github.com/EbookFoundation/free-programming-books",
+    description:
+      "Community-maintained index of freely available programming books, courses, podcasts, and interactive tutorials — organised by language and subject. The largest learn-to-code resource directory on GitHub.",
+    useCases: [
+      "Free programming books",
+      "Language tutorials",
+      "Subject-specific guides",
+      "Interactive courses",
+    ],
+    category: "Learning",
+    addedAt: "2026-05-27",
+    stars: "390k+",
+  },
+  {
+    slug: "danluu-popular",
+    title: "Dan Luu — Popular Posts",
+    github: "https://danluu.com/popular/",
+    description:
+      "Curated index of Dan Luu's most-read essays on systems engineering, debugging at scale, hiring, and how big tech companies actually work. Pure signal — every link is worth your hour.",
+    useCases: [
+      "Systems engineering essays",
+      "Career writing",
+      "Debugging at scale",
+      "Big-tech retrospectives",
+    ],
+    category: "Learning",
+    addedAt: "2026-05-27",
+  },
+  {
+    slug: "mathematics-for-ml",
+    title: "Mathematics for ML",
+    github: "https://github.com/dair-ai/Mathematics-for-ML",
+    description:
+      "Hand-picked collection of resources to learn and review the mathematics behind machine learning — linear algebra, calculus, probability, optimisation, and the intuition you actually need for backprop.",
+    useCases: [
+      "ML math foundations",
+      "Linear algebra",
+      "Backprop intuition",
+      "Probability for ML",
+    ],
+    category: "Learning",
+    addedAt: "2026-05-27",
+    stars: "6k+",
+  },
+  {
+    slug: "wacrm",
+    title: "wacrm — WhatsApp CRM",
+    github: "https://github.com/ArnasDon/wacrm",
+    description:
+      "Self-hostable WhatsApp CRM template — shared inbox, contacts, sales pipelines, broadcasts, no-code automations. Next.js 16 + React 19 + Supabase + Meta Cloud API. Fork it as the starting point for any WhatsApp-first product.",
+    useCases: [
+      "WhatsApp Business API",
+      "Self-hosted CRM",
+      "Supabase RLS",
+      "No-code automations",
+    ],
+    category: "Next.js",
+    addedAt: "2026-05-27",
+    stars: "400+",
+  },
+
   // ── Golang ────────────────────────────────────────────────────────────
   {
     slug: "go-language",
