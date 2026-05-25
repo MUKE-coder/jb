@@ -55,7 +55,7 @@ src/
 ├── features/               # Feature-specific modules
 │   └── profile/components/ # Profile page sections
 ├── registry/               # Distributable component registry
-├── content/blog/           # MDX blog posts (~70 articles)
+├── content/blog/           # MDX blog posts (115+ articles)
 ├── data/                   # Static data (user.ts, blog.ts)
 ├── config/                 # Site configuration
 ├── lib/                    # Utilities, fonts, rehype/remark plugins
@@ -134,6 +134,17 @@ src/
 - Syntax highlighting via Shiki (themes: github-dark, github-light)
 - Custom rehype/remark plugins in `src/lib/`
 
+#### MDX gotchas to avoid
+
+These break the build with cryptic `Unexpected character` errors from `micromark-extension-mdx-jsx`:
+
+- **`<` followed by a digit or letter with no space** — `<100ms`, `<5s`, `<Component` (when not a real component) get parsed as JSX. Wrap in backticks: `` `<100ms` `` or use `&lt;100ms`.
+- **`{` and `}` outside fenced code blocks** — interpreted as JSX expressions. Backtick or escape.
+- **HTML-style comments** (`<!-- ... -->`) — not valid in MDX. Use `{/* ... */}` or just delete.
+- **Raw URLs starting with `http://`** can sometimes trip the parser inside tables. Wrap as `[link](url)` instead.
+
+When `pnpm build` errors with `Export encountered an error on /(app)/(docs)/blog/[slug]/page: /blog/<slug>`, the line/column in the error message points to the MDX file — look for `<` next to a non-space character.
+
 ### Data
 
 - User profile data: `src/data/user.ts` (exported as `USER` constant)
@@ -196,3 +207,17 @@ NEXT_PUBLIC_DMCA_URL=      # Optional: DMCA protection URL
 - Images allow all HTTPS remote hosts (configured in `next.config.ts`)
 - SEO includes JSON-LD schemas (Person, Organization, WebSite, ProfilePage)
 - RSS feed at `/rss`, sitemap at `/sitemap.xml`, robots at `/robots.txt`
+- **`KNOWLEDGEBASE.md`** at the repo root is the canonical reference for Shoppleet (JB's offline-first POS product) — quote facts from it directly when a user asks about Shoppleet rather than inventing functionality.
+
+## Windows build quirk
+
+On Windows, `pnpm build` produces a trailing `EPERM ... symlink ...` error in the "Collecting build traces" step (the Next.js standalone-output trace). **This is benign** — it happens AFTER `✓ Generating static pages (N/N)` and only blocks the `.next/standalone/` output, which isn't used in the Docker/Linux CI build that actually deploys. To verify a build "passed" on Windows, grep for `✓ Generating static pages` — if all pages generated, the build is good for deploy. (Linux/Docker builds don't have this issue at all.)
+
+## Available skills (user-level, auto-discovered)
+
+These project-relevant skills live in `~/.claude/skills/` and trigger on the right phrasing:
+
+- **`blog-thumbnail`** — generates dark-editorial cover-image prompts in the jb.desishub.com style (dotted grid, left-aligned bold white title, cyan #22D3EE accent underline, iso-3D illustration on the right, monospace site-tag top-left). Use when a new blog needs an `image:` value or the user asks for a "blog thumbnail", "cover image prompt", or "Gemini thumbnail".
+- **`youtube-thumbnail`** — generates high-CTR YouTube tutorial thumbnail prompts in JB's @JBWEBDEVELOPER style (huge extruded yellow + white condensed title on the left, 2×2 glassmorphism logo grid on the right with one gold "winner" card + a glowing yellow arrow, cyan-bordered comparison pill at the bottom). Use for any "YouTube thumbnail" / "video thumbnail" / "tutorial thumbnail" request — NOT for blog covers.
+
+After writing a new blog, proactively offer the matching thumbnail prompt rather than waiting to be asked.
