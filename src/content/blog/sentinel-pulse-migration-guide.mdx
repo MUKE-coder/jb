@@ -1,0 +1,864 @@
+---
+title: "Sentinel v2 + Pulse v1 Migration Guide — Native Admin Dashboards, IP Auto-Ban & Admin Alerts"
+description: "The exact path DGateway took to migrate from old Sentinel/Pulse pseudo-versions to the stable v2 / v1 releases. Wires up native Security + Performance admin pages (no iframes), an IP auto-ban system with a 5-minute event ring + cron sweep, and in-app + email notifications to admins on every auto-ban. Go + Gin + GORM + asynq, ~2 hours to copy-paste."
+image: /case-studies/sentinel-pulse-migration.png
+category: tutorial
+createdAt: 2026-05-30
+updatedAt: 2026-05-30
+---
+
+# Sentinel v2 + Pulse v1 Migration Guide — Native Admin Dashboards, IP Auto-Ban & Admin Alerts
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — creator of [Sentinel](https://github.com/MUKE-coder/sentinel) and [Pulse](https://github.com/MUKE-coder/pulse). This is the migration I ran on [DGateway](https://dgateway.desispay.com) production traffic; every step in this post is from that diff.**
+
+How to migrate an app from the old Sentinel/Pulse pseudo-versions to the new stable releases, **plus** wire up the native Security + Performance admin dashboards (no iframes), the IP auto-ban system, and admin notifications for security events.
+
+This is the exact path DGateway took. It assumes:
+
+- A Go API on Gin + GORM
+- An admin SPA (Next.js shown here, but the patterns translate)
+- The existing asynq job-queue + cron scheduler pattern
+- A `Communication` + `UserNotification` model pair for in-app alerts (or similar)
+
+Total time: **~2 hours** if you copy-paste, longer if you also adapt the schema to your app's existing conventions.
+
+---
+
+## Table of contents
+
+1. [What you'll end up with](#what-youll-end-up-with)
+2. [Prerequisites](#prerequisites)
+3. [Stage 1 — Upgrade Sentinel + Pulse](#stage-1--upgrade-sentinel--pulse)
+4. [Stage 2 — IP-ban infrastructure](#stage-2--ip-ban-infrastructure)
+5. [Stage 3 — Backend proxy endpoints](#stage-3--backend-proxy-endpoints)
+6. [Stage 4 — Admin UI pages](#stage-4--admin-ui-pages)
+7. [Stage 5 — In-app + email notifications](#stage-5--in-app--email-notifications)
+8. [Verification checklist](#verification-checklist)
+9. [Troubleshooting](#troubleshooting)
+10. [Decisions you can re-tune later](#decisions-you-can-re-tune-later)
+
+---
+
+## What you'll end up with
+
+- Sentinel v2 (`MountE`, `TrustedProxies`, CSP receiver, CAPTCHA tier on AuthShield, CVSS on every threat) and Pulse v1.0 (SQLite persistence option, `Mount(ctx, ...)` lifecycle, SLOs / USE / k6 test-runs / flame graph dashboards).
+- A new `IPBan` table and middleware: any IP that sustains rate-limit pressure for >1 min gets auto-banned for 6 h (configurable).
+- `/system/security` and `/system/performance` admin pages that consume the upstream Sentinel + Pulse APIs server-side — admins never have to leave your admin UI.
+- Manual ban + unban controls in the dashboard.
+- In-app + email notifications to every active ADMIN when an IP is auto-banned, with 24 h dedup so reflapping doesn't spam.
+
+---
+
+## Prerequisites
+
+- Go ≥ 1.24 (Sentinel v2 + Pulse v1 require it).
+- `gh` CLI logged in if you want to verify upstream commit SHAs.
+- An existing in-app notification system. The snippets here assume the DGateway pattern:
+  - `models.Communication` — a single message
+  - `models.UserNotification` — per-user inbox row referencing a Communication
+  - `models.RoleAdmin` constant
+  - An asynq `EnqueueSendEmail(to, subject, template, data)` on your jobs client + a "notification" email template that renders `{{.Title}}` + `{{.Message}}`.
+  - If your app doesn't have this exact shape, see [Stage 5](#stage-5--in-app--email-notifications) — you can substitute.
+
+---
+
+## Stage 1 — Upgrade Sentinel + Pulse
+
+### 1.1 Remove the local replace + bump versions
+
+Older apps often have Sentinel vendored under `apps/api/libs/sentinel/` with a `replace` directive in `go.mod`. Drop both.
+
+**`apps/api/go.mod`** — delete this line:
+
+```diff
+-replace github.com/MUKE-coder/sentinel => ./libs/sentinel
+```
+
+And bump the require block to a recent pseudo-version. The Sentinel maintainer doesn't follow the `/v2` major-path Go convention, so you reference v2.0.1's commit via a pseudo-version (`v0.0.0-<commit-date>-<short-sha>`):
+
+```diff
+-    github.com/MUKE-coder/pulse v0.0.0-20260223005903-6f5d6e356231
+-    github.com/MUKE-coder/sentinel v0.0.0-20260220061042-2d2324be6824
++    github.com/MUKE-coder/pulse v0.0.0-20260529025319-478cdfa8ce5f
++    github.com/MUKE-coder/sentinel v0.0.0-20260529033414-0e945440db7f
+```
+
+> To find newer pseudo-versions, run
+> `gh api repos/MUKE-coder/sentinel/commits/main --jq '{date: .commit.author.date, sha: .sha[0:12]}'`
+> and format as `v0.0.0-YYYYMMDDHHMMSS-<short-sha>`.
+
+Run:
+
+```bash
+cd apps/api
+go mod tidy
+```
+
+### 1.2 Migrate `sentinel.Mount` → `sentinel.MountE`
+
+v2's `Mount` still exists but `log.Fatalf`s on error. `MountE` returns an error so library issues don't kill the host process.
+
+Also add `TrustedProxies: []string{}` to `WAFConfig` — v2 ignores `X-Forwarded-For` by default unless the request originates from a listed proxy CIDR. **Empty list = ignore proxy headers entirely**, which is the right default if you don't sit behind Cloudflare / nginx / an LB.
+
+**`apps/api/internal/routes/routes.go`** (around your existing `sentinel.Mount` call):
+
+```go
+if err := sentinel.MountE(r, db, sentinel.Config{
+    Dashboard: sentinel.DashboardConfig{
+        Username:  cfg.SentinelUsername,
+        Password:  cfg.SentinelPassword,
+        SecretKey: cfg.SentinelSecretKey,
+    },
+    WAF: sentinel.WAFConfig{
+        Enabled:        true,
+        Mode:           wafMode,
+        TrustedProxies: []string{}, // ← v2: empty = use direct connection IP
+        ExcludeRoutes:  []string{ /* … your existing list … */ },
+    },
+    RateLimit:  sentinel.RateLimitConfig{ /* … unchanged … */ },
+    AuthShield: sentinel.AuthShieldConfig{ /* … */ },
+    Anomaly:    sentinel.AnomalyConfig{Enabled: true},
+    Geo:        sentinel.GeoConfig{Enabled: true},
+}); err != nil {
+    log.Printf("[sentinel] mount failed: %v — API will run without the security layer", err)
+} else {
+    log.Printf("Sentinel security suite mounted at /sentinel (WAF mode: %s)", wafMode)
+}
+```
+
+> **Behind a real proxy?** Set `TrustedProxies` to the upstream CIDR(s) — e.g. `[]string{"173.245.48.0/20", "103.21.244.0/22"}` for Cloudflare's ranges. Otherwise rate limits will all key on your LB's IP.
+
+### 1.3 Migrate `pulse.Mount` signature
+
+Pulse v1.0 added a leading `context.Context` arg and switched from a Config struct to functional options. The minimal change is to wrap your existing Config in `pulse.WithConfig(...)`:
+
+```go
+import "context"
+
+p := pulse.Mount(context.Background(), r, db, pulse.WithConfig(pulse.Config{
+    AppName: cfg.AppName,
+    DevMode: cfg.IsDevelopment(),
+    Dashboard: pulse.DashboardConfig{
+        Username: cfg.PulseUsername,
+        Password: cfg.PulsePassword,
+    },
+    Tracing:    pulse.TracingConfig{ExcludePaths: []string{"/studio/*", "/sentinel/*", "/docs/*", "/pulse/*"}},
+    Alerts:     pulse.AlertConfig{},
+    Prometheus: pulse.PrometheusConfig{Enabled: true},
+}))
+```
+
+The `ctx` ties Pulse's background goroutines (runtime sampler, retention sweeper, alert engine, health runner, websocket hub) to the caller's lifecycle. `context.Background()` keeps them alive for the whole process; graceful shutdown is handled by `p.Shutdown()` wherever you call it today.
+
+### 1.4 Delete the vendored libs (after build passes)
+
+```bash
+cd apps/api
+go build ./...       # must be clean first
+rm -rf libs/sentinel
+rmdir libs           # only if empty
+```
+
+### 1.5 ⚠️ Don't forget the Dockerfile
+
+If your old Dockerfile copied `libs/` separately for go-mod caching:
+
+```dockerfile
+# DELETE THIS LINE — libs/sentinel is gone
+COPY libs/ libs/
+```
+
+Your first prod deploy will fail with `COPY libs/ libs/: "/libs": not found` otherwise. Ask me how I know.
+
+### 1.6 Commit
+
+```bash
+git add apps/api/go.mod apps/api/go.sum apps/api/internal/routes/routes.go apps/api/libs apps/api/Dockerfile
+git commit -m "Upgrade Sentinel v0.1.x → v2 and Pulse → v1.0"
+```
+
+---
+
+## Stage 2 — IP-ban infrastructure
+
+### 2.1 Add the `IPBan` model
+
+**`apps/api/internal/models/ip_ban.go`**:
+
+```go
+package models
+
+import "time"
+
+// IPBan blocks a single IP for a bounded window. Created by the auto-ban
+// cron job when an IP trips the trigger (sustained rate-limit pressure)
+// or manually by an admin from the security dashboard.
+type IPBan struct {
+    ID        uint      `gorm:"primarykey" json:"id"`
+    IP        string    `gorm:"uniqueIndex:idx_ip_bans_ip_active;size:45;not null" json:"ip"`
+    Reason    string    `gorm:"size:512" json:"reason"`
+    BannedAt  time.Time `gorm:"not null" json:"banned_at"`
+    UnbanAt   time.Time `gorm:"not null;index" json:"unban_at"`
+    BannedBy  string    `gorm:"size:64;not null" json:"banned_by"` // "auto" or admin user ID
+    Active    bool      `gorm:"default:true;uniqueIndex:idx_ip_bans_ip_active" json:"active"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+}
+```
+
+The composite `(ip, active)` unique index lets you have many _historical_ rows for the same IP but only ever one _active_.
+
+Add `&IPBan{}` to your `Models()` slice (wherever you list models for `AutoMigrate`).
+
+### 2.2 The security package — Service + middlewares
+
+This is the bulk of Stage 2. Single file, ~360 LOC. Drop into `apps/api/internal/security/security.go`:
+
+```go
+package security
+
+import (
+    "context"
+    "errors"
+    "log"
+    "math"
+    "net/http"
+    "strconv"
+    "sync"
+    "time"
+
+    "github.com/gin-gonic/gin"
+    "gorm.io/gorm"
+
+    "<your-module>/apps/api/internal/models"
+)
+
+type rateLimitEvent struct {
+    IP   string
+    Path string
+    At   time.Time
+}
+
+const (
+    eventRingCap         = 4096
+    eventRetention       = 5 * time.Minute
+    cacheRefreshInterval = 30 * time.Second
+    AutoBanDuration      = 6 * time.Hour
+)
+
+type Service struct {
+    db *gorm.DB
+
+    eventsMu sync.Mutex
+    events   []rateLimitEvent
+
+    cacheMu sync.RWMutex
+    cache   map[string]time.Time // ip → unban-at (active bans only)
+
+    stopOnce sync.Once
+    stop     chan struct{}
+}
+
+func New(db *gorm.DB) *Service {
+    s := &Service{db: db, cache: map[string]time.Time{}, stop: make(chan struct{})}
+    if err := s.RefreshCache(); err != nil {
+        log.Printf("[security] initial ban-cache prime failed: %v", err)
+    }
+    return s
+}
+
+func (s *Service) Run(ctx context.Context) {
+    cacheTick := time.NewTicker(cacheRefreshInterval)
+    defer cacheTick.Stop()
+    gcTick := time.NewTicker(eventRetention)
+    defer gcTick.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-s.stop:
+            return
+        case <-cacheTick.C:
+            _ = s.RefreshCache()
+        case <-gcTick.C:
+            s.gcEvents()
+        }
+    }
+}
+
+func (s *Service) Stop() { s.stopOnce.Do(func() { close(s.stop) }) }
+
+func (s *Service) RefreshCache() error {
+    if s.db == nil {
+        return errors.New("security: nil db")
+    }
+    var bans []models.IPBan
+    if err := s.db.Where("active = ? AND unban_at > ?", true, time.Now()).Find(&bans).Error; err != nil {
+        return err
+    }
+    next := make(map[string]time.Time, len(bans))
+    for _, b := range bans {
+        next[b.IP] = b.UnbanAt
+    }
+    s.cacheMu.Lock()
+    s.cache = next
+    s.cacheMu.Unlock()
+    return nil
+}
+
+func (s *Service) IsBanned(ip string) (bool, int) {
+    s.cacheMu.RLock()
+    unbanAt, ok := s.cache[ip]
+    s.cacheMu.RUnlock()
+    if !ok {
+        return false, 0
+    }
+    remaining := time.Until(unbanAt)
+    if remaining <= 0 {
+        return false, 0
+    }
+    secs := int(math.Ceil(remaining.Seconds()))
+    if secs < 1 {
+        secs = 1
+    }
+    return true, secs
+}
+
+func (s *Service) CountEventsInWindow(ip string, from, to time.Time) int {
+    s.eventsMu.Lock()
+    defer s.eventsMu.Unlock()
+    n := 0
+    for _, e := range s.events {
+        if e.IP == ip && !e.At.Before(from) && e.At.Before(to) {
+            n++
+        }
+    }
+    return n
+}
+
+func (s *Service) UniqueIPsInWindow(from, to time.Time) []string {
+    s.eventsMu.Lock()
+    defer s.eventsMu.Unlock()
+    seen := make(map[string]struct{})
+    for _, e := range s.events {
+        if !e.At.Before(from) && e.At.Before(to) {
+            seen[e.IP] = struct{}{}
+        }
+    }
+    out := make([]string, 0, len(seen))
+    for ip := range seen {
+        out = append(out, ip)
+    }
+    return out
+}
+
+func (s *Service) CreateAutoBan(ip, reason string) (*models.IPBan, error) {
+    return s.upsertBan(ip, reason, AutoBanDuration, "auto")
+}
+
+func (s *Service) CreateManualBan(ip, reason string, hours int, adminID uint) (*models.IPBan, error) {
+    if hours <= 0 {
+        hours = 24
+    }
+    return s.upsertBan(ip, reason, time.Duration(hours)*time.Hour, strconv.FormatUint(uint64(adminID), 10))
+}
+
+func (s *Service) upsertBan(ip, reason string, dur time.Duration, by string) (*models.IPBan, error) {
+    now := time.Now()
+    ban := models.IPBan{IP: ip, Reason: reason, BannedAt: now, UnbanAt: now.Add(dur), BannedBy: by, Active: true}
+    var existing models.IPBan
+    err := s.db.Where("ip = ? AND active = ?", ip, true).First(&existing).Error
+    switch {
+    case err == nil:
+        existing.UnbanAt = ban.UnbanAt
+        existing.Reason = reason
+        existing.BannedBy = by
+        if err := s.db.Save(&existing).Error; err != nil {
+            return nil, err
+        }
+        _ = s.RefreshCache()
+        return &existing, nil
+    case errors.Is(err, gorm.ErrRecordNotFound):
+        if err := s.db.Create(&ban).Error; err != nil {
+            return nil, err
+        }
+        _ = s.RefreshCache()
+        return &ban, nil
+    default:
+        return nil, err
+    }
+}
+
+func (s *Service) Unban(ip string) (int64, error) {
+    res := s.db.Model(&models.IPBan{}).
+        Where("ip = ? AND active = ?", ip, true).
+        Updates(map[string]interface{}{"active": false, "unban_at": time.Now()})
+    if res.Error != nil {
+        return 0, res.Error
+    }
+    _ = s.RefreshCache()
+    return res.RowsAffected, nil
+}
+
+func (s *Service) ExpireDueBans() (int64, error) {
+    res := s.db.Model(&models.IPBan{}).
+        Where("active = ? AND unban_at <= ?", true, time.Now()).
+        Update("active", false)
+    if res.Error != nil {
+        return 0, res.Error
+    }
+    if res.RowsAffected > 0 {
+        _ = s.RefreshCache()
+    }
+    return res.RowsAffected, nil
+}
+
+// ── Middleware ─────────────────────────────────────────────────────────
+
+func (s *Service) EnforceBan() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        if banned, secs := s.IsBanned(c.ClientIP()); banned {
+            c.Header("Retry-After", strconv.Itoa(secs))
+            c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+                "error": gin.H{"code": "IP_BANNED", "message": "Your IP is temporarily blocked due to abuse. Try again later."},
+            })
+            return
+        }
+        c.Next()
+    }
+}
+
+func (s *Service) RecordRateLimit() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        c.Next()
+        if c.Writer.Status() != http.StatusTooManyRequests {
+            return
+        }
+        s.appendEvent(rateLimitEvent{IP: c.ClientIP(), Path: c.Request.URL.Path, At: time.Now()})
+    }
+}
+
+func (s *Service) appendEvent(e rateLimitEvent) {
+    s.eventsMu.Lock()
+    defer s.eventsMu.Unlock()
+    if len(s.events) >= eventRingCap {
+        s.events = append(s.events[:0], s.events[eventRingCap/2:]...)
+    }
+    s.events = append(s.events, e)
+}
+
+func (s *Service) gcEvents() {
+    cutoff := time.Now().Add(-eventRetention)
+    s.eventsMu.Lock()
+    defer s.eventsMu.Unlock()
+    i := 0
+    for ; i < len(s.events); i++ {
+        if !s.events[i].At.Before(cutoff) {
+            break
+        }
+    }
+    if i > 0 {
+        s.events = append(s.events[:0], s.events[i:]...)
+    }
+}
+```
+
+### 2.3 Wire middlewares into routes
+
+In your `Services` struct, add a `Security *security.Service` field. In `Setup(...)`:
+
+```go
+// BEFORE Sentinel and your other middleware:
+if svc != nil && svc.Security != nil {
+    r.Use(svc.Security.EnforceBan())
+    r.Use(svc.Security.RecordRateLimit())
+}
+```
+
+In `cmd/server/main.go`:
+
+```go
+securityService := security.New(db)
+go securityService.Run(context.Background())
+
+svc := &routes.Services{
+    // … existing fields …
+    Security: securityService,
+}
+```
+
+### 2.4 The auto-ban cron job
+
+Add a task type constant in your jobs package:
+
+```go
+const TypeSecurityIPBanSweep = "security:ip-ban-sweep"
+```
+
+Add `Security *security.Service` to your `WorkerDeps`. Then a handler:
+
+```go
+// internal/jobs/security_handlers.go
+package jobs
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    "github.com/hibiken/asynq"
+)
+
+func handleSecurityIPBanSweep(deps WorkerDeps) func(ctx context.Context, task *asynq.Task) error {
+    return func(ctx context.Context, task *asynq.Task) error {
+        if deps.Security == nil {
+            return fmt.Errorf("security service not configured")
+        }
+        if expired, err := deps.Security.ExpireDueBans(); err == nil && expired > 0 {
+            log.Printf("[security-sweep] auto-unbanned %d expired IP(s)", expired)
+        }
+
+        // Trigger: any IP with events in BOTH [-2m,-1m] AND [-1m,now]
+        // — sustained pressure for more than a minute.
+        now := time.Now()
+        windowStart := now.Add(-2 * time.Minute)
+        windowMidline := now.Add(-1 * time.Minute)
+
+        for _, ip := range deps.Security.UniqueIPsInWindow(windowStart, windowMidline) {
+            if banned, _ := deps.Security.IsBanned(ip); banned {
+                continue
+            }
+            recent := deps.Security.CountEventsInWindow(ip, windowMidline, now)
+            if recent == 0 {
+                continue
+            }
+            older := deps.Security.CountEventsInWindow(ip, windowStart, windowMidline)
+            reason := fmt.Sprintf(
+                "auto-ban: sustained rate-limit pressure — %d hits in [-2m,-1m], %d hits in [-1m,now]",
+                older, recent,
+            )
+            if _, err := deps.Security.CreateAutoBan(ip, reason); err != nil {
+                log.Printf("[security-sweep] CreateAutoBan(%s) failed: %v", ip, err)
+                continue
+            }
+            log.Printf("[security-sweep] auto-banned %s (6h): %s", ip, reason)
+            // Notification fan-out added in Stage 5 below.
+        }
+        return nil
+    }
+}
+```
+
+Register it in your mux + scheduler:
+
+```go
+// internal/jobs/workers.go — inside StartWorker after the existing mux.HandleFunc calls:
+mux.HandleFunc(TypeSecurityIPBanSweep, handleSecurityIPBanSweep(deps))
+
+// internal/cron/cron.go — inside New() before the closing return:
+_, err = scheduler.Register("* * * * *", asynq.NewTask("security:ip-ban-sweep", nil))
+if err != nil {
+    return nil, fmt.Errorf("registering security IP-ban sweep: %w", err)
+}
+```
+
+And pass `securityService` through to `WorkerDeps` in main.go.
+
+---
+
+## Stage 3 — Backend proxy endpoints
+
+The admin UI never talks to Sentinel / Pulse directly. The Go API proxies their APIs with cached JWT auth.
+
+### 3.1 The upstream HTTP client
+
+**`apps/api/internal/security/upstream.go`** (≈180 LOC). Key idea:
+
+```go
+type UpstreamClient struct {
+    Name      string  // "sentinel" or "pulse" for logs
+    BaseURL   string  // "http://127.0.0.1:8080/sentinel/api"
+    Username  string
+    Password  string
+    // … private fields: token, tokenExp, httpClient, mu
+}
+
+func (c *UpstreamClient) Get(path string, query url.Values, out interface{}) (int, error)
+func (c *UpstreamClient) GetRaw(path string, query url.Values) (int, []byte, error)
+```
+
+It logs in on first use, caches the JWT for 50 min, and re-logs once on 401. Both Sentinel and Pulse expose `POST /auth/login` returning `{"token":"…"}` which is then sent as `Authorization: Bearer …`.
+
+### 3.2 Handlers
+
+**`apps/api/internal/handlers/admin_security.go`** — two flavours of endpoints:
+
+```go
+type AdminSecurityHandler struct {
+    DB             *gorm.DB
+    Config         *config.Config
+    Security       *security.Service
+    SentinelClient *security.UpstreamClient
+}
+
+func NewAdminSecurityHandler(db *gorm.DB, cfg *config.Config, sec *security.Service) *AdminSecurityHandler {
+    h := &AdminSecurityHandler{DB: db, Config: cfg, Security: sec}
+    if cfg.SentinelEnabled {
+        h.SentinelClient = security.NewUpstreamClient(
+            "sentinel",
+            "http://127.0.0.1:" + cfg.Port + "/sentinel/api",
+            cfg.SentinelUsername, cfg.SentinelPassword,
+        )
+    }
+    return h
+}
+```
+
+Native endpoints (use our IP-ban table + in-memory ring):
+
+- `GET  /overview` — counts + top IPs (raw or aggregated)
+- `GET  /rate-limits` — top IPs hitting limits, by window
+- `GET  /bans` — list bans (`?status=active|expired|all`)
+- `POST /bans` — manual ban (`{ip, reason, hours}`)
+- `DELETE /bans/:ip` — unban
+
+Proxy endpoints (forward to Sentinel):
+
+- `/threats`, `/analytics/{summary,attack-trends,geographic,top-targets}`, `/auth-shield`, `/sentinel-rate-limits`
+
+For Pulse it's all proxy:
+
+```go
+// admin_performance.go
+func (h *AdminPerformanceHandler) Overview(c *gin.Context) { h.proxy(c, "/overview") }
+func (h *AdminPerformanceHandler) Routes(c *gin.Context)   { h.proxy(c, "/routes") }
+func (h *AdminPerformanceHandler) N1(c *gin.Context)       { h.proxy(c, "/database/n1/ranked") }
+// … etc for /errors, /runtime/current, /health/checks, /slos, /use, /alerts
+```
+
+### 3.3 Register routes
+
+Under your existing admin route group (whatever requires `RequireRole("ADMIN")`):
+
+```go
+adminDgw.GET("/security/overview", adminSecurityHandler.Overview)
+adminDgw.GET("/security/bans", adminSecurityHandler.ListBans)
+adminDgw.POST("/security/bans", adminSecurityHandler.CreateBan)
+adminDgw.DELETE("/security/bans/:ip", adminSecurityHandler.DeleteBan)
+adminDgw.GET("/security/rate-limits", adminSecurityHandler.RateLimits)
+adminDgw.GET("/security/threats", adminSecurityHandler.Threats)
+// … rest of the security + performance endpoints
+```
+
+---
+
+## Stage 4 — Admin UI pages
+
+### 4.1 Sidebar links
+
+Whatever holds your sidebar item list, add Performance next to Security:
+
+```tsx
+{ label: "Security",    href: "/system/security",    icon: "Shield" },
+{ label: "Performance", href: "/system/performance", icon: "Gauge"  },
+```
+
+If your icon resolver pulls from `lucide-react`, make sure `Ban`, `Gauge`, and `Activity` are imported and added to your icon map / export list.
+
+### 4.2 Pages
+
+These are pure-React, TanStack Query, Tailwind. The structure is:
+
+```tsx
+const { data: bans } = useQuery({
+  queryKey: ["security-bans"],
+  queryFn: async () =>
+    (await apiClient.get("/api/admin/dgateway/security/bans?status=active"))
+      .data,
+  refetchInterval: 30_000,
+});
+```
+
+Replace the API path prefix with whatever your admin uses (e.g. `/api/admin/your-thing/security/bans`).
+
+The pages render:
+
+**Security** — three stat cards (active bans / auto-bans 24h / rate-limited IPs 1h), an active-bans table with per-row unban, an inline manual-ban form, a 5-min rate-limit pressure grid, and a recent-threats table (with severity + CVSS badges).
+
+**Performance** — eight stat cards (p50/p95/p99 + error rate + throughput + total requests + goroutines + heap), slowest-10 routes by p95, N+1 detections with suggested-fix hints, and a recent-errors table. Degrades cleanly when Pulse is disabled.
+
+Both pages also have an "Open full Sentinel/Pulse" button in the header that still links to the embedded dashboard for when admins want the deep view.
+
+---
+
+## Stage 5 — In-app + email notifications
+
+### 5.1 Generic admin alert helper
+
+**`apps/api/internal/notifications/admin.go`** — define an `EmailEnqueuer` interface so you don't import your `jobs` package directly (avoids an import cycle when `jobs/*` later imports `notifications`):
+
+```go
+package notifications
+
+type EmailEnqueuer interface {
+    EnqueueSendEmail(to, subject, template string, data map[string]interface{}) error
+}
+
+type AdminAlert struct {
+    Subject     string
+    Body        string
+    Category    string // "informative" / "warning" / "incident"
+    Email       bool
+    DedupKey    string         // "ip-autoban:1.2.3.4" — pass "" to never dedup
+    DedupWindow time.Duration
+}
+
+func NotifyAdmins(db *gorm.DB, mailer EmailEnqueuer, alert AdminAlert) {
+    if dedupHit(alert.DedupKey, alert.DedupWindow) {
+        return
+    }
+    // 1. Create Communication row
+    // 2. List active ADMIN users
+    // 3. Create UserNotification row per admin
+    // 4. If alert.Email && mailer != nil, EnqueueSendEmail("notification" template) per admin
+}
+```
+
+> The dedup is process-local — restarts clear it, which is fine for security alerts (one duplicate notification per restart is better than dropping a real one).
+
+### 5.2 Wire it into the cron handler
+
+In your `handleSecurityIPBanSweep`, after the successful `CreateAutoBan`:
+
+```go
+notifications.NotifyAdmins(deps.DB, deps.Jobs, notifications.AdminAlert{
+    Subject:     fmt.Sprintf("Auto-banned %s for sustained rate-limit pressure", ip),
+    Body:        fmt.Sprintf("%s\n\nThe ban expires automatically in 6 hours. Unban early from /system/security.", reason),
+    Category:    models.CommCategoryWarning,
+    Email:       true,
+    DedupKey:    "ip-autoban:" + ip,
+    DedupWindow: 24 * time.Hour,
+})
+```
+
+> `deps.Jobs` is a `*jobs.Client` which implements `EnqueueSendEmail` — it satisfies `EmailEnqueuer` implicitly.
+
+### 5.3 Email template
+
+If your `mail` package's `notification` template renders `{{.Title}}` + `{{.Message}}`, you're done. If not, either create one or rename the template name in the `EnqueueSendEmail` call.
+
+---
+
+## Verification checklist
+
+After deploying, work through this list:
+
+- [ ] **API boots** with `Sentinel security suite mounted at /sentinel` and `Pulse dashboard at /pulse/ui/` in the logs (no `mount failed`).
+- [ ] **GORM ran AutoMigrate** for `ip_bans` — `\d ip_bans` in psql should show the table with `idx_ip_bans_ip_active`.
+- [ ] **`/sentinel/ui` loads** with v2's CSP + AuthShield pages in the nav.
+- [ ] **`/pulse/ui/` loads** with the SLOs / USE / Test Runs / Flame pages in the nav.
+- [ ] **Admin sidebar** shows Security AND Performance.
+- [ ] **`/system/security`** loads, shows the stat strip, ban form opens, manual-ban an IP and confirm it appears in the table.
+- [ ] **`/system/performance`** loads, the stat cards populate after a minute or two of traffic.
+- [ ] **`POST /api/admin/dgateway/security/bans`** with a junk IP, then make a request from that IP — should 403 with `Retry-After` header.
+- [ ] **Cron sweep firing** — `journalctl` (or container logs) should show `[security-sweep] tick complete` at least once per minute (silent if no new bans).
+- [ ] **Notification reaches you** — manually deactivate the ban, lower the tracker thresholds to be permissive, hammer a rate-limited endpoint from one IP, wait for the next cron tick, confirm email + bell badge.
+
+---
+
+## Troubleshooting
+
+**`mount failed: refusing to start: dashboard is using the default credentials`**
+v2 refuses default creds in release mode. Set `SENTINEL_USERNAME` and `SENTINEL_PASSWORD` env vars to non-default values. (Pulse has the same check on `PULSE_*`.)
+
+**`COPY libs/ libs/: "/libs": not found`**
+Step 1.5 — remove the line from your API Dockerfile.
+
+**Rate limits all key on the same IP / always trip together**
+You're behind a proxy and `TrustedProxies` is empty, so `c.ClientIP()` returns the LB's IP for every request. Add your proxy's CIDR to the `TrustedProxies` list.
+
+**Pulse dashboard says `Mount(ctx, ...) — expected context.Context`**
+Step 1.3 — you missed the `context.Background()` first arg.
+
+**`import cycle not allowed` involving notifications + jobs**
+Step 5.1 — `notifications.NotifyAdmins` must take an `EmailEnqueuer` interface, not `*jobs.Client` directly.
+
+**`apiClient.delete` returns 404 with the wrong "no active ban" message**
+The DELETE route registration must come AFTER the auth + admin middleware on its route group. Double-check your group has `middleware.RequireRole("ADMIN")`.
+
+**Cron task fires but never auto-bans anyone**
+Confirm rate-limit middleware is recording: hit a rate-limited route manually until you get 429, then check `GET /api/admin/dgateway/security/rate-limits` — your IP should appear with a count. If not, `RecordRateLimit` middleware isn't registered (Step 2.3) or runs before the rate-limit middleware instead of after.
+
+**The Sentinel proxy returns 502 with `UPSTREAM_ERROR`**
+The upstream client is hitting `http://127.0.0.1:<port>/sentinel/api` — check `cfg.Port` is the same one your API actually listens on, and that Sentinel is mounted before your proxy handler tries to call it.
+
+---
+
+## Decisions you can re-tune later
+
+These are the values that make sense for DGateway. Adapt to your traffic.
+
+| Constant in `internal/security/security.go` | Default | Notes                                                                  |
+| ------------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `eventRingCap`                              | 4096    | Bounds memory of the 429 ring; 4k handles 800/min sustained.           |
+| `eventRetention`                            | 5 min   | Trigger looks back 2 min; 5 gives margin for cron jitter.              |
+| `cacheRefreshInterval`                      | 30 s    | DB → in-mem cache refresh; manual ban/unban also forces a refresh.     |
+| `AutoBanDuration`                           | 6 h     | JB's rule for "sustained" abuse. 1 h is more permissive, 24 h harsher. |
+
+The auto-ban trigger itself (cron handler):
+
+- **Default (trigger B)** — events in BOTH `[-2m,-1m]` AND `[-1m,now]` → sustained pressure > 1 minute, ban.
+- **Aggressive (trigger A)** — `≥3 events in [-1m,now]` → catches single bursts.
+- **Custom** — write your own predicate. The handler is ~30 lines, just swap the windowing logic.
+
+Notification dedup window:
+
+- **Default** — 24h per `ip-autoban:<ip>` key. Flapping IPs only ping you once a day.
+- **Strict (1h)** — get pinged sooner if the same offender comes back.
+- **None** — every auto-ban emails. Avoid unless you want noise.
+
+---
+
+## Bonus: HIGH/CRITICAL threat notifications
+
+The notification fan-out above only fires on auto-ban. If you also want in-app + email on every WAF block, SQLi attempt, or HIGH/CRITICAL ThreatEvent, you'll need to:
+
+1. Subscribe to Sentinel's pipeline via the `Pipeline.Subscribe*` hooks added in v2.
+2. Filter on `Severity >= sentinel.SeverityHigh` (or `CVSS >= 7.0`).
+3. Call `notifications.NotifyAdmins` with a tight dedup window (e.g. 5 min per `threat:<ip>:<type>`) to avoid burying you in alerts.
+
+Not covered in this guide — that's a separate, optional layer on top of the auto-ban path most people want first.
+
+---
+
+## Related reading
+
+- [The Complete Linux Server Security Guide — SSH Keys, Fail2Ban & Beyond](/blog/ssh-key-security-guide) — host-level hardening that sits underneath this app-level WAF + auto-ban story.
+- [Securing Your First VPS (and Installing Dokploy)](/blog/secure-vps-and-install-dokploy) — the beginner-friendly version of the host-hardening side.
+- [Integrating DGateway Payments into a Next.js App](/blog/dgateway-integration-with-nextjs-guide) — the very product whose migration this guide is taken from.
+- [DGateway Framer plugin](/blog/dgateway-framer-plugin) — the drop-in payment plugin that talks to the API protected by this Sentinel/Pulse stack.
+- [Top Go Developers in Uganda — 2026 Rankings](/blog/top-go-developers-uganda-2026) — context on the Grit / Sentinel / Pulse stack and the team behind it.
+
+---
+
+## Need help running this migration on your own API?
+
+I built Sentinel and Pulse, ship them in DGateway production traffic, and run this exact migration as a paid engagement for other Go shops.
+
+- 📞 **[Book a session](/book)** — 1-on-1 migration review, code walkthrough, or paired engineering. Sessions from UGX 50,000.
+- 💼 **Hire Desishub** for full Go API hardening + observability work — [desishub.com](https://desishub.com)
+- 📺 **YouTube** — practical Go + Sentinel + Pulse tutorials at [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- 💻 **Source**: [Sentinel](https://github.com/MUKE-coder/sentinel) · [Pulse](https://github.com/MUKE-coder/pulse)
+- 💬 **WhatsApp JB**: [+256 762 063 160](https://wa.me/256762063160)
+
+---
+
+## Resources
+
+- **Sentinel**: [github.com/MUKE-coder/sentinel](https://github.com/MUKE-coder/sentinel)
+- **Pulse**: [github.com/MUKE-coder/pulse](https://github.com/MUKE-coder/pulse)
+- **Grit framework** (the meta-framework Sentinel + Pulse plug into): [gritframework.dev](https://gritframework.dev)
+- **Asynq**: [github.com/hibiken/asynq](https://github.com/hibiken/asynq)
+- **Gin**: [gin-gonic.com](https://gin-gonic.com)
+- **GORM**: [gorm.io](https://gorm.io)
