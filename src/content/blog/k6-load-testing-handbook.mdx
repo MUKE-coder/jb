@@ -1,0 +1,919 @@
+---
+title: "The Beginner's Handbook to k6 Load Testing — Smoke, CRUD, Auth, Ramps & Realistic VPS Runs"
+description: "A from-scratch k6 load-testing handbook for people who've never touched a perf tool. Smoke test → GET / POST / PUT / PATCH / DELETE → auth flows with setup() → ramping-vus scenarios → reading p95/p99 without panicking → saving JSON results → the built-in HTML dashboard → and the right way to run k6 from a VPS. Built around the GRIT framework but works for any HTTP service."
+image: /case-studies/k6-load-testing-handbook.png
+category: tutorial
+createdAt: 2026-05-31
+updatedAt: 2026-05-31
+---
+
+# The Beginner's Handbook to k6 Load Testing — Smoke, CRUD, Auth, Ramps & Realistic VPS Runs
+
+**Last updated: May 2026 · By [JB (Muke Johnbaptist)](/) — built around the [GRIT framework](https://gritframework.dev) stateless-service challenge, but the methodology works for any HTTP service.**
+
+_A practical, from-scratch guide to load testing your APIs — written for people who have never touched a performance tool._
+
+> Already comfortable with k6 basics? You probably want my longer [Complete Guide to API Performance Testing with k6](/blog/api-perfomance-testing-with-k6) instead — it covers stress/spike/soak patterns across e-commerce, LMS, and auth systems. This handbook is the "first time touching a perf tool" beginner edition.
+
+---
+
+## Table of contents
+
+1. [What is k6 and why should you care?](#1-what-is-k6-and-why-should-you-care)
+2. [The mental model: how load testing works](#2-the-mental-model-how-load-testing-works)
+3. [Terminology you must know](#3-terminology-you-must-know)
+4. [Installing k6 on your local machine](#4-installing-k6-on-your-local-machine)
+5. [The thing you're going to test](#5-the-thing-youre-going-to-test)
+6. [Test 1 — The smoke test (your "hello world")](#6-test-1--the-smoke-test-your-hello-world)
+7. [Anatomy of a k6 script](#7-anatomy-of-a-k6-script)
+8. [Test 2 — GET with checks and thresholds](#8-test-2--get-with-checks-and-thresholds)
+9. [Test 3 — POST (creating data)](#9-test-3--post-creating-data)
+10. [Test 4 — PUT / PATCH / DELETE (full CRUD)](#10-test-4--put--patch--delete-full-crud)
+11. [Test 5 — Authentication flows](#11-test-5--authentication-flows)
+12. [Test 6 — A realistic ramping load test](#12-test-6--a-realistic-ramping-load-test)
+13. [The six load-test shapes](#13-the-six-load-test-shapes)
+14. [Reading the output without panicking](#14-reading-the-output-without-panicking)
+15. [Saving results and making charts](#15-saving-results-and-making-charts)
+16. [Running k6 from a VPS (the right way)](#16-running-k6-from-a-vps-the-right-way)
+17. [Common mistakes and how to avoid them](#17-common-mistakes-and-how-to-avoid-them)
+18. [Cheat sheet](#18-cheat-sheet)
+
+---
+
+## 1. What is k6 and why should you care?
+
+**k6** is an open-source load-testing tool made by Grafana Labs. You give it a small JavaScript file describing what requests to make, and it hammers your server with that traffic — anywhere from one simulated user to thousands — then reports how fast and how reliably your server responded.
+
+It's a single binary written in Go. You write the _test_ in JavaScript, but there's no Node.js runtime involved — k6 has its own JS engine. That combination is the whole point: tests are easy to write (JS), but the engine generating the load is fast and efficient (Go), so a single laptop can simulate a lot of users.
+
+**Why you'd reach for it:**
+
+- You shipped an API and want to know: _will it survive launch day?_
+- You changed some code and want to know: _did I just make things slower?_
+- You're choosing between two designs and want real numbers, not guesses.
+- You want a test that fails your CI build automatically when performance regresses — the same way a unit test fails when logic breaks.
+
+A unit test answers _"is it correct?"_. A load test answers _"is it correct **and** fast enough when 200 people use it at once?"_. Those are different questions, and the second one is where systems quietly fall over.
+
+---
+
+## 2. The mental model: how load testing works
+
+Here's the entire idea in one breath:
+
+> k6 spins up a number of **virtual users (VUs)**. Each VU runs your test function in a loop, over and over, for the duration you set. While it does this, k6 measures every request — how long it took, whether it succeeded — and at the end gives you statistics.
+
+That's it. Everything else is detail.
+
+A few things follow naturally from this:
+
+- **More VUs = more concurrent load.** 1 VU is one person clicking. 100 VUs is a small crowd all clicking at once.
+- **Each VU is independent.** It doesn't share memory with the others. This mirrors real clients.
+- **The loop matters.** If your function makes one request and you have 50 VUs looping for a minute, you'll generate thousands of requests.
+- **`sleep()` simulates think-time.** Real users pause between actions. Without a sleep, each VU fires requests as fast as the server can answer — useful for raw stress, less realistic for modeling humans.
+
+---
+
+## 3. Terminology you must know
+
+Don't skip this. Every k6 output and every tutorial assumes you know these words.
+
+**VU (Virtual User)** — One simulated client. Runs your test function repeatedly in its own loop.
+
+**Iteration** — One complete run of your test function (the `export default function`). If a VU loops 30 times, that's 30 iterations.
+
+**RPS (Requests Per Second)** — Throughput. How many HTTP requests your service handled each second. Higher is generally better (it means the server can serve more people).
+
+**Latency** — How long a request took, from sending it to getting the full response back. Lower is better.
+
+**Percentiles (p50, p95, p99)** — The single most important concept here, so read carefully:
+
+> A percentile tells you the value that a given share of requests beat.
+>
+> - **p50** (the _median_): half of requests were faster than this, half slower.
+> - **p95**: 95% of requests were faster than this; only 5% were slower.
+> - **p99**: 99% were faster; only 1 in 100 was slower.
+
+**Why percentiles instead of averages?** Averages lie. Imagine 99 requests at 5 ms and one request at 2,000 ms. The average is ~25 ms — sounds fine. But that one unlucky user waited 2 full seconds. The p99 would expose it; the average buries it. **Always look at p95 and p99, never just the average.** This is the lesson every performance engineer learns the hard way.
+
+**Threshold** — A pass/fail rule for the whole test. Example: "p95 must stay under 200 ms." If the test violates a threshold, k6 exits with an error code — perfect for CI.
+
+**Check** — An assertion on a single response (like "status was 200"). Unlike a threshold, a failed check does _not_ stop the test; it just gets counted. Think of checks as "did this individual response look right?" and thresholds as "did the test as a whole pass?".
+
+**Stateless service** — A server that keeps no per-client memory between requests. Every request stands alone — no session stored in RAM, no "remember me from last time." This property is what makes load tests meaningful: a slow request is the service's fault, not contention over shared state, and you can scale the service horizontally.
+
+**Executor** — The strategy k6 uses to schedule VUs over time. `constant-vus` holds a fixed number; `ramping-vus` raises and lowers them in stages. You'll meet these below.
+
+---
+
+## 4. Installing k6 on your local machine
+
+k6 is a single binary. Pick your platform.
+
+**macOS (Homebrew):**
+
+```bash
+brew install k6
+```
+
+**Windows (winget):**
+
+```powershell
+winget install k6 --source winget
+```
+
+**Windows (Chocolatey):**
+
+```powershell
+choco install k6
+```
+
+**Linux (Debian / Ubuntu):**
+
+```bash
+sudo gpg -k
+sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+  --keyserver hkp://keyserver.ubuntu.com:80 \
+  --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+  | sudo tee /etc/apt/sources.list.d/k6.list
+sudo apt-get update
+sudo apt-get install k6
+```
+
+**Verify the install:**
+
+```bash
+k6 version
+```
+
+You want a recent version. The built-in HTML web dashboard (used later for charts) needs at least v0.50, and modern versions are well past v1.0 — newer is better, so don't worry if your number looks high.
+
+> **Note on Git Bash / Windows:** if you're on Windows using Git Bash, the install above is `winget`/`choco`, not `apt`. Some Unix tools (`lsof`, `ss`) won't exist in Git Bash — but k6 itself works fine once installed via winget or Chocolatey.
+
+---
+
+## 5. The thing you're going to test
+
+You can't load-test nothing. The GRIT challenge uses a tiny **health-check endpoint** — and that's the ideal first target, because it does almost no work, so you're measuring _your framework's raw overhead_ and nothing else.
+
+If you're following GRIT, scaffold a headless API:
+
+```bash
+grit new bench-api --api
+cd bench-api
+```
+
+The `--api` flag produces a pure Go API (Gin + GORM, no frontend) — the smallest possible surface to test. It creates a monorepo with the actual Go app under `apps/api/`, and the entry point at `apps/api/cmd/server/main.go`.
+
+For a clean benchmark with zero infrastructure, switch the database to SQLite. Open `.env` at the **project root** and set:
+
+```bash
+DATABASE_URL=sqlite:./bench.db
+APP_ENV=production
+SENTINEL_ENABLED=false
+PULSE_ENABLED=false
+```
+
+Two reasons that matter:
+
+- **`APP_ENV=production`** runs Gin in release mode. Debug mode adds 2–3× overhead per request (extra logging, route printing). Always benchmark in release mode, or your numbers are meaningless.
+- **Turning off Sentinel (WAF) and Pulse (observability)** removes middleware from the request chain. With them on, you'd be benchmarking _them_, not your endpoint. Re-enable when you're done. (See the [Sentinel v2 + Pulse v1 migration guide](/blog/sentinel-pulse-migration-guide) if you haven't wired these into your API yet.)
+
+Run the server. The Go module lives in `apps/api/`, and the config loader expects that as the working directory so it can find `.env`:
+
+```bash
+cd apps/api
+go run ./cmd/server
+```
+
+> **Common trap:** don't `cd` all the way into `cmd/server` and run `go run .`. From there the config loader can't find the `.env` two levels up, and you'll get `Failed to load config: DATABASE_URL is required`. Run from `apps/api/` with `go run ./cmd/server`.
+
+Confirm it's alive in another terminal:
+
+```bash
+curl -i http://localhost:8080/api/health
+```
+
+You should see:
+
+```
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+{"status":"ok","version":"0.1.0"}
+```
+
+(The `-i` flag tells curl to print the response headers as well as the body.)
+
+**Not using GRIT?** Any HTTP server with a `GET` endpoint works. Just point the test scripts below at your own URL. The methodology is identical.
+
+---
+
+## 6. Test 1 — The smoke test (your "hello world")
+
+**Never** start by throwing 100 users at your server. Start with **one** user for a short time. This is a _smoke test_: it confirms your script works, the endpoint is reachable, and the response looks right — before you scale up. If something's broken, you want to find out now, cheaply.
+
+Make a folder for your scripts:
+
+```bash
+mkdir -p loadtests && cd loadtests
+```
+
+(`mkdir -p` creates parent directories as needed and doesn't error if the folder already exists.)
+
+Create `smoke.js`:
+
+```javascript
+import http from "k6/http";
+import { check, sleep } from "k6";
+
+export const options = {
+  vus: 1, // one virtual user
+  duration: "30s", // for 30 seconds
+  thresholds: {
+    http_req_failed: ["rate<0.01"], // <1% of requests may fail
+    http_req_duration: ["p(95)<200"], // 95% of requests must beat 200ms
+  },
+};
+
+export default function () {
+  const res = http.get("http://localhost:8080/api/health");
+  check(res, {
+    "status is 200": (r) => r.status === 200,
+    'body has "status":"ok"': (r) => r.body.includes('"status":"ok"'),
+  });
+  sleep(1);
+}
+```
+
+Run it:
+
+```bash
+k6 run smoke.js
+```
+
+**What success looks like:** at the end you'll see `checks_succeeded` at 100% and `http_req_duration` showing low single-digit milliseconds. If anything fails _here_, fix it before scaling — a bigger test won't clarify a broken script, it'll just fail louder.
+
+---
+
+## 7. Anatomy of a k6 script
+
+Every k6 script has the same three parts. Once you see them, every script becomes readable.
+
+```javascript
+// 1. IMPORTS — pull in k6's built-in modules
+import http from "k6/http"; // the HTTP client
+import { check, sleep } from "k6"; // assertion + pause helpers
+
+// 2. OPTIONS — configuration k6 reads before running
+export const options = {
+  vus: 1,
+  duration: "30s",
+  thresholds: {
+    /* pass/fail rules */
+  },
+};
+
+// 3. THE DEFAULT FUNCTION — what each VU runs, in a loop
+export default function () {
+  const res = http.get("http://localhost:8080/api/health");
+  check(res, { "status is 200": (r) => r.status === 200 });
+  sleep(1);
+}
+```
+
+Line by line, the pieces that confuse beginners:
+
+- **`export const options`** — k6 specifically looks for an export named `options`. It's not a function you call; k6 reads it to configure the run.
+- **`export default function () {}`** — this is the entry point. Every VU calls it repeatedly until the duration runs out. One call = one iteration.
+- **`http.get(url)`** — sends a GET request, returns a response object with `.status`, `.body`, `.headers`, and timing data.
+- **`check(res, {...})`** — runs named assertions. Each is a function receiving the response (`r`) and returning true/false. Failed checks are _recorded_, not fatal.
+- **`sleep(1)`** — pauses this VU for 1 second. Simulates a human pausing between actions.
+
+> **Imports are mandatory.** If you forget `import http from 'k6/http'`, the script throws `http is not defined`. Same for `check` and `sleep`.
+
+---
+
+## 8. Test 2 — GET with checks and thresholds
+
+Let's make the GET test a little more serious — checking the status, the response body, _and_ the response time, all at once. This is the pattern you'll reuse constantly.
+
+```javascript
+import http from "k6/http";
+import { check, sleep } from "k6";
+
+export const options = {
+  vus: 10,
+  duration: "1m",
+  thresholds: {
+    http_req_failed: ["rate<0.01"],
+    http_req_duration: ["p(95)<200", "p(99)<500"],
+  },
+};
+
+export default function () {
+  const res = http.get("http://localhost:8080/api/health");
+
+  check(res, {
+    "status is 200": (r) => r.status === 200,
+    "response time < 200ms": (r) => r.timings.duration < 200,
+    "body is valid JSON": (r) => {
+      try {
+        JSON.parse(r.body);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  });
+
+  sleep(1);
+}
+```
+
+New things here:
+
+- **10 VUs for 1 minute** — a light, steady load instead of a single user.
+- **`r.timings.duration`** — the per-request timing, in milliseconds, available right on the response.
+- **Two thresholds on duration** — you can stack multiple percentile rules; all must pass.
+- **JSON-validity check** — a real check that the body parses, not just a substring match.
+
+---
+
+## 9. Test 3 — POST (creating data)
+
+GET is read-only. To test creating data, you send a **POST** with a body and headers. Here's the pattern for a typical "create a user" endpoint.
+
+```javascript
+import http from "k6/http";
+import { check, sleep } from "k6";
+
+export const options = {
+  vus: 5,
+  duration: "30s",
+  thresholds: {
+    http_req_failed: ["rate<0.01"],
+    http_req_duration: ["p(95)<300"],
+  },
+};
+
+export default function () {
+  const url = "http://localhost:8080/api/users";
+
+  // Build the request body as a JSON string
+  const payload = JSON.stringify({
+    name: `User ${__VU}-${__ITER}`, // unique-ish per VU + iteration
+    email: `user_${__VU}_${__ITER}@example.com`,
+  });
+
+  // Tell the server we're sending JSON
+  const params = {
+    headers: { "Content-Type": "application/json" },
+  };
+
+  const res = http.post(url, payload, params);
+
+  check(res, {
+    "status is 201": (r) => r.status === 201,
+    "returns created id": (r) => JSON.parse(r.body).id !== undefined,
+  });
+
+  sleep(1);
+}
+```
+
+Key concepts:
+
+- **`JSON.stringify(...)`** — request bodies are sent as strings. Build an object, stringify it.
+- **`params` with headers** — the third argument to `http.post()`. Always set `Content-Type: application/json` when sending JSON, or the server may not parse it.
+- **`__VU` and `__ITER`** — magic variables k6 provides: the current virtual-user number and the current iteration number. Use them to generate unique data so you're not posting 500 identical records (which can hit unique-constraint errors and skew your results).
+- **`201 Created`** — the conventional status for a successful POST that created a resource. Check for the _right_ code, not just "not an error."
+
+---
+
+## 10. Test 4 — PUT / PATCH / DELETE (full CRUD)
+
+A realistic test often does a full lifecycle: create something, read it, update it, delete it. This is where you chain requests and pass data between them.
+
+```javascript
+import http from "k6/http";
+import { check, sleep } from "k6";
+
+export const options = {
+  vus: 5,
+  duration: "1m",
+  thresholds: {
+    http_req_failed: ["rate<0.02"],
+    http_req_duration: ["p(95)<400"],
+  },
+};
+
+const BASE = "http://localhost:8080/api/users";
+const JSON_HEADERS = { headers: { "Content-Type": "application/json" } };
+
+export default function () {
+  // --- CREATE (POST) ---
+  const createRes = http.post(
+    BASE,
+    JSON.stringify({
+      name: `Temp ${__VU}-${__ITER}`,
+      email: `t_${__VU}_${__ITER}@ex.com`,
+    }),
+    JSON_HEADERS
+  );
+  check(createRes, { "created (201)": (r) => r.status === 201 });
+
+  // Grab the id the server assigned so we can act on this exact record
+  const id = JSON.parse(createRes.body).id;
+
+  // --- READ (GET) ---
+  const readRes = http.get(`${BASE}/${id}`);
+  check(readRes, { "read (200)": (r) => r.status === 200 });
+
+  // --- UPDATE (PUT replaces, PATCH partially updates) ---
+  const updateRes = http.put(
+    `${BASE}/${id}`,
+    JSON.stringify({
+      name: "Updated Name",
+      email: `t_${__VU}_${__ITER}@ex.com`,
+    }),
+    JSON_HEADERS
+  );
+  check(updateRes, { "updated (200)": (r) => r.status === 200 });
+
+  // (PATCH would look the same but only sends the fields you want to change)
+  // const patchRes = http.patch(`${BASE}/${id}`, JSON.stringify({ name: 'New' }), JSON_HEADERS)
+
+  // --- DELETE ---
+  const deleteRes = http.del(`${BASE}/${id}`);
+  check(deleteRes, { "deleted (204)": (r) => r.status === 204 });
+
+  sleep(1);
+}
+```
+
+What's new and important:
+
+- **Chaining via captured data** — the `id` from the POST response feeds every subsequent request. This is how you test realistic flows.
+- **`http.put` vs `http.patch`** — PUT replaces the whole resource (send all fields); PATCH updates only the fields you send. Use the one your API expects.
+- **`http.del(url)`** — note the method is `del`, not `delete` (which is a reserved word in JavaScript).
+- **Status codes per verb** — `201` for create, `200` for read/update, `204 No Content` for a successful delete. Check the codes your API actually returns.
+
+---
+
+## 11. Test 5 — Authentication flows
+
+Most real endpoints are behind auth. The usual pattern: log in once to get a token, then reuse that token on every protected request. Doing the login _inside_ the loop on every iteration would unfairly measure your login endpoint, so use **`setup()`** to log in once before the test starts.
+
+```javascript
+import http from "k6/http";
+import { check, sleep } from "k6";
+
+export const options = {
+  vus: 10,
+  duration: "1m",
+  thresholds: {
+    http_req_failed: ["rate<0.01"],
+    http_req_duration: ["p(95)<300"],
+  },
+};
+
+// setup() runs ONCE before any VU starts. Its return value is passed
+// to the default function as an argument.
+export function setup() {
+  const res = http.post(
+    "http://localhost:8080/api/auth/login",
+    JSON.stringify({ email: "demo@example.com", password: "password123" }),
+    { headers: { "Content-Type": "application/json" } }
+  );
+  check(res, { "login succeeded": (r) => r.status === 200 });
+  const token = JSON.parse(res.body).token;
+  return { token }; // <-- handed to every VU
+}
+
+export default function (data) {
+  // Attach the token as a Bearer header on the protected request
+  const params = {
+    headers: { Authorization: `Bearer ${data.token}` },
+  };
+
+  const res = http.get("http://localhost:8080/api/me", params);
+  check(res, { "authorized (200)": (r) => r.status === 200 });
+
+  sleep(1);
+}
+```
+
+Concepts:
+
+- **`setup()`** — a special exported function k6 runs once, before the load begins. Perfect for logging in, seeding data, or any one-time prep.
+- **The return value of `setup()`** — gets passed as the argument (`data`) to your default function, so every VU shares the token without each one logging in.
+- **`Authorization: Bearer <token>`** — the standard header format for token auth. Adjust if your API uses a different scheme (API keys, cookies, etc.).
+- **There's also `teardown(data)`** — runs once at the end, for cleanup.
+
+---
+
+## 12. Test 6 — A realistic ramping load test
+
+The smoke test held 1 VU flat. A real load test _ramps_ users up, holds a plateau, climbs higher, then ramps down. This shape — ramp → plateau → ramp → plateau → ramp-down — is the canonical **"average load"** profile. It shows both steady-state behavior and what happens as users spin up.
+
+This requires the `scenarios` + `ramping-vus` executor instead of the simple `vus`/`duration` shorthand.
+
+```javascript
+import http from "k6/http";
+import { check } from "k6";
+
+export const options = {
+  scenarios: {
+    average_load: {
+      executor: "ramping-vus",
+      startVUs: 0,
+      stages: [
+        { duration: "30s", target: 50 }, // ramp 0 → 50 VUs over 30s
+        { duration: "1m30s", target: 50 }, // hold 50 VUs for 1m30s
+        { duration: "30s", target: 100 }, // ramp 50 → 100 over 30s
+        { duration: "2m", target: 100 }, // hold 100 VUs for 2m
+        { duration: "30s", target: 0 }, // ramp down to 0
+      ],
+      gracefulRampDown: "10s",
+    },
+  },
+  thresholds: {
+    http_req_failed: ["rate<0.01"],
+    http_req_duration: [
+      "p(50)<50", // median under 50ms
+      "p(95)<200", // p95 under 200ms
+      "p(99)<500", // p99 under 500ms
+    ],
+  },
+  summaryTrendStats: ["min", "med", "avg", "p(95)", "p(99)", "max"],
+};
+
+export default function () {
+  const res = http.get("http://localhost:8080/api/health");
+  check(res, { "status is 200": (r) => r.status === 200 });
+}
+```
+
+Decoding the new parts:
+
+- **`scenarios`** — lets you define one or more named load patterns with fine control. Here, one named `average_load`.
+- **`executor: 'ramping-vus'`** — varies the VU count over time according to `stages`.
+- **`startVUs: 0`** — begin with no users, then ramp up.
+- **`stages`** — each entry moves the VU count _from its current value_ toward `target` over `duration`. The total runtime here is about 5 minutes.
+- **`gracefulRampDown: '10s'`** — when VUs are being removed, give in-flight requests up to 10s to finish instead of cutting them off mid-flight.
+- **`summaryTrendStats`** — controls which statistics print in the end-of-run summary. Reporting only; doesn't change the test.
+
+> **Note:** this test has no `sleep()`, so each VU fires requests back-to-back as fast as responses arrive — good for measuring raw throughput. For a more human-like profile, add `import { sleep } from 'k6'` and a `sleep(1)` at the end of the function. "50 VUs with think-time" behaves much more like 50 real people than "50 tight request loops."
+
+---
+
+## 13. The six load-test shapes
+
+Different questions need different traffic shapes. You don't need to memorize these — just know they exist so you reach for the right one.
+
+| Test             | What it does                                       | Question it answers                            |
+| ---------------- | -------------------------------------------------- | ---------------------------------------------- |
+| **Smoke**        | 1 VU, short duration                               | Does the script even work? Is the endpoint up? |
+| **Average load** | Ramp to typical load, hold, ramp down              | How does it behave under normal traffic?       |
+| **Stress**       | Ramp _beyond_ normal until it strains              | Where's the breaking point?                    |
+| **Spike**        | Sudden jump to very high VUs (e.g. 5s ramp to 500) | Can it survive a flash crowd?                  |
+| **Soak**         | Moderate load held for a long time (hours)         | Does it leak memory or degrade over time?      |
+| **Breakpoint**   | Slowly increase load until it fails                | What's the exact capacity ceiling?             |
+
+Always run **smoke first**. It's cheap insurance against wasting a 5-minute run on a typo.
+
+---
+
+## 14. Reading the output without panicking
+
+When a run finishes, k6 prints a wall of numbers. Here's what each line means and what "good" looks like for a tiny health endpoint on a local machine.
+
+```
+http_req_duration..: avg=3.42ms min=0.31ms med=2.81ms max=121.6ms p(95)=7.84ms p(99)=18.2ms
+http_reqs..........: 24812  165.41/s
+http_req_failed....: 0.00%  0 out of 24812
+vus................: 100    min=0  max=100
+checks_succeeded...: 100.00%
+```
+
+| Metric                  | Meaning                            | Healthy (tiny local endpoint) |
+| ----------------------- | ---------------------------------- | ----------------------------- |
+| `http_req_duration` p50 | Median request time                | `< 10 ms`                     |
+| `http_req_duration` p95 | 95% of requests beat this          | `< 50 ms`                     |
+| `http_req_duration` p99 | 99% of requests beat this          | `< 200 ms`                    |
+| `http_req_failed`       | Fraction of requests that errored  | `< 0.1%`                      |
+| `http_reqs`             | Total requests + throughput (RPS)  | As high as the box allows     |
+| `vus`                   | Concurrent virtual users           | Should match your stages      |
+| `http_req_waiting`      | Time waiting for first byte (TTFB) | Should track p50 closely      |
+| `http_req_connecting`   | TCP handshake time                 | ≈ 0 with keep-alive on        |
+| `checks_succeeded`      | % of your checks that passed       | 100%                          |
+
+**Three traps to avoid:**
+
+1. **Reading averages.** "avg 5 ms" can hide a 5,000 ms p99. Always look at p95 and p99.
+2. **Comparing across hardware.** Numbers on your laptop describe your laptop. They don't predict a $5 VPS or a 64-core server. Only compare runs on the _same_ machine.
+3. **Ignoring `http_req_failed`.** 0% errors is table stakes. If latency looks amazing but errors are at 12%, your "amazing latency" is just the speed of failing fast.
+
+---
+
+## 15. Saving results and making charts
+
+Printing to the terminal is fine for a quick look. To keep results or chart them, save to files.
+
+```bash
+k6 run \
+  --out json=results.jsonl \
+  --summary-export=summary.json \
+  load.js
+```
+
+(The trailing `\` is just line continuation — it splits one command across multiple lines for readability. It's the same as writing it all on one line.)
+
+- **`--out json=results.jsonl`** streams _every_ data point (every individual request) to a JSON-Lines file. Big, but great for detailed analysis or custom charts.
+- **`--summary-export=summary.json`** writes the aggregated end-of-test summary (totals, percentiles, pass/fail) as one JSON object. Small, perfect for CI or a README table.
+
+Verify the files appeared:
+
+```bash
+ls
+cat summary.json
+```
+
+### The easiest chart: the built-in HTML dashboard
+
+Modern k6 ships a real-time web dashboard that can export a self-contained HTML report. Just set two environment variables when you run:
+
+```bash
+K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=report.html k6 run load.js
+```
+
+Open `report.html` in any browser — it has percentile lines, request rate, and error rate over time, and it works offline. Commit it straight into your repo as your chart.
+
+> One quirk: the HTML dashboard focuses on graphs and may not display checks/thresholds the way the terminal summary does. Keep `--summary-export` too if you want those numbers in a file.
+
+### A custom SVG chart (more control)
+
+If you want a styled chart for your README, bin the JSONL into per-second percentiles and emit an SVG. Save as `chart.mjs` and run with `node chart.mjs`:
+
+```javascript
+import fs from "node:fs";
+
+const rows = fs
+  .readFileSync("results.jsonl", "utf8")
+  .trim()
+  .split("\n")
+  .map(JSON.parse)
+  .filter((r) => r.metric === "http_req_duration" && r.type === "Point");
+
+const start = new Date(rows[0].data.time).getTime();
+const buckets = new Map();
+for (const r of rows) {
+  const t = Math.floor((new Date(r.data.time).getTime() - start) / 1000);
+  if (!buckets.has(t)) buckets.set(t, []);
+  buckets.get(t).push(r.data.value);
+}
+
+const pct = (xs, p) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length * p)] || 0;
+};
+
+const series = [...buckets.entries()]
+  .sort(([a], [b]) => a - b)
+  .map(([t, vs]) => ({
+    t,
+    p50: pct(vs, 0.5),
+    p95: pct(vs, 0.95),
+    p99: pct(vs, 0.99),
+  }));
+
+const w = 800,
+  h = 320,
+  pad = 40;
+const maxY = Math.max(...series.flatMap((s) => [s.p50, s.p95, s.p99])) * 1.1;
+const x = (i) => pad + (i / (series.length - 1)) * (w - pad * 2);
+const y = (v) => h - pad - (v / maxY) * (h - pad * 2);
+const line = (key) =>
+  series.map((s, i) => `${i ? "L" : "M"}${x(i)},${y(s[key])}`).join(" ");
+
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}">
+  <rect width="${w}" height="${h}" fill="#0a0a0f"/>
+  <path d="${line("p99")}" fill="none" stroke="#ff6b6b" stroke-width="2"/>
+  <path d="${line("p95")}" fill="none" stroke="#fdcb6e" stroke-width="2"/>
+  <path d="${line("p50")}" fill="none" stroke="#6c5ce7" stroke-width="2"/>
+  <text x="${pad}" y="${pad - 10}" fill="#e8e8f0" font-family="monospace" font-size="14">Latency (ms) — p50 (purple) · p95 (yellow) · p99 (red)</text>
+</svg>`;
+
+fs.writeFileSync("latency.svg", svg);
+console.log("wrote latency.svg");
+```
+
+For repeated runs and a permanent dashboard, point k6 at InfluxDB and import the official Grafana dashboard — but that's overkill for a one-shot. For most people, the built-in HTML report is enough.
+
+---
+
+## 16. Running k6 from a VPS (the right way)
+
+Here's a truth that surprises beginners:
+
+> **Running k6 and your server on the same machine gives you bad numbers.**
+
+When the load generator and the service fight over the same CPU, you measure the worst of both, and your latency is inflated by contention that wouldn't exist in production. For relative comparisons ("is my code faster after this change?") co-located is acceptable. For _absolute_ numbers you trust, **put k6 on a separate machine.** A cheap VPS is perfect.
+
+### Step 1 — Get a VPS
+
+Spin up a small Linux VPS (DigitalOcean, Hetzner, Linode, AWS Lightsail — any will do). SSH in:
+
+```bash
+ssh root@your.vps.ip.address
+```
+
+> If you've never set one up before, follow my [beginner's VPS hardening guide](/blog/secure-vps-and-install-dokploy) first — it locks the box down with one script before you run anything on it.
+
+### Step 2 — Install k6 on the VPS
+
+Same Debian/Ubuntu install as before:
+
+```bash
+sudo gpg -k
+sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+  --keyserver hkp://keyserver.ubuntu.com:80 \
+  --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+  | sudo tee /etc/apt/sources.list.d/k6.list
+sudo apt-get update && sudo apt-get install k6
+k6 version
+```
+
+### Step 3 — Get your test script onto the VPS
+
+Either copy it from your laptop with `scp`:
+
+```bash
+scp loadtests/load.js root@your.vps.ip.address:/root/
+```
+
+…or just create it on the VPS with a heredoc:
+
+```bash
+cat > load.js << 'EOF'
+import http from 'k6/http'
+import { check } from 'k6'
+// ... paste the rest of your script ...
+EOF
+```
+
+(The quoted `'EOF'` stops the shell from expanding `$variables` inside your pasted code. Verify with `cat load.js`.)
+
+### Step 4 — Point the test at your real server
+
+This is the crucial change. Instead of `http://localhost:8080`, use your deployed server's public address:
+
+```javascript
+const res = http.get("https://api.yourdomain.com/api/health");
+```
+
+Now k6 (on the VPS) generates traffic across the network to your actual deployed service — the same path real users take. **Numbers from this setup are the numbers that matter.**
+
+### Step 5 — Run it, and keep it running if you disconnect
+
+For a long soak test you don't want to lose if your SSH session drops, run it under `tmux` (or `screen`):
+
+```bash
+tmux new -s loadtest
+k6 run --summary-export=summary.json load.js
+# Detach with Ctrl+B then D. Reattach later with: tmux attach -t loadtest
+```
+
+Then pull the results back to your laptop:
+
+```bash
+scp root@your.vps.ip.address:/root/summary.json ./
+```
+
+### A few VPS realities to keep in mind
+
+- **Network is now part of the measurement.** Latency over the internet includes real network hops — that's _good_, it's what users experience, but it means your numbers will be higher than localhost. Put the VPS geographically near (or far from) your server depending on what you want to model.
+- **The VPS itself has limits.** A tiny 1-CPU VPS can't generate thousands of VUs — it'll bottleneck on its own CPU before your server does. If `vus` is high but RPS plateaus and the VPS CPU is pegged, the _load generator_ is the bottleneck, not your service. Size up the VPS or use multiple load generators.
+- **Open the right firewall ports** on the server being tested so the VPS can reach it.
+
+---
+
+## 17. Common mistakes and how to avoid them
+
+- **Forgetting imports.** `http is not defined` means you skipped `import http from 'k6/http'`.
+- **Benchmarking in debug mode.** Always set your framework to release/production mode first, or you measure logging overhead, not your code.
+- **Reading the average.** Look at p95 and p99. The average is the metric that lies to you.
+- **Co-locating k6 and the server for "real" numbers.** Fine for before/after comparisons; misleading for absolute results. Separate boxes for numbers you'll quote.
+- **Posting identical data.** Use `__VU` and `__ITER` to vary payloads, or you'll trip unique constraints and measure error paths.
+- **Logging in inside the loop.** Do one-time setup (like auth) in `setup()`, not in the default function.
+- **Ignoring `http_req_failed`.** Great latency with 12% errors is not great — it's fast failure.
+- **Wrong delete method.** It's `http.del()`, not `http.delete()` (reserved word in JS).
+- **No smoke test.** Always run 1 VU first. Cheap insurance.
+
+---
+
+## 18. Cheat sheet
+
+**Run a test:**
+
+```bash
+k6 run script.js
+```
+
+**Override VUs / duration from the CLI (without editing the script):**
+
+```bash
+k6 run --vus 50 --duration 2m script.js
+```
+
+**Save results + summary:**
+
+```bash
+k6 run --out json=results.jsonl --summary-export=summary.json script.js
+```
+
+**Generate an HTML report:**
+
+```bash
+K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=report.html k6 run script.js
+```
+
+**HTTP methods in k6:**
+
+```javascript
+http.get(url, params);
+http.post(url, body, params);
+http.put(url, body, params);
+http.patch(url, body, params);
+http.del(url, body, params); // note: del, not delete
+```
+
+**Magic variables:**
+
+```javascript
+__VU; // current virtual user number
+__ITER; // current iteration number
+```
+
+**Lifecycle functions:**
+
+```javascript
+export function setup() {
+  /* runs once before */ return data;
+}
+export default function (data) {
+  /* runs per iteration */
+}
+export function teardown(data) {
+  /* runs once after */
+}
+```
+
+**Common thresholds:**
+
+```javascript
+thresholds: {
+  http_req_failed:   ['rate<0.01'],                 // <1% errors
+  http_req_duration: ['p(95)<200', 'p(99)<500'],    // latency targets
+  checks:            ['rate>0.99'],                 // 99% of checks pass
+}
+```
+
+---
+
+_Built around the [GRIT framework](https://gritframework.dev)'s "Stateless Service + k6 Load Test" challenge. Once you're comfortable, try benchmarking an endpoint that hits the database, add rate limiting and watch p99 climb, or run a spike test (5-second ramp to 500 VUs). The same patterns scale all the way up._
+
+---
+
+## Related reading
+
+- [Complete Guide to API Performance Testing with k6](/blog/api-perfomance-testing-with-k6) — the deeper, scenario-by-scenario guide (e-commerce, LMS, auth) once you're past this handbook.
+- [Sentinel v2 + Pulse v1 Migration Guide](/blog/sentinel-pulse-migration-guide) — wire WAF + observability into the Go API you're now benchmarking.
+- [Securing Your First VPS (and Installing Dokploy)](/blog/secure-vps-and-install-dokploy) — lock down the load-generator VPS before you run k6 from it.
+- [The Complete Linux Server Security Guide — SSH Keys, Fail2Ban & Beyond](/blog/ssh-key-security-guide) — host-level hardening that pairs naturally with the perf work.
+- [Top Go Developers in Uganda — 2026 Rankings](/blog/top-go-developers-uganda-2026) — context on GRIT and the Go stack this handbook runs on.
+
+---
+
+## Need help benchmarking your API?
+
+I write load tests as part of every Go API I ship — Shoppleet, DGateway, and a dozen client services — and run paid k6 + Grafana engagements for teams that want a real perf baseline.
+
+- 📞 **[Book a session](/book)** — 1-on-1 load-test design, results review, or paired CI integration. Sessions from UGX 50,000.
+- 💼 **Hire Desishub** for full perf engineering + observability work — [desishub.com](https://desishub.com)
+- 📺 **YouTube** — practical Go + k6 + Grafana tutorials at [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- 💻 **Source / reference**: [github.com/grafana/k6](https://github.com/grafana/k6)
+- 💬 **WhatsApp JB**: [+256 762 063 160](https://wa.me/256762063160)
+
+---
+
+## Resources
+
+- **k6 docs**: [k6.io/docs](https://k6.io/docs)
+- **k6 GitHub**: [github.com/grafana/k6](https://github.com/grafana/k6)
+- **Grafana k6 dashboards**: [grafana.com/grafana/dashboards/?search=k6](https://grafana.com/grafana/dashboards/?search=k6)
+- **GRIT framework**: [gritframework.dev](https://gritframework.dev)
+- **Gin**: [gin-gonic.com](https://gin-gonic.com)
+- **GORM**: [gorm.io](https://gorm.io)
