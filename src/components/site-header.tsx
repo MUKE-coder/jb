@@ -39,7 +39,7 @@ export function SiteHeader() {
         data-header-container
       >
         <BrandContextMenu>
-          <Link href="/" aria-label="Home" className="[&_svg]:h-8">
+          <Link href="/" aria-label="Home" className="h-full">
             <SiteHeaderMark />
           </Link>
         </BrandContextMenu>
