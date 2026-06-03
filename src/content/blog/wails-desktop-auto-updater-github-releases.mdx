@@ -1,0 +1,1383 @@
+---
+title: "Shipping a Self-Updating Wails Desktop App with GitHub Releases — the Shoppleet Pattern"
+description: "A copy-pasteable walkthrough of the in-app auto-updater shipped in Shoppleet — a Wails 2 + React + Go desktop app that polls GitHub Releases every 6 hours, downloads a new .exe to %TEMP%, renames the live binary to .exe.old, copies the new one in place, and relaunches. No installer wizard, no UAC, no 'please close and rerun setup'. ~200 lines of Go, one release script, an API proxy for private repos and rate-limit safety."
+image: /case-studies/wails-auto-updater.png
+category: tutorial
+createdAt: 2026-06-02
+updatedAt: 2026-06-02
+---
+
+# Shipping a Self-Updating Wails Desktop App with GitHub Releases — the Shoppleet Pattern
+
+**Last updated: June 2026 · By [JB (Muke Johnbaptist)](/) — this is the exact auto-updater shipped in [Shoppleet](https://shoppleet.com) v1.5.85+. Hundreds of branch installs, six months unattended, zero update-related support tickets.**
+
+A complete, copy-pasteable walkthrough of how to build a desktop app that:
+
+- Notices a new release on a 6-hour timer (and on a manual "Check for updates" click),
+- Shows a polished progress modal while downloading the new `.exe`,
+- Swaps its own binary in place and relaunches into the new version — no installer wizard, no UAC prompt, no "please close the app and run setup".
+
+The technique works for any Wails 2 app on Windows. The same shape ports to macOS / Linux with one change (replace the binary-swap with a platform-native trick). The article uses Go + Gin on the backend and React on the frontend because that's what Wails apps usually pair with, but every step is independent — you can keep the bits you want and skip the rest.
+
+This is the exact pattern we ship in production for [Shoppleet](/blog/shoppleet-launch) (a multi-tenant ERP). It has been running across hundreds of branch installs for months without an incident.
+
+---
+
+## What you'll build
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│                         Your Desktop App                          │
+│                                                                   │
+│  React UI ── useLatestVersion() ──► your API /api/desktop/latest  │
+│       │                                          │                │
+│       │                                          │                │
+│       ▼                                          ▼                │
+│  Update modal ◄── Wails binding ◄── Updater.go ◄──┐               │
+│       │                                           │               │
+│       │                                           │               │
+│  download .exe to %TEMP%                          │               │
+│       │                                           │               │
+│       │                                           │               │
+│  rename live .exe → .exe.old                      │               │
+│  copy new .exe in place                           │               │
+│  spawn it + Quit()                                │               │
+│                                                   │               │
+└───────────────────────────────────────────────────┼───────────────┘
+                                                    │
+                                                    │ 302 redirect
+                                                    ▼
+                                  ┌─────────────────────────────────┐
+                                  │ Your API (Go + Gin or anything) │
+                                  │                                 │
+                                  │  ─► hits GitHub Releases API    │
+                                  │  ─► caches the response 10 min  │
+                                  │  ─► resolves presigned asset URL│
+                                  │  ─► redirects client to S3 CDN  │
+                                  └────────────────┬────────────────┘
+                                                   │
+                                                   ▼
+                                  ┌─────────────────────────────────┐
+                                  │   github.com/you/myapp Releases │
+                                  │                                 │
+                                  │   v1.2.3  ─ MyApp-v1.2.3.exe   │
+                                  │           ─ MyApp-Setup-v1.2.3 │
+                                  │           ─ MyApp-Setup.zip    │
+                                  └─────────────────────────────────┘
+```
+
+The shipping flow on your end is just one command:
+
+```bash
+scripts/release-desktop.sh 1.2.3
+```
+
+That command bumps `wails.json`, builds the `.exe` + NSIS installer, tags `v1.2.3`, pushes the tag, and uploads everything to a GitHub Release. The desktop app on every operator's machine notices the new version within minutes via the polling hook and surfaces a banner. They click "Update", a 20 MB download bar runs, they click "Install & restart", the window flickers once and reopens on the new version. That's it.
+
+---
+
+## Why proxy through your own API?
+
+You can short-circuit this whole thing by having the desktop app talk directly to `https://api.github.com/repos/you/myapp/releases/latest`. We did that at first. Here's why it didn't survive:
+
+1. **Private repos.** GitHub's `browser_download_url` returns 404 for assets in private repos unless the client is authenticated. Shipping a GitHub PAT inside a desktop binary is a non-starter. A tiny API proxy that holds the token server-side fixes this in 30 lines.
+
+2. **Rate limits.** Unauthenticated GitHub API is 60 requests per IP per hour. Behind a corporate NAT, every desktop in the building shares one IP. Our 6-hour poll cadence wouldn't survive lunch hour at one of our larger customers. The proxy caches for 10 minutes server-side; you go from 60/hour to 6/hour worst case.
+
+3. **Emergency override.** When GitHub is having a bad day, you want to be able to say "the latest version is X, download it from this URL" via an env var without redeploying the desktop. With the proxy you flip `DESKTOP_LATEST_VERSION=1.2.3` and everyone moves on.
+
+4. **Version-pinned downgrade window.** The proxy is where you'd implement "operators on version X must update to at least Y before they can log in" — you control the `min_supported_version` field. The desktop side already trusts the response shape.
+
+If none of those matter to you, skip the API section and have the desktop hit GitHub directly. The rest of the guide still applies.
+
+---
+
+## Prerequisites
+
+- A Wails 2 app you control (or any Go binary; the same updater code works without Wails — you'd just drop the `runtime.Quit` call and `os.Exit(0)` instead).
+- A GitHub repo to host releases. Can be the same repo as your source.
+- Go 1.21+ on the build machine.
+- A server you can run the API on. We use a $5 VPS behind Traefik. (See the [VPS hardening guide](/blog/secure-vps-and-install-dokploy) if you don't have one yet.)
+- `gh` CLI installed on the build machine (`winget install GitHub.cli` or `brew install gh`).
+- NSIS on the build machine if you want the installer (`winget install NSIS.NSIS`). Optional.
+
+---
+
+## Step 1 — Create the GitHub Personal Access Token
+
+The API proxy needs read access to your releases. You have two flavors of token; pick **fine-grained** if your repo lives under your personal account or under an org that allows them.
+
+### Fine-grained PAT (recommended)
+
+1. Go to **https://github.com/settings/tokens?type=beta** (or Settings → Developer settings → Personal access tokens → Fine-grained tokens).
+2. Click **Generate new token**.
+3. Fill in:
+   - **Token name:** `myapp-updater-prod` (anything memorable).
+   - **Expiration:** 1 year. Calendar it.
+   - **Resource owner:** the account or org that owns the releases repo.
+   - **Repository access:** _Only select repositories_ → pick `you/myapp`.
+   - **Repository permissions** → set **Contents: Read-only**. Nothing else. (If you also plan to _create_ releases from the same token, set Contents: Read and write.)
+4. Click **Generate token**.
+5. Copy the token _now_. GitHub never shows it again. Format: `github_pat_11AAA...` for fine-grained.
+
+### Classic PAT (works everywhere)
+
+If your org doesn't allow fine-grained tokens:
+
+1. Go to **https://github.com/settings/tokens** → **Generate new token (classic)**.
+2. Name it `myapp-updater-prod`.
+3. Expiration: 90 days or 1 year.
+4. Scopes: tick **`repo`** (the whole group). That's a lot of permission for what you need, which is why fine-grained is preferred when available.
+5. Generate, copy. Format: `ghp_xxxxxx...`.
+
+### Where to store it
+
+The token goes into **two places**:
+
+1. **Your build machine**, as an environment variable, so `gh` and your release script can create releases. On Windows:
+
+   ```powershell
+   [Environment]::SetEnvironmentVariable("GITHUB_TOKEN", "ghp_xxx...", "User")
+   ```
+
+   On macOS / Linux:
+
+   ```bash
+   echo 'export GITHUB_TOKEN="ghp_xxx..."' >> ~/.zshrc
+   ```
+
+   Then `gh auth login --with-token <<< $GITHUB_TOKEN`.
+
+2. **Your API server**, as an environment variable, so the proxy can authenticate to GitHub. If you deploy with Docker Compose:
+
+   ```yaml
+   services:
+     api:
+       environment:
+         GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+   ```
+
+   The `:-` default keeps the container booting even when the host doesn't have `GITHUB_TOKEN` set — useful for staging environments where the repo is public anyway.
+
+Never commit the token to your repo. If you do, GitHub will auto-revoke it within minutes, but you should still rotate immediately.
+
+---
+
+## Step 2 — Set up the repo for releases
+
+Two conventions to decide before the first release:
+
+### Tag format
+
+Pick `vMAJOR.MINOR.PATCH` and stick with it. The release script and the API proxy both strip the leading `v` when comparing. Don't mix `v1.2.3` and `1.2.3` — pick one. We use `v` because that's what GitHub's web UI auto-suggests.
+
+### Asset naming
+
+The proxy uses substring matching to pick the right asset from a release. We ship three assets per release:
+
+| Asset                    | Purpose                                                                               | Substring match         |
+| ------------------------ | ------------------------------------------------------------------------------------- | ----------------------- |
+| `MyApp-v1.2.3.exe`       | Raw portable binary. **Auto-updater swaps this** in place at runtime.                 | doesn't contain "setup" |
+| `MyApp-Setup-v1.2.3.exe` | NSIS installer. Used for the first-install flow only (website download button, etc.). | contains "setup"        |
+| `MyApp-Setup-v1.2.3.zip` | Zip of the installer, for chat/email distribution.                                    | –                       |
+
+The "doesn't contain 'setup'" rule is what `pickAsset()` in the proxy uses to find the right artifact. If you don't ship an installer (CLI tools, internal tools where IT pushes the first install via SCCM), just produce one `.exe` and the proxy picks it.
+
+---
+
+## Step 3 — The release script
+
+The whole shipping flow lives in one bash script. Save this as `scripts/release-desktop.sh` and `chmod +x` it. Adapt `MyApp` → your product name.
+
+```bash
+#!/usr/bin/env bash
+# release-desktop.sh — build, tag, and publish a new MyApp desktop
+# version in one shot. Run from the repo root.
+#
+# Usage:
+#   scripts/release-desktop.sh                 # release current wails.json version
+#   scripts/release-desktop.sh 1.2.3           # bump wails.json + release
+#   scripts/release-desktop.sh 1.2.3 --notes "Custom notes"
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+WAILS_JSON="apps/desktop/wails.json"
+BIN_DIR="apps/desktop/build/bin"
+
+VERSION=""
+NOTES=""
+NO_INSTALLER=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --notes) NOTES="$2"; shift 2 ;;
+    --no-installer) NO_INSTALLER=true; shift ;;
+    *)
+      if [[ -z "$VERSION" && "$1" =~ ^[0-9] ]]; then
+        VERSION="$1"
+      else
+        echo "Unknown arg: $1" >&2
+        exit 2
+      fi
+      shift
+      ;;
+  esac
+done
+
+CURRENT=$(grep '"productVersion"' "$WAILS_JSON" | head -1 | sed 's/.*"productVersion": *"\([^"]*\)".*/\1/')
+if [[ -z "$VERSION" ]]; then
+  VERSION="$CURRENT"
+  echo "==> No version arg — releasing current wails.json version $VERSION"
+fi
+
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+  echo "Bad version '$VERSION' — expected X.Y.Z[-suffix]" >&2
+  exit 2
+fi
+
+TAG="v$VERSION"
+EXE="MyApp-v$VERSION.exe"
+INSTALLER="MyApp-Setup-v$VERSION.exe"
+ZIP="MyApp-Setup-v$VERSION.zip"
+
+# ---- guard rails ----
+if gh release view "$TAG" >/dev/null 2>&1; then
+  echo "GitHub release $TAG already exists. Aborting." >&2
+  exit 1
+fi
+if git rev-parse "$TAG" >/dev/null 2>&1; then
+  echo "Git tag $TAG already exists. Aborting." >&2
+  exit 1
+fi
+
+# ---- bump wails.json if needed ----
+if [[ "$VERSION" != "$CURRENT" ]]; then
+  echo "==> Bumping wails.json: $CURRENT -> $VERSION"
+  python -c "
+import json
+p = '$WAILS_JSON'
+with open(p) as f: data = json.load(f)
+data['outputfilename'] = 'MyApp-v$VERSION'
+data['info']['productVersion'] = '$VERSION'
+with open(p, 'w') as f: json.dump(data, f, indent=2)
+"
+  git add "$WAILS_JSON"
+  git commit -m "chore(release): bump desktop to v$VERSION"
+fi
+
+# ---- build ----
+echo "==> Building desktop v$VERSION"
+if $NO_INSTALLER; then
+  (cd apps/desktop && wails build -platform windows/amd64)
+else
+  # -nsis produces both MyApp-vX.Y.Z.exe AND MyApp-Setup-vX.Y.Z.exe
+  (cd apps/desktop && wails build -nsis -platform windows/amd64)
+fi
+
+if [[ ! -f "$BIN_DIR/$EXE" ]]; then
+  echo "Expected $BIN_DIR/$EXE — build did not produce it." >&2
+  exit 1
+fi
+
+# ---- zip the installer ----
+if ! $NO_INSTALLER && [[ -f "$BIN_DIR/$INSTALLER" ]]; then
+  ZIP_SOURCE="$INSTALLER"
+else
+  ZIP_SOURCE="$EXE"
+  ZIP="MyApp-v$VERSION.zip"
+fi
+echo "==> Packaging $ZIP"
+(cd "$BIN_DIR" && powershell.exe -Command "Compress-Archive -Path '$ZIP_SOURCE' -DestinationPath '$ZIP' -Force")
+
+# ---- release notes ----
+if [[ -z "$NOTES" ]]; then
+  NOTES="MyApp desktop v$VERSION"
+fi
+
+# ---- publish ----
+echo "==> Tagging $TAG + pushing"
+git tag -a "$TAG" -m "MyApp desktop $TAG"
+git push origin "$(git rev-parse --abbrev-ref HEAD)"
+git push origin "$TAG"
+
+echo "==> Creating GitHub release"
+# Asset ORDER matters — the first asset is what the Releases page
+# shows most prominently. Installer first so humans grab the right
+# one; raw .exe second (auto-updater picks it programmatically via
+# the "no setup keyword" rule); zip last.
+RELEASE_ASSETS=()
+if ! $NO_INSTALLER && [[ -f "$BIN_DIR/$INSTALLER" ]]; then
+  RELEASE_ASSETS+=("$BIN_DIR/$INSTALLER")
+fi
+RELEASE_ASSETS+=("$BIN_DIR/$EXE" "$BIN_DIR/$ZIP")
+gh release create "$TAG" \
+  "${RELEASE_ASSETS[@]}" \
+  --title "MyApp desktop $TAG" \
+  --notes "$NOTES"
+
+echo "Released $TAG."
+```
+
+The trick that makes shipping painless: **the version lives in `wails.json`**, and the script is the only thing that bumps it. The Go updater reads it via Wails at build time. The React code reads it via Vite (next section). One source of truth, no drift.
+
+Test it once with a dry-run version like `0.0.1`:
+
+```bash
+scripts/release-desktop.sh 0.0.1
+```
+
+Then verify the release exists at `https://github.com/you/myapp/releases/tag/v0.0.1` and delete the tag if you were just testing.
+
+---
+
+## Step 4 — The NSIS installer (optional but recommended)
+
+For the first-install flow, the raw `.exe` works but it lands wherever the user double-clicks it. The NSIS installer drops a proper Start Menu entry, an uninstaller, and lands the binary in `%LOCALAPPDATA%\Programs\MyApp\MyApp.exe`. That same path is what the auto-updater swaps on subsequent updates, so the installer + auto-updater stay in lockstep.
+
+Wails auto-generates `apps/desktop/build/windows/installer/project.nsi` on first build. The default is fine. The one tweak we make is **per-user install** (no UAC prompt) instead of system-wide:
+
+```nsi
+; project.nsi — make it a per-user install
+RequestExecutionLevel user
+InstallDir "$LOCALAPPDATA\Programs\MyApp"
+```
+
+After this, `wails build -nsis` produces both `MyApp-v1.2.3.exe` (the raw, swappable binary) and `MyApp-Setup-v1.2.3.exe` (the wizard). The release script ships both.
+
+---
+
+## Step 5 — The API proxy endpoint
+
+Two endpoints. The first returns release metadata. The second redirects to a downloadable asset URL.
+
+### `GET /api/desktop/latest`
+
+Returns the current latest release as JSON. The desktop polls this every 6 hours.
+
+```go
+// desktop_handler.go
+package handlers
+
+import (
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+    "strings"
+    "sync"
+    "time"
+
+    "github.com/gin-gonic/gin"
+)
+
+type DesktopHandler struct {
+    mu     sync.Mutex
+    cached *cachedRelease
+}
+
+type cachedRelease struct {
+    payload   gin.H
+    expiresAt time.Time
+}
+
+func NewDesktopHandler() *DesktopHandler { return &DesktopHandler{} }
+
+// Fallback values — used only when GitHub is unreachable AND no env
+// override is set. Lets the endpoint never return 500.
+const (
+    defaultOwner        = "you"
+    defaultRepo         = "myapp"
+    defaultAssetGlob    = ".exe"
+    defaultVersion      = "1.0.0"
+    defaultURL          = "https://github.com/you/myapp/releases/latest"
+    defaultReleaseNotes = "See CHANGELOG"
+    cacheTTL            = 10 * time.Minute
+    githubTimeout       = 8 * time.Second
+)
+
+func envOr(key, fallback string) string {
+    if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+        return v
+    }
+    return fallback
+}
+
+type githubRelease struct {
+    TagName     string `json:"tag_name"`
+    Body        string `json:"body"`
+    PublishedAt string `json:"published_at"`
+    Draft       bool   `json:"draft"`
+    Prerelease  bool   `json:"prerelease"`
+    Assets      []struct {
+        ID                 int64  `json:"id"`
+        Name               string `json:"name"`
+        BrowserDownloadURL string `json:"browser_download_url"`
+    } `json:"assets"`
+}
+
+func fetchLatest(owner, repo string) (*githubRelease, error) {
+    url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
+    req, _ := http.NewRequest("GET", url, nil)
+    req.Header.Set("Accept", "application/vnd.github+json")
+    if tok := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); tok != "" {
+        req.Header.Set("Authorization", "Bearer "+tok)
+    }
+    client := &http.Client{Timeout: githubTimeout}
+    resp, err := client.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+    if resp.StatusCode != 200 {
+        body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+        return nil, fmt.Errorf("github %d: %s", resp.StatusCode, string(body))
+    }
+    var rel githubRelease
+    if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+        return nil, err
+    }
+    if rel.Draft || rel.Prerelease {
+        return nil, fmt.Errorf("latest is draft/prerelease")
+    }
+    return &rel, nil
+}
+
+// pickAsset finds the raw .exe (preferred) or installer (fallback).
+// Two-pass: prefer assets that DON'T contain "setup" so the
+// auto-updater's binary-swap path gets the portable .exe, not the
+// NSIS wizard.
+func pickAsset(rel *githubRelease, glob string) (int64, string) {
+    g := strings.ToLower(glob)
+    var fallback struct {
+        ID  int64
+        URL string
+    }
+    for _, a := range rel.Assets {
+        ln := strings.ToLower(a.Name)
+        if !strings.Contains(ln, g) {
+            continue
+        }
+        if fallback.URL == "" {
+            fallback.ID, fallback.URL = a.ID, a.BrowserDownloadURL
+        }
+        if !strings.Contains(ln, "setup") && !strings.Contains(ln, "installer") {
+            return a.ID, a.BrowserDownloadURL
+        }
+    }
+    return fallback.ID, fallback.URL
+}
+
+func (h *DesktopHandler) getCached() gin.H {
+    h.mu.Lock()
+    defer h.mu.Unlock()
+    if h.cached != nil && time.Now().Before(h.cached.expiresAt) {
+        return h.cached.payload
+    }
+    return nil
+}
+
+func (h *DesktopHandler) setCache(payload gin.H) {
+    h.mu.Lock()
+    defer h.mu.Unlock()
+    h.cached = &cachedRelease{payload: payload, expiresAt: time.Now().Add(cacheTTL)}
+}
+
+// GET /api/desktop/latest
+// GET /api/desktop/latest?refresh=1 — bust the cache
+func (h *DesktopHandler) GetLatest(c *gin.Context) {
+    // Env override wins — emergency manual control without a redeploy
+    if v := strings.TrimSpace(os.Getenv("DESKTOP_LATEST_VERSION")); v != "" {
+        c.JSON(200, gin.H{"data": gin.H{
+            "version":       v,
+            "download_url":  envOr("DESKTOP_LATEST_URL", defaultURL),
+            "release_notes": envOr("DESKTOP_LATEST_NOTES", defaultReleaseNotes),
+            "source":        "env",
+        }})
+        return
+    }
+
+    if c.Query("refresh") != "1" {
+        if cached := h.getCached(); cached != nil {
+            c.JSON(200, gin.H{"data": cached})
+            return
+        }
+    }
+
+    owner := envOr("DESKTOP_GITHUB_OWNER", defaultOwner)
+    repo := envOr("DESKTOP_GITHUB_REPO", defaultRepo)
+    glob := envOr("DESKTOP_ASSET_GLOB", defaultAssetGlob)
+
+    rel, err := fetchLatest(owner, repo)
+    if err != nil {
+        // Last-resort fallback — keep the endpoint up
+        c.JSON(200, gin.H{"data": gin.H{
+            "version":       defaultVersion,
+            "download_url":  defaultURL,
+            "release_notes": defaultReleaseNotes,
+            "source":        "fallback",
+        }})
+        return
+    }
+
+    assetID, githubURL := pickAsset(rel, glob)
+    if githubURL == "" {
+        c.JSON(200, gin.H{"data": gin.H{
+            "version":      strings.TrimPrefix(rel.TagName, "v"),
+            "download_url": defaultURL,
+            "source":       "no-asset",
+        }})
+        return
+    }
+
+    // download_url points at OUR proxy, not GitHub directly. This is
+    // how private-repo assets work without the desktop needing auth.
+    base := requestBase(c)
+    payload := gin.H{
+        "version":       strings.TrimPrefix(rel.TagName, "v"),
+        "download_url":  fmt.Sprintf("%s/api/desktop/download?tag=%s", base, rel.TagName),
+        "github_url":    githubURL,
+        "released_at":   rel.PublishedAt,
+        "release_notes": rel.Body,
+        "source":        "github",
+    }
+    _ = assetID
+    h.setCache(payload)
+    c.JSON(200, gin.H{"data": payload})
+}
+
+// requestBase honours X-Forwarded-Proto for Traefik / nginx setups
+// so the download URL we hand back is https:// in prod and http://
+// locally.
+func requestBase(c *gin.Context) string {
+    scheme := "http"
+    if c.Request.TLS != nil {
+        scheme = "https"
+    }
+    if p := c.Request.Header.Get("X-Forwarded-Proto"); p != "" {
+        scheme = p
+    }
+    host := c.Request.Host
+    if h := c.Request.Header.Get("X-Forwarded-Host"); h != "" {
+        host = h
+    }
+    return scheme + "://" + host
+}
+```
+
+### `GET /api/desktop/download?tag=v1.2.3`
+
+Resolves the release tag to a **presigned S3 URL** (GitHub's CDN) and 302-redirects there. The desktop client follows the redirect and downloads bytes directly from S3 — your API only handles the metadata round-trip. This is the same pattern GitHub Releases uses for `gh release download`.
+
+```go
+// resolvePresignedAssetURL hits GitHub's asset endpoint with
+// Accept: application/octet-stream. For both public and private
+// repos this responds with a 302 to a short-lived presigned URL
+// (no further auth required by the client). We read the Location
+// header without following the redirect, then re-emit it to the
+// client.
+func resolvePresignedAssetURL(owner, repo string, assetID int64) (string, error) {
+    url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/assets/%d", owner, repo, assetID)
+    client := &http.Client{
+        Timeout: githubTimeout,
+        CheckRedirect: func(req *http.Request, via []*http.Request) error {
+            return http.ErrUseLastResponse
+        },
+    }
+    req, _ := http.NewRequest("GET", url, nil)
+    req.Header.Set("Accept", "application/octet-stream")
+    if tok := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); tok != "" {
+        req.Header.Set("Authorization", "Bearer "+tok)
+    }
+    resp, err := client.Do(req)
+    if err != nil {
+        return "", err
+    }
+    defer resp.Body.Close()
+    if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusTemporaryRedirect {
+        return "", fmt.Errorf("expected 302, got %d", resp.StatusCode)
+    }
+    loc := resp.Header.Get("Location")
+    if loc == "" {
+        return "", fmt.Errorf("missing Location header")
+    }
+    return loc, nil
+}
+
+// GET /api/desktop/download?tag=v1.2.3
+func (h *DesktopHandler) GetDownload(c *gin.Context) {
+    owner := envOr("DESKTOP_GITHUB_OWNER", defaultOwner)
+    repo := envOr("DESKTOP_GITHUB_REPO", defaultRepo)
+    tag := strings.TrimSpace(c.Query("tag"))
+
+    var rel *githubRelease
+    var err error
+    if tag == "" {
+        rel, err = fetchLatest(owner, repo)
+    } else {
+        rel, err = fetchReleaseByTag(owner, repo, tag)
+    }
+    if err != nil {
+        c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+        return
+    }
+    assetID, _ := pickAsset(rel, envOr("DESKTOP_ASSET_GLOB", defaultAssetGlob))
+    if assetID == 0 {
+        c.JSON(http.StatusNotFound, gin.H{"error": "no matching asset"})
+        return
+    }
+    presigned, err := resolvePresignedAssetURL(owner, repo, assetID)
+    if err != nil {
+        c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+        return
+    }
+    c.Redirect(http.StatusFound, presigned)
+}
+```
+
+### Register the routes
+
+```go
+r := gin.Default()
+desk := handlers.NewDesktopHandler()
+r.GET("/api/desktop/latest", desk.GetLatest)
+r.GET("/api/desktop/download", desk.GetDownload)
+```
+
+### Environment variables
+
+Set these on the API server. All optional — every one has a sensible default in the code.
+
+| Variable                 | Purpose                                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GITHUB_TOKEN`           | The PAT from Step 1. Required for private repos. For public repos, omitting it works but you're capped at 60 GitHub calls/hour. |
+| `DESKTOP_GITHUB_OWNER`   | Your GitHub username or org. Defaults to whatever you hard-code.                                                                |
+| `DESKTOP_GITHUB_REPO`    | Repo name.                                                                                                                      |
+| `DESKTOP_ASSET_GLOB`     | Substring the asset name must contain. Default `.exe`. Set to `.dmg` if you're shipping Mac too.                                |
+| `DESKTOP_LATEST_VERSION` | Emergency override. When set, the endpoint returns this without calling GitHub.                                                 |
+| `DESKTOP_LATEST_URL`     | Companion override for the download URL.                                                                                        |
+| `DESKTOP_LATEST_NOTES`   | Companion override for release notes.                                                                                           |
+
+A nice diagnostics endpoint to add — read-only, never returns the token value, just confirms the token is set and that the GitHub call works:
+
+```go
+func (h *DesktopHandler) GetDiagnostics(c *gin.Context) {
+    tok := os.Getenv("GITHUB_TOKEN")
+    prefix := ""
+    if n := len(tok); n >= 4 {
+        prefix = tok[:4] + "..."
+    }
+    owner := envOr("DESKTOP_GITHUB_OWNER", defaultOwner)
+    repo := envOr("DESKTOP_GITHUB_REPO", defaultRepo)
+    test := gin.H{"owner": owner, "repo": repo}
+    if rel, err := fetchLatest(owner, repo); err != nil {
+        test["ok"] = false
+        test["error"] = err.Error()
+    } else {
+        test["ok"] = true
+        test["latest_tag"] = rel.TagName
+        test["asset_count"] = len(rel.Assets)
+    }
+    c.JSON(200, gin.H{"data": gin.H{
+        "token_set":    tok != "",
+        "token_length": len(tok),
+        "token_prefix": prefix,
+        "github":       test,
+    }})
+}
+```
+
+Hit `GET /api/desktop/diagnostics` and you'll instantly know whether the deploy has the token. Worth its weight in saved Slack threads.
+
+---
+
+## Step 6 — The Go updater
+
+This is the heart of the whole thing: ~200 lines of Go that download a `.exe`, swap it for the running binary, and relaunch. Save as `apps/desktop/updater.go`:
+
+```go
+package main
+
+import (
+    "context"
+    "errors"
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "sync"
+    "sync/atomic"
+    "time"
+
+    "github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+type Updater struct {
+    ctx context.Context
+
+    mu      sync.RWMutex
+    status  string // idle | downloading | downloaded | installing | error
+    target  string // path to the downloaded .exe
+    version string
+    errMsg  string
+
+    bytesDownloaded atomic.Int64
+    bytesTotal      atomic.Int64
+
+    cancel context.CancelFunc
+}
+
+type UpdaterState struct {
+    Status          string `json:"status"`
+    Version         string `json:"version"`
+    BytesDownloaded int64  `json:"bytes_downloaded"`
+    BytesTotal      int64  `json:"bytes_total"`
+    Error           string `json:"error,omitempty"`
+}
+
+func NewUpdater() *Updater { return &Updater{status: "idle"} }
+func (u *Updater) SetContext(ctx context.Context) { u.ctx = ctx }
+
+// CleanupOldOnStartup removes the .exe.old left behind by the
+// previous in-app update. Called from main.go in a goroutine so app
+// startup isn't blocked. Best-effort: retries briefly in case the
+// old process is still releasing the handle.
+func (u *Updater) CleanupOldOnStartup() {
+    exe, err := os.Executable()
+    if err != nil {
+        return
+    }
+    old := exe + ".old"
+    if _, err := os.Stat(old); errors.Is(err, os.ErrNotExist) {
+        return
+    }
+    for i := 0; i < 25; i++ {
+        if err := os.Remove(old); err == nil || errors.Is(err, os.ErrNotExist) {
+            return
+        }
+        time.Sleep(200 * time.Millisecond)
+    }
+}
+
+func (u *Updater) GetProgress() UpdaterState {
+    u.mu.RLock()
+    defer u.mu.RUnlock()
+    return UpdaterState{
+        Status:          u.status,
+        Version:         u.version,
+        BytesDownloaded: u.bytesDownloaded.Load(),
+        BytesTotal:      u.bytesTotal.Load(),
+        Error:           u.errMsg,
+    }
+}
+
+func (u *Updater) StartDownload(url, version string) error {
+    if url == "" || version == "" {
+        return errors.New("url and version required")
+    }
+    u.mu.Lock()
+    if u.status == "downloading" {
+        u.mu.Unlock()
+        return errors.New("download already in progress")
+    }
+    ctx, cancel := context.WithCancel(context.Background())
+    u.cancel = cancel
+    u.status = "downloading"
+    u.version = version
+    u.errMsg = ""
+    u.target = ""
+    u.bytesDownloaded.Store(0)
+    u.bytesTotal.Store(0)
+    u.mu.Unlock()
+    go u.downloadWorker(ctx, url, version)
+    return nil
+}
+
+func (u *Updater) downloadWorker(ctx context.Context, url, version string) {
+    fail := func(err error) {
+        u.mu.Lock()
+        u.status = "error"
+        u.errMsg = err.Error()
+        u.mu.Unlock()
+    }
+
+    partial := filepath.Join(os.TempDir(), fmt.Sprintf("MyApp-v%s.exe.partial", version))
+    final := filepath.Join(os.TempDir(), fmt.Sprintf("MyApp-v%s.exe", version))
+    _ = os.Remove(partial)
+    _ = os.Remove(final)
+
+    req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+    // No client-level timeout. The download can be 20+ MB on a flaky
+    // link. Context-driven cancellation handles user-cancel.
+    resp, err := (&http.Client{Timeout: 0}).Do(req)
+    if err != nil {
+        fail(err)
+        return
+    }
+    defer resp.Body.Close()
+    if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+        fail(fmt.Errorf("download HTTP %d", resp.StatusCode))
+        return
+    }
+
+    u.bytesTotal.Store(resp.ContentLength)
+
+    out, err := os.Create(partial)
+    if err != nil {
+        fail(err)
+        return
+    }
+    prog := &progressWriter{u: u}
+    if _, err := io.Copy(out, io.TeeReader(resp.Body, prog)); err != nil {
+        out.Close()
+        _ = os.Remove(partial)
+        if ctx.Err() != nil {
+            u.mu.Lock()
+            u.status = "idle"
+            u.mu.Unlock()
+            return
+        }
+        fail(err)
+        return
+    }
+    out.Close()
+
+    if err := os.Rename(partial, final); err != nil {
+        fail(err)
+        return
+    }
+    u.mu.Lock()
+    u.status = "downloaded"
+    u.target = final
+    u.mu.Unlock()
+}
+
+type progressWriter struct{ u *Updater }
+
+func (p *progressWriter) Write(b []byte) (int, error) {
+    p.u.bytesDownloaded.Add(int64(len(b)))
+    return len(b), nil
+}
+
+func (u *Updater) CancelDownload() {
+    u.mu.Lock()
+    if u.cancel != nil {
+        u.cancel()
+    }
+    u.mu.Unlock()
+}
+
+// InstallAndRestart is THE trick. On Windows, you can't overwrite a
+// running .exe. But you CAN rename it — Windows keeps the kernel
+// object alive while the directory entry moves. So we:
+//
+//   1. Rename live.exe → live.exe.old
+//   2. Copy new.exe (from %TEMP%) → live.exe path
+//   3. Spawn live.exe (the new version) as a detached child
+//   4. Quit our current process
+//
+// On next launch, CleanupOldOnStartup() removes the .old.
+func (u *Updater) InstallAndRestart() error {
+    u.mu.Lock()
+    src := u.target
+    curStatus := u.status
+    u.mu.Unlock()
+
+    if curStatus != "downloaded" || src == "" {
+        return fmt.Errorf("no completed download (status=%s)", curStatus)
+    }
+    u.mu.Lock()
+    u.status = "installing"
+    u.mu.Unlock()
+
+    currentExe, err := os.Executable()
+    if err != nil {
+        return fmt.Errorf("resolving current exe: %w", err)
+    }
+
+    oldPath := currentExe + ".old"
+    _ = os.Remove(oldPath) // clear stale .old from a previous attempt
+
+    if err := os.Rename(currentExe, oldPath); err != nil {
+        return fmt.Errorf("renaming current exe: %w", err)
+    }
+
+    // Copy, not rename — %TEMP% is usually on a different volume than
+    // %LOCALAPPDATA% and os.Rename across volumes fails with EXDEV.
+    if err := copyFile(src, currentExe); err != nil {
+        _ = os.Rename(oldPath, currentExe) // roll back
+        return fmt.Errorf("copying new exe: %w", err)
+    }
+    _ = os.Remove(src)
+
+    cmd := exec.Command(currentExe)
+    if err := cmd.Start(); err != nil {
+        return fmt.Errorf("starting new version: %w", err)
+    }
+
+    // Small delay so the modal's "Installing…" state has time to
+    // paint before the window closes. Feels less abrupt.
+    go func() {
+        time.Sleep(250 * time.Millisecond)
+        if u.ctx != nil {
+            runtime.Quit(u.ctx)
+        } else {
+            os.Exit(0)
+        }
+    }()
+    return nil
+}
+
+func copyFile(src, dst string) error {
+    in, err := os.Open(src)
+    if err != nil {
+        return err
+    }
+    defer in.Close()
+    out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
+    if err != nil {
+        return err
+    }
+    defer out.Close()
+    if _, err := io.Copy(out, in); err != nil {
+        return err
+    }
+    return out.Close()
+}
+```
+
+### Wire it into `main.go`
+
+```go
+func main() {
+    app := NewApp()
+    updater := NewUpdater()
+
+    err := wails.Run(&options.App{
+        Title:  "MyApp",
+        Width:  1280,
+        Height: 800,
+        OnStartup: func(ctx context.Context) {
+            app.startup(ctx)
+            updater.SetContext(ctx)
+            go updater.CleanupOldOnStartup()
+        },
+        Bind: []interface{}{
+            app,
+            updater, // ← exposes Updater methods to React
+        },
+    })
+    if err != nil {
+        println(err.Error())
+    }
+}
+```
+
+Now `wails build` regenerates the TS bindings and `window.go.main.Updater.StartDownload(...)` is callable from React.
+
+### Cross-platform notes
+
+- **macOS:** The same rename trick works (HFS+ / APFS allow it). But the canonical pattern on macOS is to drop a new `.app` bundle in `/Applications` and relaunch. Use `os/exec` to call `ditto` for the copy.
+- **Linux:** Works as written, but on most distros your binary is installed via the package manager and you don't want to step on it. Sparkle-style update flows aren't really the convention.
+
+This guide is Windows-first because that's where the binary-swap shines.
+
+---
+
+## Step 7 — The React layer
+
+Three pieces: a build-time version constant, a polling hook, and an update modal.
+
+### Inject the version at build time
+
+`apps/desktop/frontend/vite.config.ts`:
+
+```ts
+import { defineConfig } from "vite";
+import fs from "node:fs";
+import path from "node:path";
+
+const wailsJson = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "../wails.json"), "utf-8")
+);
+
+export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(wailsJson.info.productVersion),
+  },
+  // ...rest of your config
+});
+```
+
+And `src/lib/version.ts`:
+
+```ts
+export const APP_VERSION: string =
+  (typeof __APP_VERSION__ !== "undefined" && __APP_VERSION__) || "1.0.0";
+
+declare const __APP_VERSION__: string;
+
+// Semver-light comparison. Strips suffixes after "-".
+export function isNewerVersion(current: string, latest: string): boolean {
+  const parse = (v: string) =>
+    v
+      .split("-")[0]
+      .split(".")
+      .map((n) => parseInt(n, 10))
+      .map((n) => (Number.isFinite(n) ? n : 0));
+  const a = parse(current);
+  const b = parse(latest);
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const ai = a[i] ?? 0;
+    const bi = b[i] ?? 0;
+    if (bi > ai) return true;
+    if (bi < ai) return false;
+  }
+  return false;
+}
+```
+
+### The polling hook
+
+```ts
+// src/hooks/use-latest-version.ts
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
+import { APP_VERSION, isNewerVersion } from "@/lib/version";
+
+export interface LatestVersionPayload {
+  version: string;
+  download_url: string;
+  released_at: string;
+  release_notes: string;
+}
+
+const POLL_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+export function useLatestVersion() {
+  const qc = useQueryClient();
+  const q = useQuery<LatestVersionPayload, Error>({
+    queryKey: ["desktop-latest-version"],
+    queryFn: async () => {
+      const { data } = await axios.get(
+        "https://api.myapp.com/api/desktop/latest"
+      );
+      return data.data as LatestVersionPayload;
+    },
+    refetchInterval: POLL_INTERVAL_MS,
+    staleTime: POLL_INTERVAL_MS / 2,
+    retry: 1, // old API that doesn't have this endpoint: fail once and back off
+  });
+
+  // Bypass the API's 10-min cache for the "Check for updates" click —
+  // otherwise the operator clicking the button immediately after a
+  // release ships sees stale data.
+  async function checkNow() {
+    const { data } = await axios.get(
+      "https://api.myapp.com/api/desktop/latest?refresh=1"
+    );
+    const payload = data.data as LatestVersionPayload;
+    qc.setQueryData(["desktop-latest-version"], payload);
+    return payload;
+  }
+
+  const latestVersion = q.data?.version ?? null;
+  const isUpdateAvailable =
+    !!latestVersion && isNewerVersion(APP_VERSION, latestVersion);
+
+  return {
+    ...q,
+    checkNow,
+    isUpdateAvailable,
+    currentVersion: APP_VERSION,
+    latestVersion,
+  };
+}
+```
+
+### The update modal
+
+```tsx
+// src/components/update-progress-modal.tsx
+import { useEffect, useRef, useState } from "react";
+
+// Wails injects window.go.main.Updater at runtime. We resolve through
+// window so dev-server runs (no Wails) don't crash on the global.
+interface UpdaterBinding {
+  StartDownload: (url: string, version: string) => Promise<void>;
+  GetProgress: () => Promise<UpdaterState>;
+  CancelDownload: () => Promise<void>;
+  InstallAndRestart: () => Promise<void>;
+}
+
+function getUpdater(): UpdaterBinding | null {
+  const w = window as { go?: { main?: { Updater?: UpdaterBinding } } };
+  return w.go?.main?.Updater ?? null;
+}
+
+export interface UpdaterState {
+  status: "idle" | "downloading" | "downloaded" | "installing" | "error";
+  version: string;
+  bytes_downloaded: number;
+  bytes_total: number;
+  error?: string;
+}
+
+export function UpdateProgressModal({
+  downloadURL,
+  version,
+  onClose,
+}: {
+  downloadURL: string;
+  version: string;
+  onClose: () => void;
+}) {
+  const [state, setState] = useState<UpdaterState>({
+    status: "idle",
+    version,
+    bytes_downloaded: 0,
+    bytes_total: 0,
+  });
+  const startedRef = useRef(false);
+  const updater = getUpdater();
+
+  // Kick off the download once on mount.
+  useEffect(() => {
+    if (startedRef.current || !updater) return;
+    startedRef.current = true;
+    updater
+      .StartDownload(downloadURL, version)
+      .catch((e: Error) =>
+        setState((s) => ({ ...s, status: "error", error: e.message }))
+      );
+  }, [downloadURL, version, updater]);
+
+  // Poll for progress 2x/sec until we hit a terminal state.
+  useEffect(() => {
+    if (!updater) return;
+    if (["downloaded", "error", "installing"].includes(state.status)) return;
+    const id = setInterval(async () => {
+      try {
+        const s = await updater.GetProgress();
+        setState(s);
+      } catch {
+        // polling glitches are non-fatal
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, [state.status, updater]);
+
+  const pct =
+    state.bytes_total > 0
+      ? Math.round((state.bytes_downloaded / state.bytes_total) * 100)
+      : 0;
+  const mb = (state.bytes_downloaded / 1024 / 1024).toFixed(1);
+  const mbTotal =
+    state.bytes_total > 0 ? (state.bytes_total / 1024 / 1024).toFixed(1) : "?";
+
+  return (
+    <div className="modal">
+      <h2>
+        {state.status === "downloading" && `Downloading v${version}`}
+        {state.status === "downloaded" && `Ready to install v${version}`}
+        {state.status === "installing" && "Installing…"}
+        {state.status === "error" && "Update failed"}
+      </h2>
+
+      {(state.status === "downloading" || state.status === "downloaded") && (
+        <>
+          <progress value={pct} max={100} />
+          <div>
+            {mb} / {mbTotal} MB ({pct}%)
+          </div>
+        </>
+      )}
+
+      {state.status === "error" && <div className="error">{state.error}</div>}
+
+      <div className="actions">
+        {state.status === "downloading" && (
+          <button
+            onClick={() => {
+              updater?.CancelDownload();
+              onClose();
+            }}
+          >
+            Cancel
+          </button>
+        )}
+        {state.status === "downloaded" && (
+          <button onClick={() => updater?.InstallAndRestart()}>
+            Install &amp; restart
+          </button>
+        )}
+        {state.status === "error" && <button onClick={onClose}>Close</button>}
+      </div>
+    </div>
+  );
+}
+```
+
+### A banner that opens the modal
+
+```tsx
+// somewhere in your app shell
+import { useState } from "react";
+import { useLatestVersion } from "@/hooks/use-latest-version";
+import { UpdateProgressModal } from "@/components/update-progress-modal";
+
+function UpdateBanner() {
+  const { isUpdateAvailable, latestVersion, data } = useLatestVersion();
+  const [open, setOpen] = useState(false);
+
+  if (!isUpdateAvailable) return null;
+
+  return (
+    <>
+      <div className="banner">
+        A new version (v{latestVersion}) is available.
+        <button onClick={() => setOpen(true)}>Update now</button>
+      </div>
+      {open && data && (
+        <UpdateProgressModal
+          downloadURL={data.download_url}
+          version={data.version}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+```
+
+### Settings page — let the operator opt out
+
+Some users get jumpy about auto-updates. A simple localStorage-backed toggle:
+
+```ts
+const KEY = "myapp.auto_update_enabled";
+
+export function getAutoUpdateEnabled(): boolean {
+  const v = localStorage.getItem(KEY);
+  return v === null || v === "true"; // default ON
+}
+
+export function setAutoUpdateEnabled(enabled: boolean) {
+  localStorage.setItem(KEY, enabled ? "true" : "false");
+}
+```
+
+Gate the banner render on `getAutoUpdateEnabled()` and you're done. We also added a "dismissed version" key so dismissing v1.5.92 doesn't re-nag until v1.5.93 ships — a 3-line addition.
+
+---
+
+## Step 8 — First release end-to-end
+
+You now have everything. The shipping ritual:
+
+```bash
+# 1. Make your changes, run tests
+git commit -am "feat: my new feature"
+
+# 2. Ship it
+scripts/release-desktop.sh 1.2.3
+
+# 3. Wait ~90 seconds for the build
+# 4. The release is live at https://github.com/you/myapp/releases/tag/v1.2.3
+```
+
+Every desktop that polls within the next 6 hours sees the new version. Every desktop where someone clicks "Check for updates" sees it instantly.
+
+---
+
+## Troubleshooting
+
+**The modal opens but `StartDownload` throws "download url is empty".**
+The API returned an empty `download_url`. Either GitHub couldn't find an asset matching `DESKTOP_ASSET_GLOB`, or the release is marked as a draft/prerelease. `GET /api/desktop/diagnostics` tells you which.
+
+**Operators see v1.5.90 when v1.5.91 is already on GitHub.**
+The 10-minute API cache. Either wait, or click "Check for updates" — that endpoint hits `?refresh=1` and bypasses the cache.
+
+**`InstallAndRestart` returns `renaming current exe: Access is denied`.**
+Two causes. (1) Another process is holding the .exe open (e.g. an antivirus scanner mid-scan). Retry once. (2) The .exe lives in a directory the user doesn't have write access to — happens when someone "Run as administrator" installed it. The fix is to use per-user install (`%LOCALAPPDATA%\Programs\MyApp`), not `%PROGRAMFILES%`. We tweaked `project.nsi` for exactly this reason.
+
+**"GitHub 401: Bad credentials" in the API logs.**
+The PAT is wrong or expired. Hit `/api/desktop/diagnostics` — it'll show the token length and the first 4 characters so you can confirm without leaking the secret. Common cause: pasting the token with a trailing newline. The handler trims whitespace defensively, but check anyway.
+
+**The desktop downloads but the .exe.old never gets cleaned up.**
+`CleanupOldOnStartup` retries 25 times at 200 ms intervals. If something's still holding the handle after 5 seconds, you have an antivirus stuck on the file. We've seen Defender do this on first install of an unsigned binary. Sign your `.exe` and the problem goes away — or just accept the leftover `.old` and clean it on the next run.
+
+**Frontend bindings file isn't generated.**
+Wails generates `wailsjs/go/main/Updater.d.ts` on `wails build`. If you're running `pnpm dev` against a fresh checkout without ever having built, the file doesn't exist yet and TypeScript can't resolve it. Run `wails build` once to seed the bindings, then `pnpm dev` works.
+
+**`gh release create` says `release not found` after running.**
+The script attempts to push the tag and then create the release. If the push succeeded but the release create failed, you'll have an orphan tag. Delete it with `git push origin :v1.2.3` and rerun the script.
+
+---
+
+## Going further
+
+Things we shipped in production that build on this foundation but aren't strictly needed for the core flow:
+
+- **Bullet release notes.** The release notes come straight from the GitHub release body. Format them as bullets server-side or in the React component so they look polished in the modal.
+- **Sidebar pulse.** A subtle animated dot on the sidebar when an update is available — `animate-ping` in Tailwind, gone the instant the operator opens the modal.
+- **"Minimum supported version" gate.** Return `min_supported_version` from `/api/desktop/latest`. If `APP_VERSION` is below it, refuse to start the app and force the update. We use this to retire legacy clients that depend on now-broken API contracts.
+- **Activity event.** Emit an `updater.updated` activity row when `CleanupOldOnStartup` removes a `.exe.old` — you'll instantly know your rollout coverage from your existing logs.
+- **Code signing.** A signed `.exe` skips Windows SmartScreen warnings. A code signing certificate is ~$200/year. If you ship to enterprise customers, it pays for itself the first time you avoid a support ticket.
+
+---
+
+## What's here vs. what we glossed over
+
+This guide covers the 80% of the work. The remaining 20% is mostly polish: progress animations, sound effects, internationalized strings, etc. — all standard React work, none of it specific to auto-updating.
+
+The auto-updater pattern is older than most of us. Sparkle has done it on macOS for 15 years; Squirrel does it for Electron; Tauri has a baked-in updater. The reason it's worth building yourself for Wails is that the moving parts are so few — a bash script, an HTTP handler, 200 lines of Go, a polling hook, a modal. You can read every line in an afternoon, and you own the whole pipeline. No surprise breakages, no upstream library churn, no shipping a 12 MB updater framework with a 2 MB app.
+
+The whole pattern fits on a sticky note:
+
+> Poll `/latest` → if newer, download `.exe` to `%TEMP%` → rename live exe to `.old` → copy new exe in → spawn it → quit.
+
+The rest is decoration.
+
+---
+
+_This article is based on the Shoppleet desktop auto-updater shipped in v1.5.85 and improved through v1.5.93. The pattern has run unattended across hundreds of installs for six months without an update-related support ticket._
+
+---
+
+## Related reading
+
+- [Introducing Shoppleet — the offline-first desktop business platform](/blog/shoppleet-launch) — the product this exact auto-updater ships in.
+- [Desktop app development in Uganda — Rental Manager case study](/blog/desktop-app-development-uganda-rental-manager) — another Wails 2 desktop build, same stack.
+- [Desktop frameworks 2026 — Electron vs Tauri vs Wails vs Grit](/blog/desktop-frameworks-2026) — why I picked Wails for both apps in the first place.
+- [Securing your first VPS (and installing Dokploy)](/blog/secure-vps-and-install-dokploy) — lock down the $5 VPS the API proxy runs on.
+- [Sentinel v2 + Pulse v1 migration guide](/blog/sentinel-pulse-migration-guide) — the WAF + observability layer that wraps the same Go/Gin API stack.
+
+---
+
+## Need help shipping a Wails app of your own?
+
+I built the Shoppleet desktop client + its auto-updater solo on top of [Grit](https://gritframework.dev), and I run paid engagements for teams that want to ship native desktop without the Electron tax.
+
+- 📞 **[Book a session](/book)** — 1-on-1 Wails design / code review / paired auto-updater wiring. Sessions from UGX 50,000.
+- 💼 **Hire Desishub** for full Wails desktop + Go API builds — [desishub.com](https://desishub.com)
+- 📺 **YouTube** — practical Wails + Go tutorials at [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- 💻 **The product this is from**: [Shoppleet](https://shoppleet.com) · [app.shoppleet.com](https://app.shoppleet.com)
+- 💬 **WhatsApp JB**: [+256 762 063 160](https://wa.me/256762063160)
+
+---
+
+## Resources
+
+- **Wails 2**: [wails.io](https://wails.io)
+- **GitHub Releases API**: [docs.github.com/en/rest/releases/releases](https://docs.github.com/en/rest/releases/releases)
+- **NSIS**: [nsis.sourceforge.io](https://nsis.sourceforge.io)
+- **`gh` CLI**: [cli.github.com](https://cli.github.com)
+- **Grit framework**: [gritframework.dev](https://gritframework.dev)
+- **Shoppleet**: [shoppleet.com](https://shoppleet.com)
