@@ -570,18 +570,109 @@ Decoding the new parts:
 
 ## 13. The six load-test shapes
 
-Different questions need different traffic shapes. You don't need to memorize these — just know they exist so you reach for the right one.
+"Performance testing" isn't one test — it's a family. The only thing that changes between them is the **shape of the load over time**: how the VU count ramps up, holds, and ramps down. Master these six shapes and you can answer almost any performance question a stakeholder will throw at you.
 
-| Test             | What it does                                       | Question it answers                            |
-| ---------------- | -------------------------------------------------- | ---------------------------------------------- |
-| **Smoke**        | 1 VU, short duration                               | Does the script even work? Is the endpoint up? |
-| **Average load** | Ramp to typical load, hold, ramp down              | How does it behave under normal traffic?       |
-| **Stress**       | Ramp _beyond_ normal until it strains              | Where's the breaking point?                    |
-| **Spike**        | Sudden jump to very high VUs (e.g. 5s ramp to 500) | Can it survive a flash crowd?                  |
-| **Soak**         | Moderate load held for a long time (hours)         | Does it leak memory or degrade over time?      |
-| **Breakpoint**   | Slowly increase load until it fails                | What's the exact capacity ceiling?             |
+### The three ingredients of every meaningful perf test
 
-Always run **smoke first**. It's cheap insurance against wasting a 5-minute run on a typo.
+Before you reach for a test type, get these three things explicit. If any of them are vague, your test will produce noise instead of answers.
+
+1. **A load profile** — how many VUs, arriving how (instant / ramped), held for how long.
+2. **A user journey** — what each VU actually _does_ (log in → browse → check out — not just hammering `/health`).
+3. **Pass/fail thresholds** — the concrete numbers that decide if the run succeeded.
+
+Get those three nailed down and a test becomes a repeatable CI gate. Leave them fuzzy and you just collect graphs nobody trusts.
+
+### The metrics that matter (and the ones that lie)
+
+- **Response time in percentiles** — `p95` / `p99`, never averages. The tail is what users feel (see §3 for why).
+- **Throughput** — requests per second the system actually sustained.
+- **Error rate** — fraction of requests that failed. Often climbs before latency does — usually the _first_ sign of overload.
+- **VUs (Virtual Users)** — the dial you turn to set load.
+- **Saturation signals** — CPU, memory, DB connections on the server side _while the test runs_. So you learn _why_ it broke, not just _that_ it did.
+
+### SLOs are the target you test against
+
+A Service Level Objective (SLO) is a concrete "good enough" number you've decided on:
+
+> "`p95` latency under 500 ms and error rate under 1% at 1,000 concurrent users."
+
+Encode that as a k6 `thresholds` block and the test becomes objective — it passes or fails against the number, not against a feeling. SLO-aligned thresholds are what let perf tests live in CI as automatic regression gates, exactly the same way unit tests live there.
+
+### The six shapes at a glance
+
+| Test             | Question it answers                            | Shape                                 |
+| ---------------- | ---------------------------------------------- | ------------------------------------- |
+| **Smoke**        | Does the script even work? Is the endpoint up? | tiny (1-5 VUs), short                 |
+| **Average load** | How does it behave under normal traffic?       | ramp to typical, hold, ramp down      |
+| **Stress**       | What happens _beyond_ normal — at the limits?  | ramp well above normal, hold          |
+| **Spike**        | Can it survive a sudden surge?                 | instant jump to huge load, hold, drop |
+| **Soak**         | Does it leak or degrade over hours?            | moderate load held for hours          |
+| **Breakpoint**   | Exactly where is the capacity ceiling?         | slowly ramp until something breaks    |
+
+Always run **smoke first**. It's cheap insurance against wasting a 5-minute run on a typo. Then layer the others — no single type catches every failure mode.
+
+### Same script, four shapes — the advanced profiles in code
+
+The test _type_ is just the `stages` shape. You reshape one script into all four advanced profiles by swapping the `options.stages` block. Drop these in over the `options` from §12:
+
+#### Stress — push 4× beyond normal to find the failure mode
+
+```js
+stages: [
+  { duration: "2m", target: 100 }, // normal
+  { duration: "5m", target: 400 }, // 4× normal — the stress
+  { duration: "2m", target: 0 },
+],
+```
+
+**What you're learning**: at 4× load, does latency degrade _gracefully_, or does the error rate spike and the whole thing fall over? You're characterising the failure _mode_, not just finding the limit. A system that holds 400 VUs with p99 of 800ms is in much better shape than one that holds 350 VUs cleanly and then collapses to 30% errors at 360.
+
+#### Spike — instant surge, then recovery
+
+```js
+stages: [
+  { duration: "1m", target: 50 },    // baseline
+  { duration: "10s", target: 1000 }, // SLAM to 1000 almost instantly
+  { duration: "1m", target: 1000 },  // hold the spike
+  { duration: "10s", target: 50 },   // drop back — does it recover?
+],
+```
+
+**What you're learning**: the critical question is _recovery_. After the surge passes, does the system snap back to baseline latency, or stay degraded? This tests auto-scaling response time, queue draining, connection-pool warm-up, and the cold-cache penalty after garbage collection. Use this before any expected flash-sale or viral event.
+
+#### Soak — hold moderate load for hours to expose leaks
+
+```js
+stages: [
+  { duration: "5m", target: 100 },
+  { duration: "4h", target: 100 }, // four hours — watch memory creep
+  { duration: "5m", target: 0 },
+],
+```
+
+**What you're learning**: a flat latency line that _slowly tilts upward_ over hours is the classic signature of a memory leak, an unclosed DB-connection pool, or a goroutine leak. These bugs **never** show up in a 5-minute test — they only emerge under sustained load. Pair this with server-side CPU/memory graphs and you'll spot the inflection point the moment the leak compounds.
+
+#### Breakpoint — slow ramp until thresholds break
+
+```js
+stages: [
+  { duration: "1h", target: 5000 }, // slow climb to find the wall
+],
+```
+
+**What you're learning**: the VU count at which `http_req_failed` first climbs or `http_req_duration` p95 crosses your SLO threshold — **that number is your real capacity**. It's exactly the input you need for capacity planning before a launch ("we can comfortably hold N concurrent users; above that we need more boxes / a queue / a fast-fail").
+
+### Model realistic traffic, not a synthetic storm
+
+The single most common mistake in load testing: every VU hammering one endpoint with no think-time. Real users don't behave that way. They:
+
+- **Pause between actions.** Use `sleep()` to model think-time. "50 VUs with think-time" looks much more like 50 real people than "50 tight request loops".
+- **Follow varied journeys** (browse vs buy vs search). Split your default function across paths, or define multiple scenarios with different journeys mixed in.
+- **Arrive in mixes**, not all-at-once-on-the-same-URL.
+
+For requests-per-second targets (rather than VU targets), use k6's **arrival-rate executors** (`constant-arrival-rate`, `ramping-arrival-rate`) instead of raw VUs. They model load as "N requests fired per second" rather than "N users looping as fast as they can".
+
+Realistic load finds real bottlenecks. Synthetic hammering finds _fake_ bottlenecks and misses the true breaking point.
 
 ---
 
