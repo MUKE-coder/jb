@@ -78,6 +78,103 @@ Throughout: `$` means a normal user shell; `#` or `sudo` means administrator rig
 
 ---
 
+## Installing Kali Linux on Windows with WSL — step by step
+
+WSL (Windows Subsystem for Linux) is the easiest way to run Kali on a Windows machine without setting up a full virtual machine. You get a real Linux command line inside Windows, in its own window — no reboot, no separate VM to manage. Kali publishes an official WSL image, so the terminal and all its CLI tools install cleanly.
+
+**One thing to set expectations:** WSL gives you Kali's command-line tools (Nmap, Hydra, sqlmap, John, etc.) cleanly. The full graphical desktop and some Wi-Fi / hardware tools need extra steps or don't work well — WSL doesn't get direct access to your Wi-Fi card. For everything terminal-based in this handbook, WSL is great. For Aircrack-ng monitor-mode / packet-injection work, use a full VirtualBox or VMware Kali VM with a USB Wi-Fi adapter instead.
+
+### Step 1 — Install WSL itself
+
+Open **PowerShell as Administrator** (right-click the Start button → **Terminal (Admin)** or **Windows PowerShell (Admin)**), then:
+
+```powershell
+wsl --install
+```
+
+This enables the WSL feature and installs the default pieces. Reboot when prompted.
+
+After rebooting, confirm it's working:
+
+```powershell
+wsl --version
+```
+
+### Step 2 — Install the Kali image
+
+Once WSL is ready, install Kali:
+
+```powershell
+wsl --install -d kali-linux
+```
+
+(`-d` means "distribution" — you're picking Kali specifically.)
+
+If you ever want to see the list of available distros first:
+
+```powershell
+wsl --list --online
+```
+
+### Step 3 — First launch and set up your user
+
+After it installs, launch Kali — either type `kali-linux` in your terminal, or find **Kali Linux** in the Start menu.
+
+The first launch sets things up and asks you to create a **username and password**. This password is what `sudo` will ask for later, so pick something you'll remember.
+
+### Step 4 — Update everything
+
+The freshly installed WSL Kali is a minimal base. First thing, always update:
+
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+### Step 5 — Install the tools you'll use in this handbook
+
+The WSL Kali base is intentionally lightweight — you add what you need. Grab the common starter set used across the chapters below:
+
+```bash
+sudo apt install -y nmap hydra sqlmap john hashcat gobuster seclists ipcalc
+```
+
+Or, if you want the big bundle of Kali's default tools in one command (large download):
+
+```bash
+sudo apt install -y kali-linux-default
+```
+
+Then verify something works:
+
+```bash
+nmap --version
+ipcalc 192.168.122.71/24
+```
+
+### A few things worth knowing
+
+- **Accessing your Windows files from inside Kali.** Your C: drive lives at `/mnt/c/`, so your user folder is `/mnt/c/Users/YourName/`. Handy for moving files back and forth.
+- **Networking caveat.** WSL shares your Windows network connection but sits behind a small virtual NAT layer. Scanning your own machine and your local network with Nmap generally works, but low-level Wi-Fi tooling (monitor mode for Aircrack-ng, raw packet injection) won't, because WSL can't directly control the physical Wi-Fi adapter. For that path, use a full VirtualBox / VMware Kali VM with a USB Wi-Fi adapter.
+- **Shut Kali down cleanly** from PowerShell:
+
+  ```powershell
+  wsl --shutdown
+  ```
+
+### Quick recap
+
+```text
+PowerShell (Admin):  wsl --install              → reboot
+PowerShell (Admin):  wsl --install -d kali-linux
+Launch Kali, create user + password
+In Kali:             sudo apt update && sudo apt upgrade -y
+In Kali:             sudo apt install -y nmap hydra sqlmap john ipcalc ...
+```
+
+And remember the golden rule from the disclaimer above: only point these tools at your own machines and networks, or deliberately vulnerable practice targets — never anything you don't own or have written permission to test.
+
+---
+
 ## Chapter 1 — Reconnaissance & Network Scanning
 
 Before an attacker touches your login form, they build a map. Recon splits into **passive** (public info — WHOIS, DNS, search engines) and **active** (directly probing the target, which can be detected).
