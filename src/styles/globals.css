@@ -349,3 +349,17 @@
     @apply bg-code-highlight;
   }
 }
+
+/*
+ * beautiful-banner-ads image cap.
+ *
+ * The package's `:where(.bba-banner-branded__image)` rule has zero
+ * specificity and lets the transparent 1024x1024 clay-render PNGs we ship
+ * try to render at intrinsic size — which on a 520px branded banner fills
+ * the entire card. Cap the displayed image to ~110px so it sits cleanly in
+ * the image-right column. Un-layered so it beats the package's `:where()`.
+ */
+.bba-banner-branded__image {
+  max-width: 110px;
+  max-height: 110px;
+}

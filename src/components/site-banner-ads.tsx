@@ -11,24 +11,15 @@ import { useMemo } from "react";
 /**
  * Site-wide self-promotion banner rotator.
  *
- * - 5 ads (DGateway · WesendAll · Grit · Nexora · Vibekit) rotate every
- *   30 seconds, paused on hover. AdSlot's default renderer (BannerAd
- *   with branded layout) uses each config's `image` directly.
- * - The slot alternates corner every full pass through the ads:
- *   round 1 → bottom-right, round 2 → bottom-left, repeat. Handled
- *   natively by the package's `corner={[...]}` array support (no
- *   external useEffect / setInterval needed).
- * - Each image uses `fit: "contain"` so the transparent 1024×1024
- *   source scales cleanly inside whatever column the BrandedBanner
- *   gives it without overflowing.
- * - Dismissed banners are remembered per-product for 7 days via the
- *   package's built-in createExpiringStorage. AdSlot cascades both the
- *   storage adapter and the dismissible default to every banner.
+ * v0.4.0 cascades slot defaults (width, layout, dismissible, storage) into
+ * the config passed to the render function, so `<BrandedBanner config={c} />`
+ * inherits everything without re-statement. Image display size is capped
+ * globally in globals.css since the package exposes no per-image size knob.
  */
 
 const ROTATION_INTERVAL_MS = 30_000;
 const DISMISS_WINDOW_DAYS = 7;
-const BANNER_WIDTH = "520px"; // wider so the image-right column has room
+const BANNER_WIDTH = "520px";
 
 const ADS: readonly BannerConfig[] = [
   {
@@ -119,13 +110,6 @@ export function SiteBannerAds() {
     []
   );
 
-  // AdSlot's default renderer is BannerAd (text-only). To render the
-  // product image we explicitly render BrandedBanner via children-as-
-  // function. With v0.3.1's #3 fix, `<BrandedBanner config={config} />`
-  // properly pulls `image` from BannerConfig — no spread needed.
-  // We re-state width / layout / dismissible / storage on the inner
-  // banner because AdSlot's cascade auto-applies only to the default
-  // renderer, not to children-as-function consumers.
   return (
     <AdSlot
       ads={ADS}
@@ -135,16 +119,10 @@ export function SiteBannerAds() {
       offset={24}
       width={BANNER_WIDTH}
       storage={storage}
+      dismissible
+      layout="image-right"
     >
-      {(config) => (
-        <BrandedBanner
-          config={config}
-          layout="image-right"
-          width={BANNER_WIDTH}
-          dismissible
-          storage={storage}
-        />
-      )}
+      {(config) => <BrandedBanner config={config} />}
     </AdSlot>
   );
 }
