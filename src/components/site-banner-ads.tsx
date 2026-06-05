@@ -2,35 +2,35 @@
 
 import {
   AdSlot,
-  BrandedBanner,
+  type BannerConfig,
   createExpiringStorage,
 } from "beautiful-banner-ads";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 /**
  * Site-wide self-promotion banner rotator.
  *
  * - 5 ads (DGateway · WesendAll · Grit · Nexora · Vibekit) rotate every
- *   30 seconds, paused on hover.
- * - Each ad uses BrandedBanner with its own transparent 3D product
- *   image (public/trans-ads/*.png).
- * - The slot alternates corner every full cycle through all 5 ads:
- *   round 1 → bottom-right, round 2 → bottom-left, repeat.
+ *   30 seconds, paused on hover. AdSlot's default renderer (BannerAd
+ *   with branded layout) uses each config's `image` directly.
+ * - The slot alternates corner every full pass through the ads:
+ *   round 1 → bottom-right, round 2 → bottom-left, repeat. Handled
+ *   natively by the package's `corner={[...]}` array support (no
+ *   external useEffect / setInterval needed).
+ * - Each image is constrained to a fixed render box (180×180) with
+ *   `fit: "contain"` so the transparent 1024×1024 source doesn't blow
+ *   up to fill the whole banner.
  * - Dismissed banners are remembered per-product for 7 days via the
- *   package's built-in createExpiringStorage adapter.
- *
- * Note on the image map: the package's BannerConfig type intentionally
- * does NOT include `image` (it's BrandedBanner-specific, not a shared
- * core field). So we keep the rotating ad content in `ADS` (BannerConfig
- * shape) and pair each ad with its image via `AD_IMAGES`, looking it up
- * by id in the children-as-function renderer.
+ *   package's built-in createExpiringStorage. AdSlot cascades both the
+ *   storage adapter and the dismissible default to every banner.
  */
 
 const ROTATION_INTERVAL_MS = 30_000;
 const DISMISS_WINDOW_DAYS = 7;
 const BANNER_WIDTH = "460px";
+const IMAGE_RENDER_SIZE = 180; // px — keeps the 1024² source in check
 
-const ADS = [
+const ADS: readonly BannerConfig[] = [
   {
     id: "promo-dgateway",
     eyebrow: "PAYMENTS",
@@ -39,6 +39,14 @@ const ADS = [
     cta: {
       label: "Try DGateway",
       href: "https://dgateway.desispay.com",
+    },
+    image: {
+      src: "/trans-ads/smartphone_payment_render.png",
+      alt: "DGateway — mobile payment success on smartphone",
+      width: IMAGE_RENDER_SIZE,
+      height: IMAGE_RENDER_SIZE,
+      fit: "contain",
+      position: "center",
     },
   },
   {
@@ -50,6 +58,14 @@ const ADS = [
       label: "Start sending",
       href: "https://www.wesendall.com",
     },
+    image: {
+      src: "/trans-ads/envelope_render.png",
+      alt: "WesendAll — envelope with SMS and email satellites",
+      width: IMAGE_RENDER_SIZE,
+      height: IMAGE_RENDER_SIZE,
+      fit: "contain",
+      position: "center",
+    },
   },
   {
     id: "promo-grit",
@@ -59,6 +75,14 @@ const ADS = [
     cta: {
       label: "Explore Grit",
       href: "https://gritframework.dev",
+    },
+    image: {
+      src: "/trans-ads/panels_render.png",
+      alt: "Grit Framework — fanned glass panels for each client target",
+      width: IMAGE_RENDER_SIZE,
+      height: IMAGE_RENDER_SIZE,
+      fit: "contain",
+      position: "center",
     },
   },
   {
@@ -70,6 +94,14 @@ const ADS = [
       label: "Try Nexora",
       href: "https://nexora.gritcms.com",
     },
+    image: {
+      src: "/trans-ads/sphere_render_variant.png",
+      alt: "Nexora AI — glass sphere of vector embeddings",
+      width: IMAGE_RENDER_SIZE,
+      height: IMAGE_RENDER_SIZE,
+      fit: "contain",
+      position: "center",
+    },
   },
   {
     id: "promo-vibekit",
@@ -80,35 +112,16 @@ const ADS = [
       label: "Browse Vibekit",
       href: "https://vibekit.desishub.com",
     },
+    image: {
+      src: "/trans-ads/ui_cards_render.png",
+      alt: "Vibekit — stacked translucent UI cards",
+      width: IMAGE_RENDER_SIZE,
+      height: IMAGE_RENDER_SIZE,
+      fit: "contain",
+      position: "center",
+    },
   },
-] as const;
-
-const AD_IMAGES: Record<string, { src: string; alt: string }> = {
-  "promo-dgateway": {
-    src: "/trans-ads/smartphone_payment_render.png",
-    alt: "DGateway — mobile payment success on smartphone",
-  },
-  "promo-wesendall": {
-    src: "/trans-ads/envelope_render.png",
-    alt: "WesendAll — envelope with SMS and email satellites",
-  },
-  "promo-grit": {
-    src: "/trans-ads/panels_render.png",
-    alt: "Grit Framework — fanned glass panels for each client target",
-  },
-  "promo-nexora": {
-    src: "/trans-ads/sphere_render_variant.png",
-    alt: "Nexora AI — glass sphere of vector embeddings",
-  },
-  "promo-vibekit": {
-    src: "/trans-ads/ui_cards_render.png",
-    alt: "Vibekit — stacked translucent UI cards",
-  },
-};
-
-const FULL_CYCLE_MS = ROTATION_INTERVAL_MS * ADS.length;
-
-type Corner = "bottom-right" | "bottom-left";
+];
 
 export function SiteBannerAds() {
   const storage = useMemo(
@@ -116,36 +129,17 @@ export function SiteBannerAds() {
     []
   );
 
-  const [corner, setCorner] = useState<Corner>("bottom-right");
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setCorner((prev) =>
-        prev === "bottom-right" ? "bottom-left" : "bottom-right"
-      );
-    }, FULL_CYCLE_MS);
-    return () => window.clearInterval(id);
-  }, []);
-
   return (
     <AdSlot
       ads={ADS}
       rotate={{ interval: ROTATION_INTERVAL_MS, pauseOnHover: true }}
       position="corner"
-      corner={corner}
+      corner={["bottom-right", "bottom-left"]}
       offset={24}
+      width={BANNER_WIDTH}
+      layout="image-right"
+      dismissible
       storage={storage}
-    >
-      {(config) => (
-        <BrandedBanner
-          config={config}
-          image={AD_IMAGES[config.id ?? ""]}
-          dismissible
-          storage={storage}
-          layout="image-right"
-          width={BANNER_WIDTH}
-        />
-      )}
-    </AdSlot>
+    />
   );
 }
