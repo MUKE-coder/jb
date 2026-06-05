@@ -136,8 +136,11 @@ export function SiteBannerAds() {
       storage={storage}
     >
       {(config) => (
+        // Workaround for upstream issue #3 — passing `config={config}`
+        // drops the `image` prop in BrandedBanner. Spread the config
+        // fields directly until the package merges `image` properly.
         <BrandedBanner
-          config={config}
+          {...config}
           dismissible
           storage={storage}
           layout="image-right"
