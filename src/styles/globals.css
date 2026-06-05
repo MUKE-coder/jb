@@ -416,11 +416,42 @@
 }
 
 /*
- * Make a touch more room for the body column on the left of the image:
- * pull the right padding in slightly so the CTA isn't crammed against
- * the 120px image well.
+ * Replace the package's flex-row layout with a 2-column grid so the CTA
+ * stacks under the body text (the package puts CTA as a row sibling,
+ * which with `row-reverse` lands the pill on the LEFT of the body —
+ * reads as broken). Grid template:
+ *
+ *   ┌──────────────┬───────┐
+ *   │ eyebrow      │       │
+ *   │ TITLE        │ IMAGE │
+ *   │ subtitle     │ (120) │
+ *   ├──────────────┤       │
+ *   │ [CTA pill]   │       │
+ *   └──────────────┴───────┘
  */
 .bba-banner-branded {
+  display: grid !important;
+  grid-template-columns: 1fr 120px !important;
+  grid-template-areas:
+    "body  image"
+    "cta   image" !important;
+  gap: 0.75rem 1rem !important;
+  align-items: start !important;
   padding: 1rem 1.25rem !important;
-  gap: 1rem !important;
+}
+
+.bba-banner-branded .bba-banner__body {
+  grid-area: body;
+  min-width: 0;
+}
+
+.bba-banner-branded .bba-banner__cta {
+  grid-area: cta;
+  justify-self: start;
+  align-self: end;
+}
+
+.bba-banner-branded .bba-banner__media {
+  grid-area: image;
+  align-self: center;
 }
