@@ -1,7 +1,7 @@
 ---
 title: "Ship Self-Promo Banner Ads on Your Next.js Site with beautiful-banner-ads"
 description: "How I built the rotating corner banners on jb.desishub.com — 5 product ads rotating every 30s, alternating bottom-right and bottom-left, dismissible for 7 days, in ~40 lines of React. Plus the 8 GitHub issues I filed along the way and the CSS overrides you actually need."
-image: /blog/self-promo-banner-ads-nextjs-beautiful-banner-ads.webp
+image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfOplgX7koJbWuGYVc5EZHf1m7xFl3IvOpeSqz
 category: tutorial
 createdAt: 2026-06-05
 updatedAt: 2026-06-05
@@ -209,13 +209,13 @@ These overrides — pasted at the bottom of `globals.css` — are the ones I'm r
 ```css
 /* Cap the image and its flex slot so the body column gets real estate. */
 .bba-banner-branded .bba-banner__media {
-  flex: 0 0 120px !important;
-  width: 120px !important;
-  height: 120px !important;
+  flex: 0 0 140px !important;
+  width: 140px !important;
+  height: 140px !important;
 }
 .bba-banner-branded__image {
-  max-width: 120px !important;
-  max-height: 120px !important;
+  max-width: 140px !important;
+  max-height: 140px !important;
   width: 100% !important;
   height: 100% !important;
   object-fit: contain !important;
@@ -249,7 +249,7 @@ These overrides — pasted at the bottom of `globals.css` — are the ones I'm r
 /* Grid layout so the CTA stacks UNDER the body, not beside it. */
 .bba-banner-branded {
   display: grid !important;
-  grid-template-columns: 1fr 120px !important;
+  grid-template-columns: 1fr 140px !important;
   grid-template-areas:
     "body  image"
     "cta   image" !important;

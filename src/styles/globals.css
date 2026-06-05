@@ -364,14 +364,14 @@
  * rules.
  */
 .bba-banner-branded .bba-banner__media {
-  flex: 0 0 120px !important;
-  width: 120px !important;
-  height: 120px !important;
+  flex: 0 0 140px !important;
+  width: 140px !important;
+  height: 140px !important;
 }
 
 .bba-banner-branded__image {
-  max-width: 120px !important;
-  max-height: 120px !important;
+  max-width: 140px !important;
+  max-height: 140px !important;
   width: 100% !important;
   height: 100% !important;
   object-fit: contain !important;
@@ -431,7 +431,7 @@
  */
 .bba-banner-branded {
   display: grid !important;
-  grid-template-columns: 1fr 120px !important;
+  grid-template-columns: 1fr 140px !important;
   grid-template-areas:
     "body  image"
     "cta   image" !important;
