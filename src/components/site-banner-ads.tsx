@@ -15,13 +15,18 @@ import { useEffect, useMemo, useState } from "react";
  * - Each ad uses BrandedBanner with its own transparent 3D product
  *   image (public/trans-ads/*.png).
  * - The slot alternates corner every full cycle through all 5 ads:
- *   round 1 → bottom-right, round 2 → bottom-left, repeat. Keeps the
- *   placement from blending into the page furniture.
+ *   round 1 → bottom-right, round 2 → bottom-left, repeat.
  * - Dismissed banners are remembered per-product for 7 days via the
  *   package's built-in createExpiringStorage adapter.
+ *
+ * Note on the image map: the package's BannerConfig type intentionally
+ * does NOT include `image` (it's BrandedBanner-specific, not a shared
+ * core field). So we keep the rotating ad content in `ADS` (BannerConfig
+ * shape) and pair each ad with its image via `AD_IMAGES`, looking it up
+ * by id in the children-as-function renderer.
  */
 
-const ROTATION_INTERVAL_MS = 30_000; // 30 seconds per ad
+const ROTATION_INTERVAL_MS = 30_000;
 const DISMISS_WINDOW_DAYS = 7;
 const BANNER_WIDTH = "460px";
 
@@ -35,10 +40,6 @@ const ADS = [
       label: "Try DGateway",
       href: "https://dgateway.desispay.com",
     },
-    image: {
-      src: "/trans-ads/smartphone_payment_render.png",
-      alt: "DGateway — mobile payment success on smartphone",
-    },
   },
   {
     id: "promo-wesendall",
@@ -48,10 +49,6 @@ const ADS = [
     cta: {
       label: "Start sending",
       href: "https://www.wesendall.com",
-    },
-    image: {
-      src: "/trans-ads/envelope_render.png",
-      alt: "WesendAll — envelope with SMS and email satellites",
     },
   },
   {
@@ -63,10 +60,6 @@ const ADS = [
       label: "Explore Grit",
       href: "https://gritframework.dev",
     },
-    image: {
-      src: "/trans-ads/panels_render.png",
-      alt: "Grit Framework — fanned glass panels for each client target",
-    },
   },
   {
     id: "promo-nexora",
@@ -76,10 +69,6 @@ const ADS = [
     cta: {
       label: "Try Nexora",
       href: "https://nexora.gritcms.com",
-    },
-    image: {
-      src: "/trans-ads/sphere_render_variant.png",
-      alt: "Nexora AI — glass sphere of vector embeddings",
     },
   },
   {
@@ -91,16 +80,32 @@ const ADS = [
       label: "Browse Vibekit",
       href: "https://vibekit.desishub.com",
     },
-    image: {
-      src: "/trans-ads/ui_cards_render.png",
-      alt: "Vibekit — stacked translucent UI cards",
-    },
   },
 ] as const;
 
-// One full cycle = every ad shown once at the current rotation interval.
-// After each full cycle we swap the placement corner so the slot doesn't
-// blend into page furniture.
+const AD_IMAGES: Record<string, { src: string; alt: string }> = {
+  "promo-dgateway": {
+    src: "/trans-ads/smartphone_payment_render.png",
+    alt: "DGateway — mobile payment success on smartphone",
+  },
+  "promo-wesendall": {
+    src: "/trans-ads/envelope_render.png",
+    alt: "WesendAll — envelope with SMS and email satellites",
+  },
+  "promo-grit": {
+    src: "/trans-ads/panels_render.png",
+    alt: "Grit Framework — fanned glass panels for each client target",
+  },
+  "promo-nexora": {
+    src: "/trans-ads/sphere_render_variant.png",
+    alt: "Nexora AI — glass sphere of vector embeddings",
+  },
+  "promo-vibekit": {
+    src: "/trans-ads/ui_cards_render.png",
+    alt: "Vibekit — stacked translucent UI cards",
+  },
+};
+
 const FULL_CYCLE_MS = ROTATION_INTERVAL_MS * ADS.length;
 
 type Corner = "bottom-right" | "bottom-left";
@@ -113,10 +118,6 @@ export function SiteBannerAds() {
 
   const [corner, setCorner] = useState<Corner>("bottom-right");
 
-  // Swap corner at the end of each full cycle. Timing roughly coincides
-  // with the rotation transition between the last ad of one cycle and the
-  // first ad of the next, so the swap blends with the slide-in animation
-  // rather than a visible jump on a static banner.
   useEffect(() => {
     const id = window.setInterval(() => {
       setCorner((prev) =>
@@ -136,11 +137,9 @@ export function SiteBannerAds() {
       storage={storage}
     >
       {(config) => (
-        // Workaround for upstream issue #3 — passing `config={config}`
-        // drops the `image` prop in BrandedBanner. Spread the config
-        // fields directly until the package merges `image` properly.
         <BrandedBanner
-          {...config}
+          config={config}
+          image={AD_IMAGES[config.id ?? ""]}
           dismissible
           storage={storage}
           layout="image-right"
