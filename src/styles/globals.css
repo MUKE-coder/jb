@@ -376,3 +376,51 @@
   height: 100% !important;
   object-fit: contain !important;
 }
+
+/*
+ * The branded banner ships with a `--bba-fs-2xl` (36px) title which is
+ * tuned for a 930px leaderboard. In our 520px corner slot it eats the
+ * whole body column and squeezes the subtitle + CTA out of shape. Bring
+ * the type system down to corner-banner-appropriate sizes.
+ */
+.bba-banner-branded .bba-banner__title {
+  font-size: 1.0625rem !important;
+  line-height: 1.25 !important;
+}
+
+.bba-banner-branded .bba-banner__subtitle {
+  font-size: 0.8125rem !important;
+  line-height: 1.35 !important;
+}
+
+.bba-banner-branded .bba-banner__eyebrow {
+  font-size: 0.6875rem !important;
+  margin-bottom: 0.125rem !important;
+}
+
+/*
+ * Dock the close button to the top-right corner instead of letting it
+ * sit as a flex sibling — with `flex-direction: row-reverse` (image-right
+ * layout) the close ends up on the LEFT edge, which reads as broken UX.
+ * Absolute positioning frees the body column to use the full width too.
+ */
+.bba-banner-branded {
+  position: relative !important;
+}
+
+.bba-banner-branded .bba-banner__close {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  z-index: 2 !important;
+}
+
+/*
+ * Make a touch more room for the body column on the left of the image:
+ * pull the right padding in slightly so the CTA isn't crammed against
+ * the 120px image well.
+ */
+.bba-banner-branded {
+  padding: 1rem 1.25rem !important;
+  gap: 1rem !important;
+}
