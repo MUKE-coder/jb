@@ -353,13 +353,26 @@
 /*
  * beautiful-banner-ads image cap.
  *
- * The package's `:where(.bba-banner-branded__image)` rule has zero
- * specificity and lets the transparent 1024x1024 clay-render PNGs we ship
- * try to render at intrinsic size — which on a 520px branded banner fills
- * the entire card. Cap the displayed image to ~110px so it sits cleanly in
- * the image-right column. Un-layered so it beats the package's `:where()`.
+ * The transparent 1024x1024 clay renders we ship will, left alone, fill
+ * the entire branded card because the package only sets `max-width: 100%`
+ * on the image and `flex: 0 0 auto` on the media slot — neither
+ * constrains the column to anything sane. Cap BOTH:
+ *  - the media slot to a 120px square so the body column always gets the rest
+ *  - the image inside to the same cap with `object-fit: contain`
+ * `!important` is used because the package style tag is injected after our
+ * CSS at runtime, so source order would otherwise lose to its `:where()`
+ * rules.
  */
+.bba-banner-branded .bba-banner__media {
+  flex: 0 0 120px !important;
+  width: 120px !important;
+  height: 120px !important;
+}
+
 .bba-banner-branded__image {
-  max-width: 110px;
-  max-height: 110px;
+  max-width: 120px !important;
+  max-height: 120px !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
 }
