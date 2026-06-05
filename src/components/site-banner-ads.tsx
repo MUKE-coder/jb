@@ -5,23 +5,25 @@ import {
   BrandedBanner,
   createExpiringStorage,
 } from "beautiful-banner-ads";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /**
  * Site-wide self-promotion banner rotator.
  *
- * Renders a single dismissible corner toast (bottom-right) that rotates
- * through JB's own products every 8 seconds, paused on hover. Each ad
- * uses BrandedBanner with its own transparent product image rendered in
- * the JB 3D clay-render style (lives under public/trans-ads/).
- *
- * Dismissed banners are remembered per-product for 7 days via the
- * package's built-in createExpiringStorage adapter; after the window
- * lapses the same product rotates back in.
+ * - 5 ads (DGateway · WesendAll · Grit · Nexora · Vibekit) rotate every
+ *   30 seconds, paused on hover.
+ * - Each ad uses BrandedBanner with its own transparent 3D product
+ *   image (public/trans-ads/*.png).
+ * - The slot alternates corner every full cycle through all 5 ads:
+ *   round 1 → bottom-right, round 2 → bottom-left, repeat. Keeps the
+ *   placement from blending into the page furniture.
+ * - Dismissed banners are remembered per-product for 7 days via the
+ *   package's built-in createExpiringStorage adapter.
  */
 
-const ROTATION_INTERVAL_MS = 8000;
+const ROTATION_INTERVAL_MS = 30_000; // 30 seconds per ad
 const DISMISS_WINDOW_DAYS = 7;
+const BANNER_WIDTH = "460px";
 
 const ADS = [
   {
@@ -96,20 +98,41 @@ const ADS = [
   },
 ] as const;
 
+// One full cycle = every ad shown once at the current rotation interval.
+// After each full cycle we swap the placement corner so the slot doesn't
+// blend into page furniture.
+const FULL_CYCLE_MS = ROTATION_INTERVAL_MS * ADS.length;
+
+type Corner = "bottom-right" | "bottom-left";
+
 export function SiteBannerAds() {
   const storage = useMemo(
     () => createExpiringStorage({ days: DISMISS_WINDOW_DAYS }),
     []
   );
 
+  const [corner, setCorner] = useState<Corner>("bottom-right");
+
+  // Swap corner at the end of each full cycle. Timing roughly coincides
+  // with the rotation transition between the last ad of one cycle and the
+  // first ad of the next, so the swap blends with the slide-in animation
+  // rather than a visible jump on a static banner.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setCorner((prev) =>
+        prev === "bottom-right" ? "bottom-left" : "bottom-right"
+      );
+    }, FULL_CYCLE_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
   return (
     <AdSlot
       ads={ADS}
       rotate={{ interval: ROTATION_INTERVAL_MS, pauseOnHover: true }}
       position="corner"
-      corner="bottom-right"
+      corner={corner}
       offset={24}
-      width="440px"
       storage={storage}
     >
       {(config) => (
@@ -118,6 +141,7 @@ export function SiteBannerAds() {
           dismissible
           storage={storage}
           layout="image-right"
+          width={BANNER_WIDTH}
         />
       )}
     </AdSlot>
