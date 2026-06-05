@@ -3,6 +3,7 @@
 import {
   AdSlot,
   type BannerConfig,
+  BrandedBanner,
   createExpiringStorage,
 } from "beautiful-banner-ads";
 import { useMemo } from "react";
@@ -118,6 +119,13 @@ export function SiteBannerAds() {
     []
   );
 
+  // AdSlot's default renderer is BannerAd (text-only). To render the
+  // product image we explicitly render BrandedBanner via children-as-
+  // function. With v0.3.1's #3 fix, `<BrandedBanner config={config} />`
+  // properly pulls `image` from BannerConfig — no spread needed.
+  // We re-state width / layout / dismissible / storage on the inner
+  // banner because AdSlot's cascade auto-applies only to the default
+  // renderer, not to children-as-function consumers.
   return (
     <AdSlot
       ads={ADS}
@@ -126,9 +134,17 @@ export function SiteBannerAds() {
       corner={["bottom-right", "bottom-left"]}
       offset={24}
       width={BANNER_WIDTH}
-      layout="image-right"
-      dismissible
       storage={storage}
-    />
+    >
+      {(config) => (
+        <BrandedBanner
+          config={config}
+          layout="image-right"
+          width={BANNER_WIDTH}
+          dismissible
+          storage={storage}
+        />
+      )}
+    </AdSlot>
   );
 }
