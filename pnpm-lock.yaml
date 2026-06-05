@@ -81,6 +81,9 @@ importers:
       '@vercel/speed-insights':
         specifier: ^1.2.0
         version: 1.2.0(next@15.4.10(@babel/core@7.27.4)(@opentelemetry/api@1.9.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)
+      beautiful-banner-ads:
+        specifier: ^0.1.1
+        version: 0.1.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2857,6 +2860,13 @@ packages:
   basic-ftp@5.0.5:
     resolution: {integrity: sha512-4Bcg1P8xhUuqcii/S0Z9wiHIrQVPMermM1any+MX5GeGD7faD3/msQUDGLol9wOcz4/jbg/WJnGqoJF6LiBdtg==}
     engines: {node: '>=10.0.0'}
+
+  beautiful-banner-ads@0.1.1:
+    resolution: {integrity: sha512-iQ6Fbh1nQj+sjcml6UEbWGfJW8uNpkpvBIe5lFQ1oN/Bix4dEqEjoLR782CRrVrDYcBRBzfZ9oftWjBt0v3j5w==}
+    engines: {node: '>=18.17'}
+    peerDependencies:
+      react: '>=18.0.0'
+      react-dom: '>=18.0.0'
 
   bl@5.1.0:
     resolution: {integrity: sha512-tv1ZJHLfTDnXE6tMHv73YgSJaWR2AFuPwMntBe7XL/GBFHnT0CLnsHMogfk5+GzCDC5ZWarSCYaIGATZt9dNsQ==}
@@ -9254,6 +9264,11 @@ snapshots:
   base64-js@1.5.1: {}
 
   basic-ftp@5.0.5: {}
+
+  beautiful-banner-ads@0.1.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
+    dependencies:
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
   bl@5.1.0:
     dependencies:

@@ -6,6 +6,7 @@ import type { Organization, Person, WebSite, WithContext } from "schema-dts";
 
 import ChatBot from "@/components/ChatBot";
 import { Providers } from "@/components/providers";
+import { SiteBannerAds } from "@/components/site-banner-ads";
 import { META_THEME_COLORS, SITE_INFO } from "@/config/site";
 import { USER } from "@/data/user";
 import { fontMono, fontSans } from "@/lib/fonts";
@@ -299,6 +300,7 @@ export default function RootLayout({
       <body>
         <Providers>
           <ChatBot />
+          <SiteBannerAds />
           {children}
         </Providers>
       </body>

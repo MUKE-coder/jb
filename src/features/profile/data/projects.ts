@@ -417,4 +417,146 @@ export const PROJECTS: Project[] = [
 - Scalable platform supporting multiple shipment types and delivery routes
 - Real-time notifications and status updates for enhanced customer communication`,
   },
+  {
+    id: "wesendall",
+    title: "WesendAll — Bulk SMS & Email Platform",
+    period: {
+      start: "08.2025",
+    },
+    link: "https://www.wesendall.com",
+    skills: [
+      "Desishub Product",
+      "Next.js",
+      "Bulk SMS",
+      "Bulk Email",
+      "Campaign Management",
+      "Contact Lists",
+      "Delivery Reports",
+      "African SMS Gateways",
+      "Resend",
+      "PostgreSQL",
+      "Stripe / DGateway Billing",
+    ],
+    description: `A Desishub product I built for sending bulk SMS and email campaigns from one dashboard — designed for African businesses that need reliable transactional + marketing messaging without juggling 3 different gateway accounts.
+- Contact list management with imports, segmentation, and unsubscribe handling
+- Campaign composer for both SMS and email with merge tags and previews
+- Delivery reports + per-recipient status tracking (delivered / pending / failed)
+- Multi-provider SMS routing (African aggregators) with automatic failover
+- Email via Resend with bring-your-own-domain + DKIM/SPF
+- Scheduled and recurring sends, draft mode, A/B subject testing
+- Pay-as-you-go billing with credit top-ups via DGateway (Mobile Money + cards)
+- REST API for programmatic sending from your own apps`,
+  },
+  {
+    id: "fundpier-loan-management",
+    title: "Fundpier — Loan Management System (Client)",
+    period: {
+      start: "03.2025",
+    },
+    link: "https://fundpier.net/",
+    skills: [
+      "Client Project",
+      "Loan Management",
+      "Fintech",
+      "Next.js",
+      "Borrower Onboarding",
+      "Repayment Schedules",
+      "Interest Calculations",
+      "Document Uploads",
+      "Reporting Dashboard",
+      "PostgreSQL",
+      "Multi-Role Access",
+    ],
+    description: `A loan management platform built for a micro-lending client — end-to-end borrower lifecycle from application to repayment to writeoff.
+- Borrower onboarding with KYC document uploads + identity verification
+- Loan products with configurable interest rates, terms, and fee structures
+- Automatic repayment schedule generation + per-installment tracking
+- Loan officer + manager + admin role separation with approval workflows
+- Repayment recording (cash / mobile money / bank) with auto-balancing
+- Arrears tracking, aging buckets, and overdue alerts
+- Comprehensive reports: portfolio at risk, collections, officer performance
+- Customer statements + receipt printing`,
+  },
+  {
+    id: "kayula-motors",
+    title: "Kayula Motors — Motor Spares & Vehicle Loans (Client)",
+    period: {
+      start: "11.2025",
+    },
+    link: "https://app.kayulamotors.org/login",
+    skills: [
+      "Client Project",
+      "Inventory Management",
+      "Vehicle Loans",
+      "Next.js",
+      "POS",
+      "Motor Spares Catalog",
+      "Loan Origination",
+      "Repayment Tracking",
+      "PostgreSQL",
+      "Multi-Branch",
+    ],
+    description: `A dual-purpose platform for a motor-spares and vehicle-financing business — combines a parts-inventory POS with a vehicle-loan origination + servicing module.
+- Motor spares catalog with stock, pricing, branch-level inventory
+- POS for over-the-counter sales with receipt printing
+- Vehicle loan applications with KYC + collateral capture
+- Loan disbursement, repayment schedules, and arrears tracking
+- Unified customer view: parts purchases + active loans in one place
+- Multi-branch operations with role-based access`,
+  },
+  {
+    id: "intellixio-inventory",
+    title: "Intellixio — Inventory Management System (Client)",
+    period: {
+      start: "01.2026",
+    },
+    link: "https://intellixio.vercel.app/",
+    skills: [
+      "Client Project",
+      "Inventory Management",
+      "Next.js",
+      "Stock Tracking",
+      "Reorder Alerts",
+      "Multi-Location",
+      "Purchase Orders",
+      "Suppliers",
+      "Reporting",
+      "PostgreSQL",
+    ],
+    description: `An inventory management system built for a client running a multi-location operation — clean dashboards over stock, purchasing, and supplier relationships.
+- Real-time stock balances per location with low-stock alerts
+- Purchase order workflow (draft → approved → received → reconciled)
+- Supplier directory with order history + payment tracking
+- Stock transfers between locations with send → confirm flow
+- Stock adjustments with reasons + audit trail
+- Reports: valuation, movement, slow-moving stock, supplier performance
+- Bulk Excel import for opening stock + product catalogue`,
+  },
+  {
+    id: "walkiecheck",
+    title: "WalkieCheck — Walkie-Talkie Tracking for Film Productions (Client)",
+    period: {
+      start: "02.2026",
+    },
+    link: "https://walkiecheck.vercel.app/",
+    skills: [
+      "Client Project",
+      "Cross-Device App",
+      "Next.js",
+      "Film Production Tools",
+      "Asset Tracking",
+      "Check-in / Check-out",
+      "Crew Assignment",
+      "Realtime Sync",
+      "Web + Mobile",
+    ],
+    description: `A cross-device app built for assistant directors to track, assign, and manage production walkies on film sets — replaces the clipboard + scribble system that breaks down the moment crew rotate.
+- Real-time walkie check-in / check-out per crew member
+- Department + scene assignment with daily call-sheet awareness
+- "Who has which radio right now?" live dashboard
+- Battery and channel tracking per unit
+- End-of-day reconciliation report — missing / damaged / handed-off
+- Works seamlessly on tablet (AD's primary device) and phone (runner check-ins)
+- Built for the chaos of an active set — minimal taps, big tap targets, offline-tolerant`,
+  },
 ];
