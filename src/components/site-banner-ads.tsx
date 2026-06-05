@@ -17,9 +17,9 @@ import { useMemo } from "react";
  *   round 1 → bottom-right, round 2 → bottom-left, repeat. Handled
  *   natively by the package's `corner={[...]}` array support (no
  *   external useEffect / setInterval needed).
- * - Each image is constrained to a fixed render box (180×180) with
- *   `fit: "contain"` so the transparent 1024×1024 source doesn't blow
- *   up to fill the whole banner.
+ * - Each image uses `fit: "contain"` so the transparent 1024×1024
+ *   source scales cleanly inside whatever column the BrandedBanner
+ *   gives it without overflowing.
  * - Dismissed banners are remembered per-product for 7 days via the
  *   package's built-in createExpiringStorage. AdSlot cascades both the
  *   storage adapter and the dismissible default to every banner.
@@ -27,8 +27,7 @@ import { useMemo } from "react";
 
 const ROTATION_INTERVAL_MS = 30_000;
 const DISMISS_WINDOW_DAYS = 7;
-const BANNER_WIDTH = "460px";
-const IMAGE_RENDER_SIZE = 180; // px — keeps the 1024² source in check
+const BANNER_WIDTH = "520px"; // wider so the image-right column has room
 
 const ADS: readonly BannerConfig[] = [
   {
@@ -43,8 +42,6 @@ const ADS: readonly BannerConfig[] = [
     image: {
       src: "/trans-ads/smartphone_payment_render.png",
       alt: "DGateway — mobile payment success on smartphone",
-      width: IMAGE_RENDER_SIZE,
-      height: IMAGE_RENDER_SIZE,
       fit: "contain",
       position: "center",
     },
@@ -61,8 +58,6 @@ const ADS: readonly BannerConfig[] = [
     image: {
       src: "/trans-ads/envelope_render.png",
       alt: "WesendAll — envelope with SMS and email satellites",
-      width: IMAGE_RENDER_SIZE,
-      height: IMAGE_RENDER_SIZE,
       fit: "contain",
       position: "center",
     },
@@ -79,8 +74,6 @@ const ADS: readonly BannerConfig[] = [
     image: {
       src: "/trans-ads/panels_render.png",
       alt: "Grit Framework — fanned glass panels for each client target",
-      width: IMAGE_RENDER_SIZE,
-      height: IMAGE_RENDER_SIZE,
       fit: "contain",
       position: "center",
     },
@@ -97,8 +90,6 @@ const ADS: readonly BannerConfig[] = [
     image: {
       src: "/trans-ads/sphere_render_variant.png",
       alt: "Nexora AI — glass sphere of vector embeddings",
-      width: IMAGE_RENDER_SIZE,
-      height: IMAGE_RENDER_SIZE,
       fit: "contain",
       position: "center",
     },
@@ -115,8 +106,6 @@ const ADS: readonly BannerConfig[] = [
     image: {
       src: "/trans-ads/ui_cards_render.png",
       alt: "Vibekit — stacked translucent UI cards",
-      width: IMAGE_RENDER_SIZE,
-      height: IMAGE_RENDER_SIZE,
       fit: "contain",
       position: "center",
     },
