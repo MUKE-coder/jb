@@ -1,0 +1,324 @@
+---
+title: "Ship Self-Promo Banner Ads on Your Next.js Site with beautiful-banner-ads"
+description: "How I built the rotating corner banners on jb.desishub.com — 5 product ads rotating every 30s, alternating bottom-right and bottom-left, dismissible for 7 days, in ~40 lines of React. Plus the 8 GitHub issues I filed along the way and the CSS overrides you actually need."
+image: /blog/self-promo-banner-ads-nextjs-beautiful-banner-ads.webp
+category: tutorial
+createdAt: 2026-06-05
+updatedAt: 2026-06-05
+---
+
+# Ship Self-Promo Banner Ads on Your Next.js Site with beautiful-banner-ads
+
+**Last updated: June 2026 · By [JB (Muke Johnbaptist)](/) — this is the exact banner-ads setup running on jb.desishub.com right now, rotating five of my own products through the bottom corners every 30 seconds.**
+
+If your blog gets meaningful traffic and you sell your own products, you don't need AdSense — you need a tasteful self-promotion slot. Something that:
+
+- Rotates through several of your own offers without you wiring up a `setInterval`,
+- Lives in a screen corner that doesn't fight the article,
+- Lets the reader dismiss it for a sane stretch of time (7 days, not forever and not every page-load),
+- Renders a real product image, not just a text strip,
+- And takes ~40 lines of code to ship.
+
+That's what [beautiful-banner-ads](https://www.npmjs.com/package/beautiful-banner-ads) is for. This post is the exact setup I'm running on [jb.desishub.com](https://jb.desishub.com) — five product ads (DGateway, WesendAll, Grit Framework, Nexora AI, Vibekit) rotating through the bottom-right and bottom-left corners, dismissible for a week, with the clay-render product imagery you've probably seen if you've spent more than 30 seconds on this site.
+
+It also walks through the eight GitHub issues I filed against the package while building this and the package upgrades that landed because of them — because a real-world adoption story is the most useful kind of "getting started" guide.
+
+---
+
+## What you'll build
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Your Next.js page                                      │
+│                                                         │
+│   ... your blog content ...                             │
+│                                                         │
+│                          ┌─────────────────────────┐    │
+│                          │ PAYMENTS              x │    │
+│                          │ Accept Mobile Money     │    │
+│                          │ in your app             │    │
+│                          │ MTN MoMo, Airtel...   📱 │    │
+│                          │ [ Try DGateway ]        │    │
+│                          └─────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+                                          ↓ every 30s
+                                  rotates ad + corner
+```
+
+A persistent docked banner in the bottom corner. Five ads cycle every 30 seconds. After a full pass, the slot jumps to the opposite corner. Dismissing it hides it for 7 days, then it quietly tries again.
+
+---
+
+## 1. Install the package
+
+```bash
+pnpm add beautiful-banner-ads
+# or: npm i beautiful-banner-ads
+# or: yarn add beautiful-banner-ads
+```
+
+It's framework-agnostic React — works in Next.js (App Router or Pages), Vite, Remix, anything that renders React. There's no peer dependency on Tailwind or a UI kit; the styles are auto-injected on mount.
+
+---
+
+## 2. Build the rotator component
+
+Create `src/components/site-banner-ads.tsx`. This is the whole thing, end-to-end:
+
+```tsx
+"use client";
+
+import {
+  AdSlot,
+  type BannerConfig,
+  BrandedBanner,
+  createExpiringStorage,
+} from "beautiful-banner-ads";
+import { useMemo } from "react";
+
+const ROTATION_INTERVAL_MS = 30_000;
+const DISMISS_WINDOW_DAYS = 7;
+const BANNER_WIDTH = "520px";
+
+const ADS: readonly BannerConfig[] = [
+  {
+    id: "promo-dgateway",
+    eyebrow: "PAYMENTS",
+    title: "Accept Mobile Money in your app",
+    subtitle: "MTN MoMo, Airtel & Stripe — one API.",
+    cta: { label: "Try DGateway", href: "https://dgateway.desispay.com" },
+    image: {
+      src: "/trans-ads/smartphone_payment_render.png",
+      alt: "DGateway — mobile payment success on smartphone",
+      fit: "contain",
+      position: "center",
+    },
+  },
+  {
+    id: "promo-wesendall",
+    eyebrow: "BULK MESSAGING",
+    title: "Bulk SMS & Email from one dashboard",
+    subtitle: "Built for African senders.",
+    cta: { label: "Start sending", href: "https://www.wesendall.com" },
+    image: {
+      src: "/trans-ads/envelope_render.png",
+      alt: "WesendAll — envelope with SMS and email satellites",
+      fit: "contain",
+      position: "center",
+    },
+  },
+  // ...repeat for every product you want in the rotation
+];
+
+export function SiteBannerAds() {
+  const storage = useMemo(
+    () => createExpiringStorage({ days: DISMISS_WINDOW_DAYS }),
+    []
+  );
+
+  return (
+    <AdSlot
+      ads={ADS}
+      rotate={{ interval: ROTATION_INTERVAL_MS, pauseOnHover: true }}
+      position="corner"
+      corner={["bottom-right", "bottom-left"]}
+      offset={24}
+      width={BANNER_WIDTH}
+      storage={storage}
+      dismissible
+      layout="image-right"
+    >
+      {(config) => <BrandedBanner config={config} />}
+    </AdSlot>
+  );
+}
+```
+
+Then mount it once in your root layout:
+
+```tsx
+// src/app/layout.tsx
+import { SiteBannerAds } from "@/components/site-banner-ads";
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        {children}
+        <SiteBannerAds />
+      </body>
+    </html>
+  );
+}
+```
+
+That's the entire integration. Let's unpack what each piece is doing.
+
+---
+
+## 3. The pieces, explained
+
+### `ads` — your product catalog
+
+A plain readonly array of `BannerConfig` objects. Each ad gets a stable `id` (used as the dismissal storage key), an `eyebrow` (the tiny label above the title), a `title`, `subtitle`, a `cta` with `label` + `href`, and an `image`.
+
+The `image` field accepts either a string URL or `{ src, alt, fit, position }`. For transparent product renders I always want `fit: "contain"` so the image scales without cropping.
+
+### `rotate` — the cycle
+
+```tsx
+rotate={{ interval: 30_000, pauseOnHover: true }}
+```
+
+The package handles the timer internally — no `setInterval` in your component. `pauseOnHover` is what keeps readers from losing an ad mid-read because the rotation fired while their cursor was hovering on the CTA.
+
+### `corner={[...]}` — alternating placement
+
+Pass an array of corners and the slot will advance to the next corner after every full pass through the ads. So if you have 5 ads on a 30s rotation, the slot stays in `bottom-right` for 2.5 minutes, then jumps to `bottom-left`, then back. No drift, no separate timer, no `useEffect` you need to write.
+
+### `storage={createExpiringStorage({ days: 7 })}` — respect the user
+
+When a reader dismisses a banner you want to remember that for a while, but not forever. `createExpiringStorage` writes to `localStorage` with a TTL, and on get-time it transparently expires anything older than N days. So "not now" hides the slot for a week, then it quietly comes back.
+
+The factory returns `undefined` on the server (SSR-safe), so a single call site works for both render passes.
+
+### `dismissible` + `layout` — cascade defaults
+
+`AdSlot` cascades these defaults into every child ad's effective config. As of `v0.4.0` they also propagate into the `config` object passed to `children-as-function`, so the inner `<BrandedBanner config={config} />` picks them up without re-stating them. Less to maintain.
+
+### `children-as-function` — why we don't use the default renderer
+
+`AdSlot`'s default renderer is `BannerAd`, which is text-only and silently ignores `config.image`. If you want an actual product render, you have to provide a render function and use `BrandedBanner` (or `MediaBanner` for video). That's this part:
+
+```tsx
+{
+  (config) => <BrandedBanner config={config} />;
+}
+```
+
+The `config` you receive is the active ad's `BannerConfig` already merged with the slot's cascaded defaults.
+
+---
+
+## 4. The CSS overrides you'll probably need
+
+Here's the part nobody tells you. The package's branded layout is tuned for a **930×180 leaderboard**, not a 520px corner banner. Drop it in unchanged and you'll get a 36px title that wraps three times and a 1024×1024 product image that fills the entire card.
+
+These overrides — pasted at the bottom of `globals.css` — are the ones I'm running:
+
+```css
+/* Cap the image and its flex slot so the body column gets real estate. */
+.bba-banner-branded .bba-banner__media {
+  flex: 0 0 120px !important;
+  width: 120px !important;
+  height: 120px !important;
+}
+.bba-banner-branded__image {
+  max-width: 120px !important;
+  max-height: 120px !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+
+/* Bring the leaderboard-tuned type down to corner-banner size. */
+.bba-banner-branded .bba-banner__title {
+  font-size: 1.25rem !important;
+  line-height: 1.25 !important;
+}
+.bba-banner-branded .bba-banner__subtitle {
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+}
+.bba-banner-branded .bba-banner__eyebrow {
+  font-size: 0.6875rem !important;
+  margin-bottom: 0.125rem !important;
+}
+
+/* Dock the close button to the top-right corner of the card. */
+.bba-banner-branded {
+  position: relative !important;
+}
+.bba-banner-branded .bba-banner__close {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  z-index: 2 !important;
+}
+
+/* Grid layout so the CTA stacks UNDER the body, not beside it. */
+.bba-banner-branded {
+  display: grid !important;
+  grid-template-columns: 1fr 120px !important;
+  grid-template-areas:
+    "body  image"
+    "cta   image" !important;
+  gap: 0.75rem 1rem !important;
+  align-items: start !important;
+  padding: 1rem 1.25rem !important;
+}
+.bba-banner-branded .bba-banner__body {
+  grid-area: body;
+  min-width: 0;
+}
+.bba-banner-branded .bba-banner__cta {
+  grid-area: cta;
+  justify-self: start;
+  align-self: end;
+}
+.bba-banner-branded .bba-banner__media {
+  grid-area: image;
+  align-self: center;
+}
+```
+
+A few notes on why these need `!important`:
+
+- The package wraps every internal selector in `:where()` so its specificity is zero. A normal class selector should win — and does, when the styles are in source order. But the package injects its `<style>` tag at runtime via `useInjectStyles`, **after** your compiled CSS link in `<head>`. Source order ends up beating specificity, so `!important` removes the ambiguity.
+- The grid override replaces the package's `flex-direction: row-reverse` layout entirely. Without it, the CTA pill — which is a row sibling — lands on the LEFT side of the body (visually disconnected from the title and subtitle it goes with).
+
+If you only ever use the leaderboard size on a desktop hero, you can skip all of this. For corner banners on a content site, you'll want it.
+
+---
+
+## 5. The eight issues I filed (and why this is the real "getting started" story)
+
+When I first dropped the package in I hit a series of small frictions — every one of them a "this should just work" moment. I filed them as issues against [MUKE-coder/beautiful-banner-ads](https://github.com/MUKE-coder/beautiful-banner-ads/issues) and the package author shipped fixes for all eight across `v0.2.0`, `v0.3.1`, and `v0.4.0`.
+
+If you adopt the package today on `v0.4.0+`, you inherit every one of these wins for free:
+
+| #   | Friction                                                                                                                                  | Shipped in                                               |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 1   | Storage adapter couldn't ride along inside a serializable `BannerConfig` — needed a separate `storage` prop on AdSlot.                    | `0.2.0`                                                  |
+| 2   | I'd hand-rolled a 25-line `createSevenDayStorage` wrapper. Filed: ship this as a first-class helper.                                      | `0.2.0` — now `createExpiringStorage({ days })`          |
+| 3   | `BannerConfig` had no `image` field, so children-as-function consumers couldn't render product imagery from the config object alone.      | `0.3.1`                                                  |
+| 4   | Cascading slot props (width, dismissible, layout) onto child banners required re-stating them on every ad.                                | `0.3.1`                                                  |
+| 5   | Alternating corners across a cycle required an external `setInterval` that would drift relative to the rotation timer.                    | `0.3.1` — now `corner={["bottom-right", "bottom-left"]}` |
+| 6   | No way to know "the rotator just finished a full pass" without race-conditioning your own timer.                                          | `0.3.1` — now `onCycleComplete` callback                 |
+| 7   | `ImageInput` needed `width`/`height` for CLS prevention and `fit`/`position` for layout control.                                          | `0.3.1`                                                  |
+| 8   | Cascade props auto-applied to the default `BannerAd` renderer but didn't merge into the `config` object passed to `children-as-function`. | `0.4.0`                                                  |
+
+The big take-away: **if a library makes you write the same five lines on top of it every time, file the issue.** Don't paper over it forever. Most maintainers will either ship the helper or tell you why the friction exists — both outcomes beat carrying the workaround.
+
+---
+
+## 6. What this gets you
+
+On `jb.desishub.com` right now this exact setup is:
+
+- Surfacing five of my own products to every reader, weighted purely by which one cycles in front of them.
+- Costing zero ad-network revenue share — every click goes straight to my product, not Google's middleman.
+- Costing ~40 lines of component code + ~30 lines of CSS overrides.
+- Respecting "not now" for a week without nagging.
+- Carrying its own rotation, corner-alternation, hover-pause, and dismissal storage — nothing for me to maintain after the initial wiring.
+
+If you have your own products and a blog with traffic, this is the lowest-friction self-promo channel I've shipped. Drop in the component, write your ad copy as a `BannerConfig[]`, paste the CSS overrides, and you're done.
+
+---
+
+## Further reading
+
+- [beautiful-banner-ads on npm](https://www.npmjs.com/package/beautiful-banner-ads)
+- [Source repo (MUKE-coder/beautiful-banner-ads)](https://github.com/MUKE-coder/beautiful-banner-ads) — the 8 issues above are all browsable in the Closed tab
+- [DGateway — mobile money payments](https://dgateway.desispay.com), the first ad in my rotation
+- [Grit Framework](https://gritframework.dev), the multi-client SaaS framework that powers most of what I ship

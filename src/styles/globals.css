@@ -384,13 +384,13 @@
  * the type system down to corner-banner-appropriate sizes.
  */
 .bba-banner-branded .bba-banner__title {
-  font-size: 1.0625rem !important;
+  font-size: 1.25rem !important;
   line-height: 1.25 !important;
 }
 
 .bba-banner-branded .bba-banner__subtitle {
-  font-size: 0.8125rem !important;
-  line-height: 1.35 !important;
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
 }
 
 .bba-banner-branded .bba-banner__eyebrow {
