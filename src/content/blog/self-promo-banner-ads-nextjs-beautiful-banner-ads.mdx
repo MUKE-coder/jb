@@ -78,7 +78,9 @@ import { useMemo } from "react";
 
 const ROTATION_INTERVAL_MS = 30_000;
 const DISMISS_WINDOW_DAYS = 7;
-const BANNER_WIDTH = "520px";
+// 520px on wide viewports, otherwise shrink to fit with a 24px margin
+// on each side (matches `offset={24}` so the banner stays balanced).
+const BANNER_WIDTH = "min(520px, calc(100vw - 48px))";
 
 const ADS: readonly BannerConfig[] = [
   {
@@ -270,7 +272,35 @@ These overrides — pasted at the bottom of `globals.css` — are the ones I'm r
   grid-area: image;
   align-self: center;
 }
+
+/* Phone-width tune — shrink image column + drop type one notch. */
+@media (max-width: 480px) {
+  .bba-banner-branded {
+    grid-template-columns: 1fr 88px !important;
+    gap: 0.5rem 0.75rem !important;
+    padding: 0.75rem 0.875rem !important;
+  }
+  .bba-banner-branded .bba-banner__media,
+  .bba-banner-branded__image {
+    width: 88px !important;
+    height: 88px !important;
+    max-width: 88px !important;
+    max-height: 88px !important;
+  }
+  .bba-banner-branded .bba-banner__title {
+    font-size: 1rem !important;
+  }
+  .bba-banner-branded .bba-banner__subtitle {
+    font-size: 0.75rem !important;
+  }
+  .bba-banner-branded .bba-banner__cta {
+    font-size: 0.8125rem !important;
+    padding: 0.5rem 1rem !important;
+  }
+}
 ```
+
+Pair that with a responsive `BANNER_WIDTH` on the `AdSlot` itself — `min(520px, calc(100vw - 48px))` — and the slot is well-behaved from a 360px phone all the way up to a wide desktop.
 
 A few notes on why these need `!important`:
 

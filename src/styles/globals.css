@@ -455,3 +455,44 @@
   grid-area: image;
   align-self: center;
 }
+
+/*
+ * Phone-width tune: shrink the image column, tighten padding, drop type
+ * one notch so the banner reads at ~360px viewport widths without
+ * overflowing or cropping the title. AdSlot's width is already
+ * `min(520px, calc(100vw - 48px))` so the outer width is fine — this
+ * just adjusts the inner proportions.
+ */
+@media (max-width: 480px) {
+  .bba-banner-branded {
+    grid-template-columns: 1fr 88px !important;
+    gap: 0.5rem 0.75rem !important;
+    padding: 0.75rem 0.875rem !important;
+  }
+
+  .bba-banner-branded .bba-banner__media {
+    flex: 0 0 88px !important;
+    width: 88px !important;
+    height: 88px !important;
+  }
+
+  .bba-banner-branded__image {
+    max-width: 88px !important;
+    max-height: 88px !important;
+  }
+
+  .bba-banner-branded .bba-banner__title {
+    font-size: 1rem !important;
+  }
+
+  .bba-banner-branded .bba-banner__subtitle {
+    font-size: 0.75rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .bba-banner-branded .bba-banner__cta {
+    font-size: 0.8125rem !important;
+    padding: 0.5rem 1rem !important;
+    min-height: 36px !important;
+  }
+}

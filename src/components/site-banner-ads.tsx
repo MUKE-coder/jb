@@ -19,7 +19,9 @@ import { useMemo } from "react";
 
 const ROTATION_INTERVAL_MS = 30_000;
 const DISMISS_WINDOW_DAYS = 7;
-const BANNER_WIDTH = "520px";
+// 520px on wide viewports, otherwise shrink to fit with a 24px margin
+// on each side (matches `offset={24}` so the banner stays balanced).
+const BANNER_WIDTH = "min(520px, calc(100vw - 48px))";
 
 const ADS: readonly BannerConfig[] = [
   {
