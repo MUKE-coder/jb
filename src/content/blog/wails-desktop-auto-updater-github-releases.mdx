@@ -4,12 +4,12 @@ description: "A copy-pasteable walkthrough of the in-app auto-updater shipped in
 image: https://14j7oh8kso.ufs.sh/f/HLxTbDBCDLwfHSP2kTBCDLwfiQb7ypA8NqdmaR9OJs6ego2E
 category: tutorial
 createdAt: 2026-06-02
-updatedAt: 2026-06-02
+updatedAt: 2026-06-05
 ---
 
 # Shipping a Self-Updating Wails Desktop App with GitHub Releases — the Shoppleet Pattern
 
-**Last updated: June 2026 · By [JB (Muke Johnbaptist)](/) — this is the exact auto-updater shipped in [Shoppleet](https://shoppleet.com) v1.5.85+. Hundreds of branch installs, six months unattended, zero update-related support tickets.**
+**Last updated: June 2026 · By [JB (Muke Johnbaptist)](/) — this is the exact auto-updater shipped in [Shoppleet](https://shoppleet.com) v1.5.85+ and improved through v1.6.42. Hundreds of branch installs, a year unattended, zero update-related support tickets.**
 
 A complete, copy-pasteable walkthrough of how to build a desktop app that:
 
@@ -337,15 +337,179 @@ Then verify the release exists at `https://github.com/you/myapp/releases/tag/v0.
 
 For the first-install flow, the raw `.exe` works but it lands wherever the user double-clicks it. The NSIS installer drops a proper Start Menu entry, an uninstaller, and lands the binary in `%LOCALAPPDATA%\Programs\MyApp\MyApp.exe`. That same path is what the auto-updater swaps on subsequent updates, so the installer + auto-updater stay in lockstep.
 
-Wails auto-generates `apps/desktop/build/windows/installer/project.nsi` on first build. The default is fine. The one tweak we make is **per-user install** (no UAC prompt) instead of system-wide:
+Wails auto-generates `apps/desktop/build/windows/installer/project.nsi` on first build. The default works, but four small tweaks turn it into something you'd be happy to put in front of paying customers.
+
+### 4.1 Per-user install (no UAC prompt)
 
 ```nsi
-; project.nsi — make it a per-user install
+; project.nsi
 RequestExecutionLevel user
 InstallDir "$LOCALAPPDATA\Programs\MyApp"
 ```
 
-After this, `wails build -nsis` produces both `MyApp-v1.2.3.exe` (the raw, swappable binary) and `MyApp-Setup-v1.2.3.exe` (the wizard). The release script ships both.
+This also matters for the auto-updater: without it, `InstallAndRestart` fails with `Access is denied` when the binary lives in `%PROGRAMFILES%`. Per-user install + per-user `%LOCALAPPDATA%` path = no UAC and no permission gymnastics on update.
+
+### 4.2 Branded MUI pages (header + welcome bitmaps)
+
+The default NSIS wizard is plain-white MUI — every page looks the same as every other freeware installer from 2007. Modern Windows installers brand the wizard with a header bitmap (top-right corner of every page) and a welcome bitmap (left-side banner on Welcome + Finish pages). Adding them takes four lines:
+
+```nsi
+; project.nsi — brand the wizard
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_BITMAP "header.bmp"        ; 150x57, top-right corner
+!define MUI_HEADERIMAGE_RIGHT
+!define MUI_WELCOMEFINISHPAGE_BITMAP "welcome.bmp" ; 164x314, side banner
+!define MUI_BGCOLOR F5F1EA                          ; page background
+!define MUI_TEXTCOLOR 0E0E0E                        ; body text
+```
+
+You don't want to hand-paint the bitmaps. Generate them from your existing `.ico` so they stay in sync with brand changes. Add this block at the top of `release-desktop.sh` — idempotent, regenerates only when missing:
+
+```bash
+# ---- ensure branded NSIS bitmaps exist (header.bmp + welcome.bmp) ----
+INSTALLER_DIR="apps/desktop/build/windows/installer"
+ICON_SRC="apps/desktop/build/windows/icon.ico"
+if [[ ! -f "$INSTALLER_DIR/header.bmp" || ! -f "$INSTALLER_DIR/welcome.bmp" ]]; then
+  echo "==> Generating NSIS bitmaps from icon"
+  powershell.exe -NoProfile -Command "
+    Add-Type -AssemblyName System.Drawing
+    \$icon = New-Object System.Drawing.Icon('$ICON_SRC')
+    \$bmp  = \$icon.ToBitmap()
+    function NewCanvas(\$w, \$h, \$bg) {
+      \$c = New-Object System.Drawing.Bitmap \$w, \$h
+      \$g = [System.Drawing.Graphics]::FromImage(\$c)
+      \$g.SmoothingMode = 'AntiAlias'
+      \$g.InterpolationMode = 'HighQualityBicubic'
+      \$g.Clear(\$bg)
+      return @{ canvas=\$c; g=\$g }
+    }
+    # Cream brand background (#F5F1EA), ink text (#0E0E0E), mint accent (#1F8A6B)
+    \$cream = [System.Drawing.Color]::FromArgb(245, 241, 234)
+    \$mint  = [System.Drawing.Color]::FromArgb( 31, 138, 107)
+
+    # header.bmp — 150x57, icon left-aligned, room for MUI title text right
+    \$h = NewCanvas 150 57 \$cream
+    \$h.g.DrawImage(\$bmp, 8, 8, 40, 40)
+    \$h.canvas.Save('$INSTALLER_DIR/header.bmp', 'Bmp')
+
+    # welcome.bmp — 164x314, mint side rail + centered icon
+    \$w = NewCanvas 164 314 \$cream
+    \$brush = New-Object System.Drawing.SolidBrush \$mint
+    \$w.g.FillRectangle(\$brush, 0, 0, 6, 314)
+    \$w.g.DrawImage(\$bmp, 50, 100, 64, 64)
+    \$w.canvas.Save('$INSTALLER_DIR/welcome.bmp', 'Bmp')
+  "
+fi
+```
+
+Result: every page of the wizard carries your icon + brand color. Cost: 30 lines of bash, zero ongoing maintenance — bitmaps regenerate when you swap the `.ico`.
+
+### 4.3 Single-instance mutex that actually works
+
+NSIS templates ship with a copy-pasted mutex block to refuse a second concurrent installer. The default has a bug that bites every per-user install:
+
+```nsi
+; The broken default — false-positives at user privilege
+System::Call 'kernel32::CreateMutex(p 0, i 0, t "Global\MyAppSetupMutex") i .r0 ?e'
+Pop $R0
+StrCmp $R0 0 +3
+  MessageBox MB_OK "Setup is already running."
+  Abort
+```
+
+Two problems:
+
+1. **`Global\` namespace requires admin** to create. Combined with `RequestExecutionLevel user`, `CreateMutex` returns `ERROR_ACCESS_DENIED` (5) and the check treats _any_ non-zero LastError as "already running" — permanent false positive.
+2. **`StrCmp $R0 0`** triggers on every error code, not just `ERROR_ALREADY_EXISTS` (183).
+
+The fix:
+
+```nsi
+; Per-user mutex + check the right error code
+System::Call 'kernel32::CreateMutex(p 0, i 0, t "MyAppSetupMutex") i .r0 ?e'
+Pop $R0
+IntCmp $R0 183 0 +3 +3   ; only ERROR_ALREADY_EXISTS (183) means "already running"
+  MessageBox MB_OK "Setup is already running."
+  Abort
+```
+
+We hit this in production. Symptom: operator double-clicked the installer, got "already running", couldn't proceed. Workaround was Task Manager → kill orphaned `*Setup*.exe`. After this patch the message only appears when there's genuinely a concurrent installer.
+
+### 4.4 Offline-capable WebView2 bundle (Full installer)
+
+Wails apps need Microsoft Edge WebView2 at runtime. The default `wails.webview2runtime` macro inserts the 1.8 MB online bootstrapper — fast to ship, but it downloads the actual ~125 MB runtime from Microsoft at install time. On the slow connection of a typical retail till, that step stalls or fails.
+
+The fix: bundle the **WebView2 Evergreen Standalone Installer** (~190 MB) so the installer works fully offline. Define your own macro and use it in place of `wails.webview2runtime`:
+
+```nsi
+; project.nsi
+!macro myapp.webview2offline
+  ; Probe the WebView2 install via the same registry keys MS uses
+  ReadRegStr $0 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+  ${If} $0 == ""
+    ReadRegStr $0 HKCU "SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+  ${EndIf}
+  ${If} $0 == ""
+    DetailPrint "Installing WebView2 runtime (bundled, offline)…"
+    SetOutPath "$PLUGINSDIR"
+    File "webview2\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+    ExecWait '"$PLUGINSDIR\MicrosoftEdgeWebView2RuntimeInstallerX64.exe" /silent /install'
+  ${EndIf}
+!macroend
+```
+
+Then in the section that originally said `!insertmacro wails.webview2runtime`, swap to `!insertmacro myapp.webview2offline`.
+
+The release script downloads + caches the standalone runtime in `apps/desktop/build/windows/installer/webview2/` (gitignored, large):
+
+```bash
+WEBVIEW2_DIR="$INSTALLER_DIR/webview2"
+WEBVIEW2_EXE="$WEBVIEW2_DIR/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+if [[ ! -f "$WEBVIEW2_EXE" ]]; then
+  echo "==> Downloading WebView2 standalone runtime (~190 MB, one-time)"
+  mkdir -p "$WEBVIEW2_DIR"
+  curl -L -o "$WEBVIEW2_EXE" "https://go.microsoft.com/fwlink/?linkid=2124701"
+fi
+```
+
+Net effect: the installer .exe grows from ~22 MB to ~200 MB, but installs on any Windows 10/11 with zero internet. Worth it for field installs on cellular hotspots.
+
+### 4.5 Slim flavour (online bootstrapper) for email-sized installers
+
+200 MB is too big for WhatsApp / email / corporate gateway filters. Ship a second "slim" installer flavour alongside the full one — same wizard, same install location, same shortcuts, just swap the WebView2 macro back to the online bootstrapper:
+
+```nsi
+; project.nsi — conditional macro choice
+!ifdef SLIM_INSTALLER
+  !insertmacro wails.webview2runtime    ; ~22 MB installer, needs internet
+!else
+  !insertmacro myapp.webview2offline    ; ~200 MB installer, offline-ready
+!endif
+```
+
+The release script runs `wails build -nsis` (full installer, default), then re-invokes `makensis` with `-DSLIM_INSTALLER` to produce the slim flavour:
+
+```bash
+# After wails build -nsis produces the full installer:
+echo "==> Building slim installer (no bundled WebView2)"
+(cd "$INSTALLER_DIR" && makensis \
+  -DSLIM_INSTALLER \
+  "-DARG_WAILS_AMD64_BINARY=..\\..\\bin\\$EXE" \
+  project.nsi > /dev/null)
+```
+
+Backslashes matter — NSIS on Windows interprets `File` paths literally, and forward slashes silently produce "no files found" inside conditional macros.
+
+Add a fourth route to your API and a tertiary download button on your website so users have all three choices: Full installer · Slim installer · Raw portable .exe.
+
+After all four tweaks, `wails build -nsis` + the slim re-run produces:
+
+- `MyApp-v1.2.3.exe` — the raw, swappable binary (auto-updater uses this)
+- `MyApp-Setup-v1.2.3.exe` — full installer with bundled WebView2 (~200 MB)
+- `MyApp-Setup-Slim-v1.2.3.exe` — slim installer with online WebView2 (~22 MB)
+- `MyApp-Setup-v1.2.3.zip` — zipped installer for chat/email distribution
+
+The release script ships all four to the GitHub release.
 
 ---
 
@@ -1224,6 +1388,44 @@ export function UpdateProgressModal({
 }
 ```
 
+### Don't let long release notes push the Install button off-screen
+
+A real bug we hit in production: the update modal grew vertically with the release-notes bullets, and on shorter windows the **Install & restart** button slid off the bottom edge with no way to scroll. The fix is two layered constraints:
+
+```tsx
+// 1. Outer modal scrolls when needed, never exceeds 90% of viewport
+<div className="modal max-h-[90vh] overflow-y-auto">
+  {/* …header… */}
+  <ReleaseNotesBlock notes={releaseNotes} />
+  {/* …actions sticky at the bottom… */}
+</div>
+```
+
+```tsx
+// 2. Release notes show the first 3 bullets, "Show all (N)" toggle expands
+function ReleaseNotesBlock({ notes }: { notes: string }) {
+  const bullets = notes.split("\n").filter((l) => l.trim().startsWith("-"));
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? bullets : bullets.slice(0, 3);
+  return (
+    <div>
+      <ul className={expanded ? "max-h-[180px] overflow-y-auto" : ""}>
+        {visible.map((b, i) => (
+          <li key={i}>{b.replace(/^- /, "")}</li>
+        ))}
+      </ul>
+      {bullets.length > 3 && (
+        <button onClick={() => setExpanded((x) => !x)}>
+          {expanded ? "Show fewer" : `Show all (${bullets.length})`}
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+The internal `max-h-[180px]` on the expanded `<ul>` is the second layer: even when expanded, the bullets list itself scrolls inside its own box, so the **Install & restart** button stays anchored at the bottom no matter how verbose the changelog gets. Cheap defensive UI that saves a support ticket.
+
 ### A banner that opens the modal
 
 ```tsx
@@ -1307,6 +1509,15 @@ The 10-minute API cache. Either wait, or click "Check for updates" — that endp
 **`InstallAndRestart` returns `renaming current exe: Access is denied`.**
 Two causes. (1) Another process is holding the .exe open (e.g. an antivirus scanner mid-scan). Retry once. (2) The .exe lives in a directory the user doesn't have write access to — happens when someone "Run as administrator" installed it. The fix is to use per-user install (`%LOCALAPPDATA%\Programs\MyApp`), not `%PROGRAMFILES%`. We tweaked `project.nsi` for exactly this reason.
 
+**Installer says "Setup is already running" on first run.**
+Classic single-instance mutex bug from the default NSIS template (see §4.3). The default uses `Global\` namespace which requires admin, and combined with `RequestExecutionLevel user` the `CreateMutex` call fails with `ERROR_ACCESS_DENIED`. The check `StrCmp $R0 0` then treats _any_ non-zero LastError as "already running". Fix: drop the `Global\` prefix and check `ERROR_ALREADY_EXISTS` (183) specifically with `IntCmp`. Workaround until you can ship a fix: Task Manager → kill any orphaned `*Setup*.exe`.
+
+**Install bar gets stuck at WebView2 download on slow links.**
+The default Wails `webview2runtime` macro inserts the 1.8 MB _online_ bootstrapper. On install, that bootstrapper has to download the ~125 MB runtime from Microsoft. If the link's slow or the corporate firewall blocks `*.microsoft.com`, the wizard hangs there. Ship the Full installer flavour with the bundled WebView2 runtime (§4.4) for retail / field installs; keep the Slim flavour for offices with reliable internet.
+
+**Long release notes hide the Install button.**
+The modal grew vertically with the notes; on shorter windows the action button slid off-screen. See §7 _"Don't let long release notes push the Install button off-screen"_ — `max-h-[90vh]` on the modal and a `Show all (N)` toggle on the bullets list.
+
 **"GitHub 401: Bad credentials" in the API logs.**
 The PAT is wrong or expired. Hit `/api/desktop/diagnostics` — it'll show the token length and the first 4 characters so you can confirm without leaking the secret. Common cause: pasting the token with a trailing newline. The handler trims whitespace defensively, but check anyway.
 
@@ -1327,7 +1538,7 @@ Things we shipped in production that build on this foundation but aren't strictl
 
 - **Bullet release notes.** The release notes come straight from the GitHub release body. Format them as bullets server-side or in the React component so they look polished in the modal.
 - **Sidebar pulse.** A subtle animated dot on the sidebar when an update is available — `animate-ping` in Tailwind, gone the instant the operator opens the modal.
-- **"Minimum supported version" gate.** Return `min_supported_version` from `/api/desktop/latest`. If `APP_VERSION` is below it, refuse to start the app and force the update. We use this to retire legacy clients that depend on now-broken API contracts.
+- **"Minimum supported version" gate.** Return `min_supported_version` from `/api/desktop/latest`. If `APP_VERSION` is below `min_supported_version`, refuse to start the app and force the update. We use this to retire legacy clients that depend on now-broken API contracts.
 - **Activity event.** Emit an `updater.updated` activity row when `CleanupOldOnStartup` removes a `.exe.old` — you'll instantly know your rollout coverage from your existing logs.
 - **Code signing.** A signed `.exe` skips Windows SmartScreen warnings. A code signing certificate is ~$200/year. If you ship to enterprise customers, it pays for itself the first time you avoid a support ticket.
 
@@ -1347,7 +1558,7 @@ The rest is decoration.
 
 ---
 
-_This article is based on the Shoppleet desktop auto-updater shipped in v1.5.85 and improved through v1.5.93. The pattern has run unattended across hundreds of installs for six months without an update-related support ticket._
+_This article is based on the Shoppleet desktop auto-updater shipped in v1.5.85 and improved through v1.6.42. The core pattern hasn't changed since the first version — what changed is the installer chrome (§4.2 branded MUI, §4.4 offline WebView2 bundle, §4.5 slim flavour), the single-instance mutex (§4.3), and the long-release-notes modal scroll (§7). The pattern has run unattended across hundreds of installs for a year without an update-related support ticket._
 
 ---
 
