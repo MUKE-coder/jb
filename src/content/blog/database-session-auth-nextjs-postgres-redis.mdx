@@ -1,0 +1,1248 @@
+---
+title: "Production Session Auth in Next.js — Database Sessions, Redis Caching, and a Versioned API"
+description: "A complete, copy-pasteable walkthrough of database-backed session authentication in Next.js App Router. Signed cookies + Postgres sessions + Redis caching, per-IP rate limiting, IP/device metadata captured per session, an account page with a 'Log out other devices' list, and a users page with server-side pagination. All behind versioned /api/v1 routes — no Server Actions — so the backend can later be re-implemented in Go or Rust without touching the React layer."
+image: /blog/database-session-auth-nextjs-postgres-redis.webp
+category: tutorial
+createdAt: 2026-06-05
+updatedAt: 2026-06-05
+---
+
+# Production Session Auth in Next.js — Database Sessions, Redis Caching, and a Versioned API
+
+**Last updated: June 2026 · By [JB (Muke Johnbaptist)](/) — the exact session-auth shape I drop into every new Next.js + Postgres project. API routes only (no Server Actions), Redis cache in front of session lookups, React Query on the client, per-session device/IP capture, a real "log out other devices" flow, and a server-paginated users table.**
+
+If you're building a real product on Next.js you eventually run into the same question: where does authentication actually live? `next-auth` works until it doesn't. JWT-only sessions can't be revoked. Server Actions tie your data layer to React forever.
+
+This post is the shape I keep landing on after building it five different ways across Shoppleet, DGateway, WesendAll, Grit CMS, and Nexora. It's deliberately conservative — every piece is replaceable — and it gives you a story you can ship to paying customers without surprises.
+
+The principles, up front:
+
+- **API Routes only** — every read/write hangs off `app/api/v1/...`. No Server Actions. The frontend talks HTTP; the backend is swappable.
+- **Database sessions, signed cookies.** The cookie carries a signed session ID; the actual session record lives in Postgres so you can revoke it instantly.
+- **Redis in front of the hot reads** — session lookups and user records. Cache miss falls back to Postgres and backfills.
+- **Rate limiting** on sensitive endpoints, Redis-backed, per-IP.
+- **Session metadata captured** — IP, browser, OS, device type — so the account page can show a "logged-in devices" list.
+- **React Query for all client fetching** — caching, loading skeletons, error handling, invalidation. No `useEffect` for data. Every status code mapped to a user-readable message.
+
+The whole thing is ~1,000 lines of TypeScript spread across 12 files. You can read it in one sitting.
+
+---
+
+## 1 — Architecture overview
+
+```
+Browser (React Query)
+   │  fetch() → /api/v1/...
+   ▼
+Next.js Route Handlers (app/api/v1/*)   ← versioned, framework-agnostic contract
+   │
+   ├── rate limiter (Redis)
+   ├── session verification (Redis cache → DB fallback)
+   └── data access layer → Prisma → Postgres
+                              │
+                              └── Redis (cache hot reads)
+```
+
+Because everything the frontend touches is an HTTP API under `/api/v1`, you can later reimplement those endpoints in Go, Rust, or whatever you like — the React layer doesn't change. The version prefix lets you introduce `v2` without breaking existing clients.
+
+### Tech assumptions
+
+- Next.js App Router (works on Pages Router too with minor rewrites).
+- Postgres + Prisma.
+- Redis — `ioredis` locally, Upstash in production.
+- `jose` for signing the session cookie.
+- `@tanstack/react-query` on the client.
+
+---
+
+## 2 — Database schema
+
+```prisma
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  password  String    // hashed (argon2 / bcrypt)
+  role      Role      @default(USER)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  sessions  Session[]
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+
+  // captured metadata
+  ipAddress  String?
+  userAgent  String?
+  browser    String?
+  os         String?
+  deviceType String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+```
+
+Two indexes pull their weight: `@@index([userId])` so the "list my sessions" query on the account page is O(log n), and `@@index([expiresAt])` so the nightly expired-session cleanup doesn't scan the table.
+
+---
+
+## 3 — Redis client
+
+```ts
+// lib/redis.ts
+import Redis from "ioredis";
+
+export const redis = new Redis(process.env.REDIS_URL!);
+
+// Key helpers — namespaced and versioned so you can flush selectively
+export const keys = {
+  session: (id: string) => `v1:session:${id}`,
+  user: (id: string) => `v1:user:${id}`,
+  rateLimit: (bucket: string, id: string) => `v1:rl:${bucket}:${id}`,
+};
+```
+
+The `v1:` prefix on every key matches the API version. If you ever ship a breaking change to the session payload shape, bump it to `v2:` and the old cache evicts naturally as keys expire.
+
+---
+
+## 4 — Rate limiting
+
+A fixed-window limiter using Redis. Keep it as a reusable helper so any route can apply it.
+
+```ts
+// lib/rate-limit.ts
+import { redis, keys } from "./redis";
+
+type RateLimitResult = {
+  success: boolean;
+  remaining: number;
+  reset: number; // epoch seconds when the window resets
+};
+
+export async function rateLimit(
+  bucket: string, // e.g. 'login', 'api'
+  identifier: string, // e.g. IP address or userId
+  limit: number,
+  windowSeconds: number
+): Promise<RateLimitResult> {
+  const key = keys.rateLimit(bucket, identifier);
+
+  const count = await redis.incr(key);
+  if (count === 1) {
+    await redis.expire(key, windowSeconds);
+  }
+
+  const ttl = await redis.ttl(key);
+  return {
+    success: count <= limit,
+    remaining: Math.max(0, limit - count),
+    reset: Math.floor(Date.now() / 1000) + (ttl > 0 ? ttl : windowSeconds),
+  };
+}
+```
+
+A small wrapper to apply it inside a route handler and short-circuit with a `429`:
+
+```ts
+// lib/api/with-rate-limit.ts
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/request-meta";
+
+export async function enforceRateLimit(
+  req: NextRequest,
+  bucket: string,
+  limit: number,
+  windowSeconds: number
+) {
+  const ip = getClientIp(req);
+  const result = await rateLimit(bucket, ip, limit, windowSeconds);
+
+  if (!result.success) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(result.reset - Math.floor(Date.now() / 1000)),
+          "X-RateLimit-Remaining": String(result.remaining),
+        },
+      }
+    );
+  }
+  return null; // null means "allowed, continue"
+}
+```
+
+The pattern at the call site is one line: `const limited = await enforceRateLimit(req, 'login', 5, 60); if (limited) return limited`. Five requests per minute per IP on the login endpoint is sensible — tune per route.
+
+---
+
+## 5 — Capturing IP + device details
+
+```ts
+// lib/request-meta.ts
+import { NextRequest } from "next/server";
+import { UAParser } from "ua-parser-js";
+
+export function getClientIp(req: NextRequest): string {
+  // Behind a proxy/CDN, trust the forwarded header chain's first entry.
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.headers.get("x-real-ip") ?? "unknown";
+}
+
+export function parseDevice(req: NextRequest) {
+  const userAgent = req.headers.get("user-agent") ?? "";
+  const parser = new UAParser(userAgent);
+  const result = parser.getResult();
+
+  return {
+    userAgent,
+    browser:
+      [result.browser.name, result.browser.version].filter(Boolean).join(" ") ||
+      null,
+    os: [result.os.name, result.os.version].filter(Boolean).join(" ") || null,
+    deviceType: result.device.type ?? "desktop",
+  };
+}
+```
+
+> Only trust `x-forwarded-for` if you're behind a proxy you control (Vercel, Cloudflare, nginx). Otherwise a client can spoof it and your "this device" list becomes lies.
+
+---
+
+## 6 — Session layer (create / verify / refresh / revoke) with Redis caching
+
+The cookie carries a **signed** session ID. Verification checks Redis first, falls back to Postgres, and backfills the cache. This is the heart of the system — read it twice.
+
+```ts
+// lib/session.ts
+import { cookies } from "next/headers";
+import { NextRequest } from "next/server";
+import { SignJWT, jwtVerify } from "jose";
+import { db } from "@/lib/db";
+import { redis, keys } from "@/lib/redis";
+import { getClientIp, parseDevice } from "@/lib/request-meta";
+
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+const secret = new TextEncoder().encode(process.env.SESSION_SECRET!);
+
+// --- cookie sign/verify ---
+async function signCookie(sessionId: string) {
+  return new SignJWT({ sid: sessionId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
+    .sign(secret);
+}
+
+async function readCookie(token: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(token, secret);
+    return (payload.sid as string) ?? null;
+  } catch {
+    return null; // tampered or expired signature
+  }
+}
+
+// --- create ---
+export async function createSession(userId: string, req: NextRequest) {
+  const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
+  const device = parseDevice(req);
+  const ipAddress = getClientIp(req);
+
+  const session = await db.session.create({
+    data: { userId, expiresAt, ipAddress, ...device },
+  });
+
+  // cache the session payload
+  await redis.set(
+    keys.session(session.id),
+    JSON.stringify({ userId, expiresAt: expiresAt.toISOString() }),
+    "EX",
+    SESSION_TTL_SECONDS
+  );
+
+  const token = await signCookie(session.id);
+  const cookieStore = await cookies();
+  cookieStore.set("session", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    expires: expiresAt,
+    path: "/",
+  });
+
+  return session;
+}
+
+// --- verify (Redis → DB) ---
+export async function verifySession() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  if (!token) return { isAuth: false, user: null, sessionId: null };
+
+  const sessionId = await readCookie(token);
+  if (!sessionId) return { isAuth: false, user: null, sessionId: null };
+
+  // try cache
+  const cached = await redis.get(keys.session(sessionId));
+  if (cached) {
+    const { userId, expiresAt } = JSON.parse(cached);
+    if (new Date(expiresAt) > new Date()) {
+      const user = await getCachedUser(userId);
+      if (user) return { isAuth: true, user, sessionId };
+    }
+  }
+
+  // fallback to DB
+  const session = await db.session.findUnique({
+    where: { id: sessionId },
+    include: {
+      user: { select: { id: true, email: true, name: true, role: true } },
+    },
+  });
+
+  if (!session || session.expiresAt < new Date()) {
+    await redis.del(keys.session(sessionId));
+    return { isAuth: false, user: null, sessionId: null };
+  }
+
+  // backfill cache
+  await redis.set(
+    keys.session(sessionId),
+    JSON.stringify({
+      userId: session.userId,
+      expiresAt: session.expiresAt.toISOString(),
+    }),
+    "EX",
+    Math.floor((session.expiresAt.getTime() - Date.now()) / 1000)
+  );
+
+  return { isAuth: true, user: session.user, sessionId };
+}
+
+// --- user cache helper ---
+async function getCachedUser(userId: string) {
+  const cached = await redis.get(keys.user(userId));
+  if (cached) return JSON.parse(cached);
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, role: true },
+  });
+  if (user) {
+    await redis.set(keys.user(userId), JSON.stringify(user), "EX", 300); // 5 min
+  }
+  return user;
+}
+
+export async function invalidateUserCache(userId: string) {
+  await redis.del(keys.user(userId));
+}
+
+// --- refresh (sliding expiry) ---
+export async function refreshSession(sessionId: string) {
+  const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
+  await db.session.update({
+    where: { id: sessionId },
+    data: { expiresAt, lastUsedAt: new Date() },
+  });
+  const cached = await redis.get(keys.session(sessionId));
+  if (cached) {
+    const data = JSON.parse(cached);
+    data.expiresAt = expiresAt.toISOString();
+    await redis.set(
+      keys.session(sessionId),
+      JSON.stringify(data),
+      "EX",
+      SESSION_TTL_SECONDS
+    );
+  }
+}
+
+// --- delete current ---
+export async function deleteSession() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  if (token) {
+    const sessionId = await readCookie(token);
+    if (sessionId) {
+      await db.session.delete({ where: { id: sessionId } }).catch(() => {});
+      await redis.del(keys.session(sessionId));
+    }
+  }
+  cookieStore.delete("session");
+}
+
+// --- revoke a specific session (logout other device) ---
+export async function revokeSession(sessionId: string, ownerUserId: string) {
+  const session = await db.session.findUnique({ where: { id: sessionId } });
+  if (!session || session.userId !== ownerUserId) {
+    return { ok: false, status: 403 as const };
+  }
+  await db.session.delete({ where: { id: sessionId } });
+  await redis.del(keys.session(sessionId));
+  return { ok: true, status: 200 as const };
+}
+```
+
+> Revoking via the DB + Redis delete makes "log out everywhere" instant — the next request that hits cache miss → DB miss is rejected. That's the entire reason DB-backed sessions exist over pure JWTs.
+
+The signed cookie is doing two jobs: it carries the opaque session ID, and the HMAC signature lets the edge middleware reject obviously-forged cookies without touching the database. The actual auth decision stays in the API.
+
+---
+
+## 7 — API Routes (versioned, `app/api/v1/...`)
+
+### 7.1 Login — `app/api/v1/auth/login/route.ts`
+
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
+import { createSession } from "@/lib/session";
+import { enforceRateLimit } from "@/lib/api/with-rate-limit";
+
+export async function POST(req: NextRequest) {
+  const limited = await enforceRateLimit(req, "login", 5, 60); // 5/min per IP
+  if (limited) return limited;
+
+  let body: { email?: string; password?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 }
+    );
+  }
+
+  const { email, password } = body;
+  if (!email || !password) {
+    return NextResponse.json(
+      { error: "Email and password are required" },
+      { status: 422 }
+    );
+  }
+
+  const user = await db.user.findUnique({ where: { email } });
+  // generic message to avoid user enumeration
+  if (!user || !(await verifyPassword(password, user.password))) {
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+  }
+
+  await createSession(user.id, req);
+  return NextResponse.json(
+    {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    },
+    { status: 200 }
+  );
+}
+```
+
+The generic "Invalid credentials" message — same response shape for unknown-email and wrong-password — is what stops attackers from enumerating valid emails by timing/error-message differences.
+
+### 7.2 Logout — `app/api/v1/auth/logout/route.ts`
+
+```ts
+import { NextResponse } from "next/server";
+import { deleteSession } from "@/lib/session";
+
+export async function POST() {
+  await deleteSession();
+  return NextResponse.json({ ok: true }, { status: 200 });
+}
+```
+
+### 7.3 Current user — `app/api/v1/auth/me/route.ts`
+
+```ts
+import { NextResponse } from "next/server";
+import { verifySession } from "@/lib/session";
+
+export async function GET() {
+  const { isAuth, user } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return NextResponse.json({ user }, { status: 200 });
+}
+```
+
+### 7.4 Account — get & update profile — `app/api/v1/account/route.ts`
+
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { verifySession, invalidateUserCache } from "@/lib/session";
+import { enforceRateLimit } from "@/lib/api/with-rate-limit";
+
+export async function GET() {
+  const { isAuth, user } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const profile = await db.user.findUnique({
+    where: { id: user.id },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      createdAt: true,
+    },
+  });
+  return NextResponse.json({ profile }, { status: 200 });
+}
+
+export async function PATCH(req: NextRequest) {
+  const { isAuth, user } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const limited = await enforceRateLimit(req, "account-update", 10, 60);
+  if (limited) return limited;
+
+  let body: { name?: string; email?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 }
+    );
+  }
+
+  if (body.email && !/^\S+@\S+\.\S+$/.test(body.email)) {
+    return NextResponse.json(
+      { error: "Invalid email format" },
+      { status: 422 }
+    );
+  }
+
+  try {
+    const updated = await db.user.update({
+      where: { id: user.id },
+      data: { name: body.name, email: body.email },
+      select: { id: true, email: true, name: true, role: true },
+    });
+    await invalidateUserCache(user.id);
+    return NextResponse.json({ profile: updated }, { status: 200 });
+  } catch (e: any) {
+    if (e.code === "P2002") {
+      return NextResponse.json(
+        { error: "Email already in use" },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json(
+      { error: "Failed to update profile" },
+      { status: 500 }
+    );
+  }
+}
+```
+
+### 7.5 List sessions / devices — `app/api/v1/account/sessions/route.ts`
+
+```ts
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { verifySession } from "@/lib/session";
+
+export async function GET() {
+  const { isAuth, user, sessionId } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const sessions = await db.session.findMany({
+    where: { userId: user.id, expiresAt: { gt: new Date() } },
+    orderBy: { lastUsedAt: "desc" },
+    select: {
+      id: true,
+      ipAddress: true,
+      browser: true,
+      os: true,
+      deviceType: true,
+      lastUsedAt: true,
+      createdAt: true,
+    },
+  });
+
+  return NextResponse.json(
+    {
+      sessions: sessions.map((s) => ({ ...s, current: s.id === sessionId })),
+    },
+    { status: 200 }
+  );
+}
+```
+
+The `current: s.id === sessionId` flag is what lets the UI render a "This device" badge and hide the "Log out" button on the row the user is sitting on.
+
+### 7.6 Revoke a session — `app/api/v1/account/sessions/[id]/route.ts`
+
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import { verifySession, revokeSession } from "@/lib/session";
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { isAuth, user, sessionId } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  if (id === sessionId) {
+    return NextResponse.json(
+      { error: "Use logout to end the current session" },
+      { status: 400 }
+    );
+  }
+
+  const result = await revokeSession(id, user.id);
+  if (!result.ok)
+    return NextResponse.json({ error: "Forbidden" }, { status: result.status });
+  return NextResponse.json({ ok: true }, { status: 200 });
+}
+```
+
+A "log out all other devices" endpoint — add a `DELETE` handler to `app/api/v1/account/sessions/route.ts`:
+
+```ts
+import { redis, keys } from "@/lib/redis";
+
+export async function DELETE() {
+  const { isAuth, user, sessionId } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const others = await db.session.findMany({
+    where: { userId: user.id, id: { not: sessionId ?? "" } },
+    select: { id: true },
+  });
+  await db.session.deleteMany({
+    where: { userId: user.id, id: { not: sessionId ?? "" } },
+  });
+  await Promise.all(others.map((s) => redis.del(keys.session(s.id))));
+  return NextResponse.json(
+    { ok: true, revoked: others.length },
+    { status: 200 }
+  );
+}
+```
+
+### 7.7 Users list with server-side pagination — `app/api/v1/users/route.ts`
+
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { verifySession } from "@/lib/session";
+import { redis } from "@/lib/redis";
+
+export async function GET(req: NextRequest) {
+  const { isAuth, user } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (user.role !== "ADMIN")
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const pageSize = Math.min(
+    100,
+    Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10) || 20)
+  );
+  const search = (searchParams.get("search") ?? "").trim();
+
+  const where = search
+    ? {
+        OR: [
+          { email: { contains: search, mode: "insensitive" as const } },
+          { name: { contains: search, mode: "insensitive" as const } },
+        ],
+      }
+    : {};
+
+  const cacheKey = `v1:users:${page}:${pageSize}:${search}`;
+  const cached = await redis.get(cacheKey);
+  if (cached) return NextResponse.json(JSON.parse(cached), { status: 200 });
+
+  const [total, items] = await Promise.all([
+    db.user.count({ where }),
+    db.user.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  const payload = {
+    items,
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+      hasNext: page * pageSize < total,
+      hasPrev: page > 1,
+    },
+  };
+
+  await redis.set(cacheKey, JSON.stringify(payload), "EX", 30); // short TTL
+  return NextResponse.json(payload, { status: 200 });
+}
+```
+
+> Invalidate `v1:users:*` keys when a user is created/updated/deleted. Avoid `redis.keys()` scans in production — keep a version counter in Redis (`v1:users:_ver`) and include it in the cache key, then bump it on writes.
+
+---
+
+## 8 — Frontend — React Query setup
+
+```tsx
+// app/providers.tsx
+"use client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [client] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: (failureCount, error: any) => {
+              // don't retry client errors (4xx)
+              if (error?.status >= 400 && error?.status < 500) return false;
+              return failureCount < 2;
+            },
+            staleTime: 30_000,
+          },
+        },
+      })
+  );
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+```
+
+The "don't retry 4xx" rule matters more than it looks. If your `/api/v1/account` returns 401, retrying it doesn't make the user more logged in — it just bumps your rate limiter counter for nothing.
+
+A `fetch` wrapper that **catches every status code** and maps it to a user-readable message:
+
+```ts
+// lib/api/client.ts
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, message: string, body?: unknown) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+export async function apiFetch<T>(
+  input: string,
+  init?: RequestInit
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(input, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      credentials: "include",
+    });
+  } catch {
+    // network failure / CORS / offline
+    throw new ApiError(0, "Network error. Check your connection.");
+  }
+
+  // attempt to parse JSON; tolerate empty bodies
+  let data: any = null;
+  const text = await res.text();
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (!res.ok) {
+    const message =
+      data?.error ??
+      (
+        {
+          400: "Bad request",
+          401: "You are not signed in",
+          403: "You do not have permission to do that",
+          404: "Not found",
+          409: "Conflict",
+          422: "Validation failed",
+          429: "Too many requests. Slow down.",
+          500: "Something went wrong on our end",
+        } as Record<number, string>
+      )[res.status] ??
+      `Request failed (${res.status})`;
+    throw new ApiError(res.status, message, data);
+  }
+
+  return data as T;
+}
+```
+
+Native `fetch`, not axios. Two reasons: bundle size, and the explicit error path forces you to handle every status code in one place instead of scattering try/catches across every component.
+
+---
+
+## 9 — Frontend — Account page (profile + devices list)
+
+```tsx
+// app/account/page.tsx
+"use client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { apiFetch, ApiError } from "@/lib/api/client";
+
+type Profile = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  createdAt: string;
+};
+type SessionRow = {
+  id: string;
+  ipAddress: string | null;
+  browser: string | null;
+  os: string | null;
+  deviceType: string | null;
+  lastUsedAt: string;
+  createdAt: string;
+  current: boolean;
+};
+
+export default function AccountPage() {
+  const qc = useQueryClient();
+
+  const profileQuery = useQuery({
+    queryKey: ["account"],
+    queryFn: () => apiFetch<{ profile: Profile }>("/api/v1/account"),
+  });
+
+  const sessionsQuery = useQuery({
+    queryKey: ["account", "sessions"],
+    queryFn: () =>
+      apiFetch<{ sessions: SessionRow[] }>("/api/v1/account/sessions"),
+  });
+
+  const updateProfile = useMutation({
+    mutationFn: (data: { name?: string; email?: string }) =>
+      apiFetch<{ profile: Profile }>("/api/v1/account", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["account"] }),
+  });
+
+  const revokeSession = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/v1/account/sessions/${id}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["account", "sessions"] }),
+  });
+
+  const revokeAll = useMutation({
+    mutationFn: () =>
+      apiFetch("/api/v1/account/sessions", { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["account", "sessions"] }),
+  });
+
+  const [form, setForm] = useState({ name: "", email: "" });
+
+  // Loading skeleton (no useEffect anywhere)
+  if (profileQuery.isLoading) return <ProfileSkeleton />;
+  if (profileQuery.isError) {
+    return (
+      <ErrorBox
+        message={(profileQuery.error as ApiError).message}
+        onRetry={profileQuery.refetch}
+      />
+    );
+  }
+
+  const p = profileQuery.data!.profile;
+
+  return (
+    <div className="account">
+      <section>
+        <h2>Profile</h2>
+        <label>
+          Name
+          <input
+            defaultValue={p.name ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          />
+        </label>
+        <label>
+          Email
+          <input
+            defaultValue={p.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          />
+        </label>
+        <button
+          disabled={updateProfile.isPending}
+          onClick={() => updateProfile.mutate(form)}
+        >
+          {updateProfile.isPending ? "Saving…" : "Save changes"}
+        </button>
+        {updateProfile.isError && (
+          <p className="error">{(updateProfile.error as ApiError).message}</p>
+        )}
+        {updateProfile.isSuccess && <p className="success">Saved.</p>}
+      </section>
+
+      <section>
+        <div className="row">
+          <h2>Logged-in devices</h2>
+          <button
+            onClick={() => revokeAll.mutate()}
+            disabled={revokeAll.isPending}
+          >
+            Log out all other devices
+          </button>
+        </div>
+
+        {sessionsQuery.isLoading && <SessionSkeleton />}
+        {sessionsQuery.isError && (
+          <ErrorBox
+            message={(sessionsQuery.error as ApiError).message}
+            onRetry={sessionsQuery.refetch}
+          />
+        )}
+        {sessionsQuery.data?.sessions.map((s) => (
+          <div key={s.id} className="device">
+            <div>
+              <strong>{s.browser ?? "Unknown browser"}</strong> on{" "}
+              {s.os ?? "Unknown OS"}
+              {s.current && <span className="badge">This device</span>}
+              <div className="muted">
+                {s.deviceType} · {s.ipAddress} · last used{" "}
+                {new Date(s.lastUsedAt).toLocaleString()}
+              </div>
+            </div>
+            {!s.current && (
+              <button
+                onClick={() => revokeSession.mutate(s.id)}
+                disabled={revokeSession.isPending}
+              >
+                Log out
+              </button>
+            )}
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+}
+
+function ProfileSkeleton() {
+  return <div className="skeleton" style={{ height: 220 }} />;
+}
+function SessionSkeleton() {
+  return (
+    <>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="skeleton"
+          style={{ height: 64, marginBottom: 8 }}
+        />
+      ))}
+    </>
+  );
+}
+function ErrorBox({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="error-box">
+      <p>{message}</p>
+      <button onClick={onRetry}>Try again</button>
+    </div>
+  );
+}
+```
+
+No `useEffect` anywhere. React Query owns the data lifecycle — when the page mounts it kicks off the queries; when the mutation succeeds it invalidates the relevant key and the UI re-renders with fresh data. Three things to notice:
+
+1. `isLoading` shows a skeleton, not a spinner. Spinners are for unknown duration; we know roughly how long these queries take.
+2. `isError` shows a real message with a Retry button, sourced from `ApiError.message` — which traces back to either the server's response body or our 400/401/403/...→string map.
+3. The `Log out` button is hidden on the row marked `current: true` so the user can't accidentally log themselves out from the sessions list (there's a separate Logout button in the navbar for that).
+
+---
+
+## 10 — Frontend — Users page (server-side pagination)
+
+```tsx
+// app/users/page.tsx
+"use client";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useState } from "react";
+import { apiFetch, ApiError } from "@/lib/api/client";
+
+type User = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  createdAt: string;
+};
+type UsersResponse = {
+  items: User[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+};
+
+export default function UsersPage() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const pageSize = 20;
+
+  const query = useQuery({
+    queryKey: ["users", page, pageSize, search],
+    queryFn: () =>
+      apiFetch<UsersResponse>(
+        `/api/v1/users?page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}`
+      ),
+    placeholderData: keepPreviousData, // keeps old page visible while next loads
+  });
+
+  return (
+    <div className="users">
+      <input
+        placeholder="Search users…"
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setPage(1);
+        }}
+      />
+
+      {query.isLoading ? (
+        <TableSkeleton />
+      ) : query.isError ? (
+        <div className="error-box">
+          <p>{(query.error as ApiError).message}</p>
+          <button onClick={() => query.refetch()}>Retry</button>
+        </div>
+      ) : (
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Joined</th>
+              </tr>
+            </thead>
+            <tbody style={{ opacity: query.isFetching ? 0.6 : 1 }}>
+              {query.data!.items.map((u) => (
+                <tr key={u.id}>
+                  <td>{u.name ?? "—"}</td>
+                  <td>{u.email}</td>
+                  <td>{u.role}</td>
+                  <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="pager">
+            <button
+              disabled={!query.data!.pagination.hasPrev}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Previous
+            </button>
+            <span>
+              Page {query.data!.pagination.page} of{" "}
+              {query.data!.pagination.totalPages} (
+              {query.data!.pagination.total} total)
+            </span>
+            <button
+              disabled={!query.data!.pagination.hasNext}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TableSkeleton() {
+  return (
+    <div>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          className="skeleton"
+          style={{ height: 40, marginBottom: 6 }}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+`placeholderData: keepPreviousData` is the trick that makes pagination feel instant — instead of flashing a skeleton between pages, React Query keeps the old page visible (dimmed via `opacity: 0.6`) until the new one arrives. Combined with the 30-second server cache on `/api/v1/users`, page-flipping feels like a static site.
+
+---
+
+## 11 — Middleware (optimistic only)
+
+Edge middleware can't reach Postgres/Redis reliably, so use it only for a cheap signed-cookie presence + signature check to bounce obvious anonymous traffic. The authoritative DB/Redis check stays in your API routes.
+
+```ts
+// middleware.ts
+import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
+
+const secret = new TextEncoder().encode(process.env.SESSION_SECRET!);
+
+export async function middleware(req: NextRequest) {
+  const token = req.cookies.get("session")?.value;
+  let valid = false;
+  if (token) {
+    try {
+      await jwtVerify(token, secret);
+      valid = true;
+    } catch {
+      valid = false;
+    }
+  }
+
+  const isProtected = ["/account", "/users"].some((p) =>
+    req.nextUrl.pathname.startsWith(p)
+  );
+  if (isProtected && !valid) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+  return NextResponse.next();
+}
+
+export const config = { matcher: ["/account/:path*", "/users/:path*"] };
+```
+
+This bounces unauthenticated browsers at the edge before any React renders. A user with a forged or expired cookie sees a 302 to `/login` instantly. A user with a valid cookie but a revoked session sees the page render briefly, then the first React Query call returns 401 and the page shows the unauthorized state. That's a feature, not a bug — the middleware deliberately stays cheap.
+
+---
+
+## 12 — Maintenance & hardening checklist
+
+The above is enough to ship. The below is what separates "ships" from "stays shipped":
+
+- **Expired session cleanup**: cron/worker running `DELETE FROM "Session" WHERE "expiresAt" < now()` every hour. Otherwise your `Session` table grows forever.
+- **Refresh throttling**: don't call `refreshSession` on every request — only if the session is past, say, half its lifetime. Otherwise every request is a DB write.
+- **Per-user rate-limit buckets**: in addition to per-IP. A logged-in user can't be locked out by a noisy office NAT mate.
+- **Cache invalidation**: invalidate `v1:user:*` on profile change (done in the PATCH handler), and `v1:users:*` on any user mutation (use a version counter, not `KEYS`).
+- **Cookie security**: `httpOnly`, `secure`, `sameSite=lax` (or `strict` if no cross-site nav needed), signed with `jose`. The cookie should never be readable from JavaScript.
+- **IP trust**: only trust `x-forwarded-for` behind a proxy you control. On Vercel this is automatic; on a raw VPS behind nginx, configure `set_real_ip_from` correctly.
+- **Password hashing**: argon2id or bcrypt; never `select` the hash into any API response, even by accident — always use `select: { ... }` explicitly to whitelist returned fields.
+- **API versioning**: keep the `/api/v1` contract stable. Introduce `/api/v2` for breaking changes so a future Go or Rust backend can implement the same routes side-by-side during a migration.
+- **Audit log**: log every login, logout, password change, and revoke into a separate table. The first time a customer asks "did someone else log into my account?" you'll be glad you did.
+
+---
+
+## What you actually get
+
+When this is wired up end-to-end, you have:
+
+- A login flow that's rate-limited and immune to user-enumeration timing attacks.
+- A session you can revoke instantly from anywhere (the Redis delete is the kill switch).
+- An account page that shows the user every device they're logged into, with the IP, browser, OS, and last-seen time — and a one-click "Log out this device" / "Log out everywhere else" flow.
+- A users page that paginates 100,000 rows with sub-100ms server response times because Redis is in front of every list query.
+- A frontend with zero `useEffect` for data, every error code mapped to a real message, and pagination that feels like a static site.
+- A backend that's just HTTP. Tomorrow you can rewrite the `/api/v1/*` handlers in Go and the React app never knows.
+
+The whole thing is ~1,000 lines. You can read every line in an afternoon. There's no magic.
+
+---
+
+## Dependencies
+
+```bash
+pnpm add @tanstack/react-query jose ioredis ua-parser-js
+# plus your ORM + password hasher, e.g.
+pnpm add @prisma/client argon2
+```
+
+---
+
+## Related reading
+
+- [Securing your first VPS (and installing Dokploy)](/blog/secure-vps-and-install-dokploy) — lock down the box the Postgres and Redis live on before you put real users on it.
+- [Sentinel v2 + Pulse v1 migration guide](/blog/sentinel-pulse-migration-guide) — the WAF + observability layer I wrap around the same Go/Gin APIs when I rewrite the backend off Next.js.
+- [Load-testing your API with k6](/blog/api-perfomance-testing-with-k6) — once auth ships, you want to know it survives 500 concurrent logins.
+- [Build and sell APIs with Next.js](/blog/build-and-sell-apis-with-nextjs) — the productisation story for the same `/api/v1/*` shape.
+
+---
+
+## Need help shipping auth on your Next.js app?
+
+I run paid engagements for teams shipping production Next.js + Postgres + Redis stacks. Auth, billing, multi-tenancy, internal tools — the unglamorous load-bearing pieces.
+
+- **[Book a session](/book)** — 1-on-1 architecture / code review / paired auth wiring. Sessions from UGX 50,000.
+- **Hire Desishub** for full Next.js + Go backend builds — [desishub.com](https://desishub.com)
+- **YouTube** — practical Next.js + AI tutorials at [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- **WhatsApp JB**: [+256 762 063 160](https://wa.me/256762063160)
