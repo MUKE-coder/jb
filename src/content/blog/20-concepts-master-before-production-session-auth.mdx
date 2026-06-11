@@ -1,0 +1,3015 @@
+---
+title: "20 Concepts to Master Before You Ship Production Session Auth in Next.js"
+description: "The full prerequisite map for the Production Session Auth in Next.js tutorial — 20 concepts spanning TypeScript, HTTP, REST, cookies, password hashing, sessions vs JWTs, Redis caching, rate limiting, Prisma, indexing, the edge boundary, React Query, RBAC, API versioning, and production hardening. Each concept comes with a one-paragraph mental model, a deep dive, three runnable examples explained line by line, and a self-test. Read the overviews first to find your gaps, then study the deep dives for the ones you're shaky on."
+image: /blog/20-concepts-master-before-production-session-auth.webp
+category: tutorial
+createdAt: 2026-06-05
+updatedAt: 2026-06-05
+---
+
+# 20 Concepts to Master Before You Ship Production Session Auth in Next.js
+
+**Last updated: June 2026 · By [JB (Muke Johnbaptist)](/) — the full prerequisite map for the [Production Session Auth in Next.js](/blog/database-session-auth-nextjs-postgres-redis) tutorial. If you can answer the self-test at the end of every concept in your own words, you can read the auth code as code instead of magic — which is the only safe way to use someone else's auth in your own product.**
+
+The session-auth build is roughly 1,000 lines of TypeScript across 12 files. It reads cleanly in one sitting — **if** you already understand the ideas it's built on. If you don't, every file will feel like magic, and "magic" is exactly what makes auth code dangerous to copy-paste.
+
+This guide is the prerequisite map. **20 concepts**, each with four parts:
+
+- **High-level overview** — the one-paragraph mental model.
+- **Deep dive** — a thorough explanation of how the concept actually works, where the real learning happens.
+- **Examples** — at least three _complete, runnable_ examples per concept, each fully explained line by line, so you see the idea in real code rather than fragments.
+- **Why it matters** — what breaks in production if you don't internalize it.
+
+Each concept ends with a **self-test**. Read the overviews of all twenty first to find your gaps, then study the deep dives and examples for the ones you're shaky on. A readiness bar is at the very end.
+
+If you've already shipped a real Next.js app with auth and want the build itself, jump straight to the [Production Session Auth tutorial](/blog/database-session-auth-nextjs-postgres-redis) — this post is the warm-up for everyone else.
+
+---
+
+## 1. TypeScript: Types as a Design Tool, Not a Tax
+
+### High-level overview
+
+TypeScript is JavaScript with a static type system. In the course, types aren't decoration — they're the contract that keeps the frontend and backend honest about the exact shape of every piece of data crossing the HTTP boundary. A type error at compile time is an auth bug that never reaches production.
+
+### Deep dive
+
+The type system does real work in this codebase, and you need fluency in five specific features:
+
+**Union types and null-safety.** `name: string | null` says a value is _either_ a string _or_ null. TypeScript then refuses to let you call `name.toUpperCase()` until you've handled the null case. This is how the course guarantees the UI never crashes on a missing name — the compiler forces a fallback like `name ?? "Unknown"` at every use site.
+
+**Generics.** A generic is a type _parameter_ — a placeholder filled in at the call site. The API client is declared `apiFetch<T>(...): Promise<T>`. When you call `apiFetch<UsersResponse>(...)`, `T` becomes `UsersResponse`, and the return value is fully typed with zero casting. One function, correctly typed for every endpoint.
+
+**Type narrowing.** When a value could be several types, a runtime check _narrows_ it. After `if (!result.ok)`, TypeScript knows you're in the failure branch and that `result.status` is `403`; in the `else`, it knows `status` is `200`. The compiler tracks this flow for you.
+
+**Literal types and `as const`.** By default, `403` widens to the general type `number`. Writing `403 as const` pins it to the exact literal `403`, which lets you build precise discriminated unions like `{ ok: false; status: 403 } | { ok: true; status: 200 }`.
+
+**Utility types.** `Record<number, string>` describes an object whose keys are numbers and values are strings — used for the status-code-to-message map. `Promise<T>` describes an async result. `Partial<T>`, `Pick<T, K>`, and `Omit<T, K>` reshape existing types without redefining them.
+
+The mental shift: stop thinking of types as something you write to satisfy the compiler, and start thinking of them as the _first draft of your design_. If the types are clean, the code usually follows.
+
+### Examples
+
+**Example 1 — A fully typed, generic API client with a custom error class.**
+
+```ts
+// lib/api/client.ts
+
+// A custom Error subclass that carries the HTTP status and the parsed body.
+// Extending Error means it works with try/catch and React Query's error handling.
+export class ApiError extends Error {
+  status: number;
+  body: unknown; // 'unknown' forces callers to narrow before using it
+  constructor(status: number, message: string, body?: unknown) {
+    super(message); // sets Error.message
+    this.status = status;
+    this.body = body;
+    this.name = "ApiError"; // so error.name reads "ApiError", not "Error"
+  }
+}
+
+// <T> is the generic: the caller decides what shape comes back.
+// Promise<T> means "an async value of type T".
+export async function apiFetch<T>(
+  input: string,
+  init?: RequestInit
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(input, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      credentials: "include", // send the httpOnly session cookie with the request
+    });
+  } catch {
+    // A thrown fetch means network failure (offline/CORS) — normalize it.
+    throw new ApiError(0, "Network error. Check your connection.");
+  }
+
+  // Parse JSON defensively: some responses (logout) have empty bodies.
+  let data: unknown = null;
+  const text = await res.text();
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (!res.ok) {
+    // (data as any)?.error reads the server's message if present.
+    const serverMsg = (data as { error?: string } | null)?.error;
+    throw new ApiError(
+      res.status,
+      serverMsg ?? `Request failed (${res.status})`,
+      data
+    );
+  }
+
+  return data as T; // the single, deliberate cast — justified because the caller named T
+}
+```
+
+_Explanation:_ The generic `<T>` is the heart of this. One function serves every endpoint, and each call site gets full type safety: `apiFetch<{ profile: Profile }>(...)` returns exactly that shape. `ApiError extends Error` so it flows through `try/catch` and React Query naturally, while carrying the extra `status` and `body` fields the UI needs. The two `try/catch` blocks separate _network_ failure (the outer one, status 0) from _HTTP_ failure (the `!res.ok` branch), which are genuinely different situations that deserve different messages.
+
+**Example 2 — A discriminated union return type with `as const`, narrowed by the caller.**
+
+```ts
+// lib/session.ts (excerpt)
+
+// The return type is a UNION of two exact shapes. 'as const' pins the literals.
+type RevokeResult = { ok: true; status: 200 } | { ok: false; status: 403 };
+
+export async function revokeSession(
+  sessionId: string,
+  ownerUserId: string
+): Promise<RevokeResult> {
+  const session = await db.session.findUnique({ where: { id: sessionId } });
+
+  // Ownership check: you may only revoke YOUR OWN sessions.
+  if (!session || session.userId !== ownerUserId) {
+    return { ok: false, status: 403 as const };
+  }
+
+  await db.session.delete({ where: { id: sessionId } });
+  await redis.del(keys.session(sessionId));
+  return { ok: true, status: 200 as const };
+}
+
+// --- caller ---
+const result = await revokeSession(id, user.id);
+if (!result.ok) {
+  // TypeScript has NARROWED result to { ok: false; status: 403 } here.
+  return NextResponse.json({ error: "Forbidden" }, { status: result.status });
+}
+// In this branch, TypeScript knows result is { ok: true; status: 200 }.
+return NextResponse.json({ ok: true }, { status: result.status });
+```
+
+_Explanation:_ The union `{ ok: true } | { ok: false }` is a _discriminated union_ — the `ok` field discriminates between the two cases. After `if (!result.ok)`, the compiler narrows `result` to the failure shape, so `result.status` is known to be `403` with no runtime guard needed. Without `as const`, `status` would widen to `number` and the precise narrowing would be lost. This pattern replaces throwing exceptions for _expected_ outcomes (forbidden is not exceptional — it's a normal result), making the control flow explicit and type-checked.
+
+**Example 3 — Reshaping types with utility types instead of redefining them.**
+
+```ts
+// The full DB user, mirrored from the Prisma schema.
+type User = {
+  id: string;
+  email: string;
+  name: string | null;
+  password: string; // the hash — must NEVER leave the server
+  role: "USER" | "ADMIN";
+  createdAt: Date;
+};
+
+// What the API is allowed to return: everything EXCEPT the password.
+// Omit<T, K> = T with key K removed. One source of truth, no drift.
+type PublicUser = Omit<User, "password">;
+
+// What a profile-update request may contain: only name and email, both optional.
+// Pick selects fields; Partial makes them optional.
+type ProfileUpdate = Partial<Pick<User, "name" | "email">>;
+
+// The status-code-to-message map: keys are numbers, values are strings.
+const STATUS_MESSAGES: Record<number, string> = {
+  400: "Bad request",
+  401: "You are not signed in",
+  403: "You do not have permission to do that",
+  409: "Conflict",
+  422: "Validation failed",
+  429: "Too many requests. Slow down.",
+  500: "Something went wrong on our end",
+};
+
+function messageFor(status: number): string {
+  return STATUS_MESSAGES[status] ?? `Request failed (${status})`;
+}
+```
+
+_Explanation:_ `Omit<User, "password">` derives `PublicUser` _from_ `User`, so if you ever add a field to `User`, `PublicUser` updates automatically — except it can never accidentally include `password`, because that field is omitted by construction. This is a type-level safety guarantee against leaking the hash. `Partial<Pick<...>>` builds the update-payload type from the same source, so the shapes can't drift apart. `Record<number, string>` types the lookup table so a typo'd key or non-string value is a compile error. These utility types mean you define data shapes _once_ and derive every variant, eliminating the copy-paste drift that causes real bugs.
+
+### Why it matters
+
+Auth bugs are overwhelmingly _shape_ bugs — a field is null when you assumed a string, the password hash sneaks into a response, a request body is missing a key. TypeScript catches every one of these at compile time. If you fight the type system and cast everything to `any`, you throw away the entire safety net precisely where you can least afford to.
+
+**Self-test:** What does the `| null` in `name: string | null` force you to do every time you render `name`, and how does `Omit<User, "password">` prevent the hash from ever appearing in an API response?
+
+---
+
+## 2. HTTP as a Contract: Status Codes, Headers, and Statelessness
+
+### High-level overview
+
+Everything in the course hangs off `app/api/v1/...` route handlers that speak plain HTTP. The frontend never imports a backend function — it sends a request and reads a response. HTTP _is_ the interface, so you need it to feel like a precise contract, where every status code and header carries meaning the rest of the system depends on.
+
+### Deep dive
+
+**Status codes are a vocabulary.** The course uses them to communicate intent so precisely that the entire client error-handling system runs off them automatically:
+
+- **401 Unauthorized** — really means _unauthenticated_: "I don't know who you are." Returned when there's no valid session.
+- **403 Forbidden** — _authenticated but not allowed_: "I know who you are, and you may not do this." Returned when a logged-in non-admin hits the users list.
+- **400 Bad Request** — the request itself is malformed (e.g. unparseable JSON body).
+- **422 Unprocessable Entity** — the request is well-formed but the _data_ is invalid (a missing required field).
+- **409 Conflict** — the request conflicts with current state (email already taken).
+- **429 Too Many Requests** — rate limit exceeded.
+- **200 / 201** — success / created.
+- **500** — an unexpected server error (a bug), as opposed to the 4xx family which are _client_ errors (the caller did something wrong).
+
+**Headers carry metadata alongside the body.** `Content-Type: application/json` tells the client how to parse. `Set-Cookie` establishes the session. `Retry-After` tells a rate-limited client how long to wait. `X-RateLimit-Remaining` reports the budget left.
+
+**Statelessness** is the foundational property: each HTTP request must carry _everything_ the server needs to handle it, because the server keeps no memory of previous requests on its own. The session cookie exists precisely to add a thread of state to this otherwise stateless protocol — the cookie is re-sent on every request, re-identifying the user each time.
+
+The 4xx-vs-5xx distinction matters enormously: 4xx means _you (the client) did something wrong_ (don't retry blindly), while 5xx means _we (the server) failed_ (a retry might succeed). React Query's retry policy is built directly on this line.
+
+### Examples
+
+**Example 1 — A login handler that uses four different status codes deliberately.**
+
+```ts
+// app/api/v1/auth/login/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
+import { createSession } from "@/lib/session";
+
+export async function POST(req: NextRequest) {
+  // 1. Parse the body. If it's not valid JSON → 400 (malformed request).
+  let body: { email?: string; password?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 }
+    );
+  }
+
+  // 2. Validate presence. Well-formed request, bad data → 422.
+  const { email, password } = body;
+  if (!email || !password) {
+    return NextResponse.json(
+      { error: "Email and password are required" },
+      { status: 422 }
+    );
+  }
+
+  // 3. Authenticate. Failure → 401, with a GENERIC message (see why-it-matters).
+  const user = await db.user.findUnique({ where: { email } });
+  if (!user || !(await verifyPassword(password, user.password))) {
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+  }
+
+  // 4. Success → 200, set the session cookie, return the safe user fields.
+  await createSession(user.id, req);
+  return NextResponse.json(
+    {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    },
+    { status: 200 }
+  );
+}
+```
+
+_Explanation:_ Four distinct failure/success paths, four distinct status codes. `400` and `422` look similar but mean different things: `400` is "I couldn't even read your request," `422` is "I read it fine, but `password` is missing." The client can show different messages for each. The `401` deliberately uses one generic message for both unknown-email and wrong-password (concept #5 explains why). Notice the success response never includes `user.password` — only the safe fields are returned by hand.
+
+**Example 2 — Returning a 429 with the headers a well-behaved client reads.**
+
+```ts
+// lib/api/with-rate-limit.ts
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/request-meta";
+
+export async function enforceRateLimit(
+  req: NextRequest,
+  bucket: string,
+  limit: number,
+  windowSeconds: number
+) {
+  const ip = getClientIp(req);
+  const result = await rateLimit(bucket, ip, limit, windowSeconds);
+
+  if (!result.success) {
+    const retryAfter = result.reset - Math.floor(Date.now() / 1000);
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          // Standard header: how many seconds until the client may retry.
+          "Retry-After": String(retryAfter),
+          // Informational: how many requests remain in this window.
+          "X-RateLimit-Remaining": String(result.remaining),
+        },
+      }
+    );
+  }
+  return null; // null means "allowed — continue"
+}
+```
+
+_Explanation:_ The body explains the error to a human; the _headers_ explain it to a machine. `Retry-After` is a standard HTTP header — a well-behaved client (or a CDN, or your own retry logic) reads it and waits exactly that long instead of hammering the endpoint. `X-RateLimit-Remaining` lets a dashboard show "3 attempts left." The function returns `null` for the allowed case, which the caller checks with `if (limited) return limited` — a clean one-line guard at every protected route.
+
+**Example 3 — A protected handler showing the 401 vs 403 distinction.**
+
+```ts
+// app/api/v1/users/route.ts (excerpt)
+import { NextResponse } from "next/server";
+import { verifySession } from "@/lib/session";
+
+export async function GET() {
+  const { isAuth, user } = await verifySession();
+
+  // No valid session at all → 401 UNAUTHENTICATED ("who are you?")
+  if (!isAuth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Authenticated, but not an admin → 403 FORBIDDEN ("you may not do this")
+  if (user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // ...authorized: fetch and return the users list
+  return NextResponse.json({ items: [] }, { status: 200 });
+}
+```
+
+_Explanation:_ These two checks must be separate and must use different codes. A `401` tells the client "log in" — the UI can redirect to the login page. A `403` tells the client "you're logged in, but this isn't for you" — the UI shows a permission error, _not_ a login prompt. Collapsing both into one code (or worse, into a 200) would make the frontend unable to react correctly: it might bounce an admin to the login screen, or show a logged-out user a confusing "permission denied" instead of "please sign in."
+
+### Why it matters
+
+If you return 200 with `{ error: "..." }` for a failed login, React Query treats it as success, your `isError` branch never fires, the user sees a half-broken "successful" screen, and your retry logic can't distinguish failure from success. Correct status codes are the invisible wiring that lets the entire client-side loading/error/retry system work _automatically_. Get them wrong and you hand-patch error handling in every component forever.
+
+**Self-test:** Why is returning 200-with-error-body worse than returning 401, and why must a non-admin hitting the users list get 403 rather than 401?
+
+---
+
+## 3. REST and API Route Handlers
+
+### High-level overview
+
+The course's backend is a set of **route handlers** — functions exported as `GET`, `POST`, `PATCH`, `DELETE` from files under `app/api/v1/...`. Each file represents a _resource_; each exported HTTP method is an _operation_ on it. This resource-plus-verb structure is REST in practice, and it's what makes the API predictable enough that a future Go backend could reimplement it route-for-route.
+
+### Deep dive
+
+**Resource-oriented routing.** The URL names the _thing_; the HTTP verb names the _action_. So instead of `POST /createUser` and `POST /deleteUser`, you have a `users` resource and let the verb decide: `GET /users` (list), `POST /users` (create), `DELETE /users/[id]` (remove one). The course splits collections from items:
+
+- `app/api/v1/account/sessions/route.ts` → the _collection_ (`GET` to list all, `DELETE` to revoke all others).
+- `app/api/v1/account/sessions/[id]/route.ts` → a _single item_ (`DELETE` to revoke that one).
+
+**Dynamic segments.** `[id]` in the folder name becomes a route parameter. In modern Next.js, `params` is a _Promise_ you must `await`: `{ params }: { params: Promise<{ id: string }> }`, then `const { id } = await params`.
+
+**Reading input.** Three sources: the body via `await req.json()` (for POST/PATCH), the query string via `new URL(req.url).searchParams` (for filters/pagination like `?page=2&search=foo`), and route params via the `params` object (for `[id]`).
+
+**Returning output.** `NextResponse.json(payload, { status, headers })` — the single way every handler responds.
+
+**Verb semantics carry meaning.** `GET` reads and must have no side effects (so it's safe to retry and cache). `POST` creates. `PATCH` partially updates (only the fields sent). `PUT` replaces wholesale. `DELETE` removes. Respecting these isn't pedantry — caches, proxies, and clients all make assumptions based on the verb.
+
+### Examples
+
+**Example 1 — A collection route handling both list (GET) and bulk-delete (DELETE).**
+
+```ts
+// app/api/v1/account/sessions/route.ts
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { redis, keys } from "@/lib/redis";
+import { verifySession } from "@/lib/session";
+
+// GET /api/v1/account/sessions  → list the user's active sessions
+export async function GET() {
+  const { isAuth, user, sessionId } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const sessions = await db.session.findMany({
+    where: { userId: user.id, expiresAt: { gt: new Date() } }, // only non-expired
+    orderBy: { lastUsedAt: "desc" },
+    select: {
+      id: true,
+      ipAddress: true,
+      browser: true,
+      os: true,
+      deviceType: true,
+      lastUsedAt: true,
+      createdAt: true,
+    },
+  });
+
+  // Flag the row the user is currently sitting on so the UI can label it.
+  return NextResponse.json(
+    { sessions: sessions.map((s) => ({ ...s, current: s.id === sessionId })) },
+    { status: 200 }
+  );
+}
+
+// DELETE /api/v1/account/sessions  → "log out all OTHER devices"
+export async function DELETE() {
+  const { isAuth, user, sessionId } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Find every session EXCEPT the current one.
+  const others = await db.session.findMany({
+    where: { userId: user.id, id: { not: sessionId ?? "" } },
+    select: { id: true },
+  });
+  // Delete them from the DB...
+  await db.session.deleteMany({
+    where: { userId: user.id, id: { not: sessionId ?? "" } },
+  });
+  // ...and evict each from the Redis cache so they die immediately.
+  await Promise.all(others.map((s) => redis.del(keys.session(s.id))));
+
+  return NextResponse.json(
+    { ok: true, revoked: others.length },
+    { status: 200 }
+  );
+}
+```
+
+_Explanation:_ One file, one resource (`sessions`), two verbs. `GET` lists; `DELETE` on the collection means "delete the (other) members of this collection." The `current: s.id === sessionId` flag is computed server-side so the client doesn't have to figure out which device it's on. The `DELETE` carefully excludes the current session with `id: { not: sessionId }` so you don't log yourself out, and it deletes from _both_ Postgres and Redis — if you forgot the Redis eviction, a revoked session could still be served from cache until its TTL expired.
+
+**Example 2 — A single-item route using a dynamic `[id]` segment.**
+
+```ts
+// app/api/v1/account/sessions/[id]/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { verifySession, revokeSession } from "@/lib/session";
+
+// DELETE /api/v1/account/sessions/abc123  → revoke ONE specific session
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> } // params is a Promise in modern Next.js
+) {
+  const { isAuth, user, sessionId } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params; // unwrap the dynamic segment
+
+  // Guard: don't let the user delete the session they're currently using here —
+  // that's what the dedicated logout endpoint is for.
+  if (id === sessionId) {
+    return NextResponse.json(
+      { error: "Use logout to end the current session" },
+      { status: 400 }
+    );
+  }
+
+  // revokeSession enforces ownership (you can only revoke your own).
+  const result = await revokeSession(id, user.id);
+  if (!result.ok) {
+    return NextResponse.json({ error: "Forbidden" }, { status: result.status });
+  }
+  return NextResponse.json({ ok: true }, { status: 200 });
+}
+```
+
+_Explanation:_ The `[id]` folder makes this route match any session ID, and `await params` extracts it. The same verb (`DELETE`) means "remove" whether it's on the collection or a single item — REST keeps the vocabulary consistent. Two guards protect it: you can't delete your _current_ session through this route (400, with a pointer to the right endpoint), and `revokeSession` checks _ownership_ so changing the URL to someone else's session ID returns 403 instead of revoking it. This is REST plus defense-in-depth.
+
+**Example 3 — Reading query-string parameters for search and pagination.**
+
+```ts
+// app/api/v1/users/route.ts (input-parsing portion)
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET(req: NextRequest) {
+  // Pull the query string off the URL: /api/v1/users?page=2&pageSize=20&search=jb
+  const { searchParams } = new URL(req.url);
+
+  // Parse + clamp page: at least 1, default 1, ignore garbage input.
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+
+  // Parse + clamp pageSize: between 1 and 100, default 20.
+  // The upper bound stops a client from requesting 1,000,000 rows at once.
+  const pageSize = Math.min(
+    100,
+    Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10) || 20)
+  );
+
+  // Trim the search term; empty string means "no filter".
+  const search = (searchParams.get("search") ?? "").trim();
+
+  // Build a Prisma 'where' only if there's a search term.
+  const where = search
+    ? {
+        OR: [
+          { email: { contains: search, mode: "insensitive" as const } },
+          { name: { contains: search, mode: "insensitive" as const } },
+        ],
+      }
+    : {};
+
+  // ...use page, pageSize, where to query (see concept #10)
+  return NextResponse.json({ page, pageSize, where }, { status: 200 });
+}
+```
+
+_Explanation:_ Query strings are how a `GET` carries parameters (a GET has no body). Every value arrives as a _string_ and from an _untrusted_ client, so each is parsed, defaulted, and clamped: `page` can't go below 1, `pageSize` can't exceed 100 (a critical guard — without it a client could request the entire table and exhaust your database). The `search` term builds a conditional `where` clause only when present. This defensive parsing of every external input is a habit that prevents both bugs and abuse.
+
+### Why it matters
+
+Get the resource/verb mapping right and your API is _guessable_: anyone — including a future Go reimplementation — can predict the routes. Get it wrong and you end up with `POST /deleteUserSessionThing`, an API no one can reason about, no versioning strategy can rescue, and every new endpoint becomes a fresh negotiation instead of following an obvious pattern.
+
+**Self-test:** Why does revoking _one_ session live at `sessions/[id]` with `DELETE`, while revoking _all others_ lives at `sessions` with `DELETE` — and why must `pageSize` be clamped to a maximum?
+
+---
+
+## 4. Cookies, Signing, and the httpOnly / SameSite / Secure Triad
+
+### High-level overview
+
+The course stores a **signed session ID** in a cookie — just an opaque ID plus a cryptographic signature, never the session data itself. The cookie is the transport that re-identifies the user on every request; the signature is the tamper-proofing; the flags are the security hardening.
+
+### Deep dive
+
+**Why a cookie and not localStorage.** Cookies are sent _automatically_ by the browser with every request to the matching domain — you don't write any code to attach them. Crucially, a cookie marked `httpOnly` is _invisible to JavaScript_: `document.cookie` can't read it. That single property neutralizes an entire class of attacks where injected script steals the token (XSS token theft). localStorage, by contrast, is plain JavaScript-readable storage — any script on the page (including a malicious one) can read everything in it.
+
+**The flag triad, each closing a specific hole:**
+
+- `httpOnly: true` — JavaScript cannot read the cookie. Blocks XSS-based token theft.
+- `secure: true` — the cookie is only sent over HTTPS. Blocks network sniffing on insecure connections.
+- `sameSite: "lax"` — the cookie is not sent on most cross-site requests (e.g. a form on `evil.com` POSTing to your site). Blocks most CSRF. (`strict` is even tighter; `lax` is the usual sweet spot because it still allows top-level navigation links to work.)
+
+Add `path: "/"` (the cookie applies site-wide) and `expires` (when the browser should discard it).
+
+**Signing vs encrypting.** The course _signs_ the cookie with `jose` using HMAC. Signing does **not** hide the contents — it proves they weren't _altered_. The signed token is `payload.signature`; the server recomputes the signature with its secret and rejects the cookie if they don't match. So a user can't change their session ID to someone else's and have it accepted — the signature won't validate. Encryption would _hide_ the payload; signing _authenticates_ it. For an opaque session ID, signing is exactly right (there's nothing secret in the ID itself; what matters is that it can't be forged).
+
+This is why the edge middleware can cheaply reject obvious fakes: a forged cookie fails signature verification _without any database lookup_.
+
+### Examples
+
+**Example 1 — Signing a session cookie on login and setting it with all flags.**
+
+```ts
+// lib/session.ts (cookie creation portion)
+import { cookies } from "next/headers";
+import { SignJWT } from "jose";
+
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+const secret = new TextEncoder().encode(process.env.SESSION_SECRET!);
+
+// Produce a signed token whose payload is just { sid: <sessionId> }.
+async function signCookie(sessionId: string): Promise<string> {
+  return new SignJWT({ sid: sessionId }) // the payload: an opaque ID
+    .setProtectedHeader({ alg: "HS256" }) // HMAC-SHA256 signing
+    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
+    .sign(secret); // sign with the server secret
+}
+
+export async function setSessionCookie(sessionId: string, expiresAt: Date) {
+  const token = await signCookie(sessionId);
+  const cookieStore = await cookies();
+  cookieStore.set("session", token, {
+    httpOnly: true, // JS cannot read it
+    secure: process.env.NODE_ENV === "production", // HTTPS-only in prod
+    sameSite: "lax", // CSRF mitigation
+    expires: expiresAt, // browser discards after this
+    path: "/", // sent for the whole site
+  });
+}
+```
+
+_Explanation:_ The payload is _only_ `{ sid: sessionId }` — the cookie carries an opaque pointer, not user data. `setExpirationTime` bakes an expiry into the signature itself, so even a stolen cookie stops verifying after 7 days. The flags are the security contract: drop `httpOnly` and an XSS bug becomes account takeover; drop `secure` and a coffee-shop network sniffs the cookie; drop `sameSite` and a malicious site can ride the user's session. Setting `secure` only in production is a pragmatic touch so local `http://localhost` development still works.
+
+**Example 2 — Verifying the signature and extracting the session ID.**
+
+```ts
+// lib/session.ts (cookie reading portion)
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
+
+const secret = new TextEncoder().encode(process.env.SESSION_SECRET!);
+
+// Returns the session ID if the cookie's signature is valid, else null.
+async function readCookie(token: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(token, secret); // throws if tampered/expired
+    return (payload.sid as string) ?? null;
+  } catch {
+    return null; // signature mismatch OR expired — treat both as "no session"
+  }
+}
+
+export async function getSessionIdFromCookie(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  if (!token) return null; // no cookie at all
+  return readCookie(token); // verify signature, return sid or null
+}
+```
+
+_Explanation:_ `jwtVerify` recomputes the HMAC with the secret and _throws_ if the signature doesn't match or the token has expired. The `try/catch` collapses both failure modes into `null` — from the caller's perspective, "no cookie," "tampered cookie," and "expired cookie" all mean the same thing: no valid session. Importantly, this verification proves the cookie is _authentic_, but the actual auth decision (is this session still active in the DB?) happens later — signing alone can't know about revocation.
+
+**Example 3 — Cheap signature check at the edge in middleware.**
+
+```ts
+// middleware.ts
+import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
+
+const secret = new TextEncoder().encode(process.env.SESSION_SECRET!);
+
+export async function middleware(req: NextRequest) {
+  const token = req.cookies.get("session")?.value;
+
+  let valid = false;
+  if (token) {
+    try {
+      await jwtVerify(token, secret); // ONLY checks the signature — no DB, no Redis
+      valid = true;
+    } catch {
+      valid = false; // forged or expired
+    }
+  }
+
+  const isProtected = ["/account", "/users"].some((p) =>
+    req.nextUrl.pathname.startsWith(p)
+  );
+
+  // Bounce obviously-anonymous traffic before any React renders.
+  if (isProtected && !valid) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+  return NextResponse.next();
+}
+
+export const config = { matcher: ["/account/:path*", "/users/:path*"] };
+```
+
+_Explanation:_ This runs at the edge, before the page renders, and does _only_ a signature check — no database, no Redis (which it can't reliably reach anyway). A forged or expired cookie fails `jwtVerify` and the user is redirected to login instantly, before any expensive work. This is the payoff of signing: you can reject fakes cheaply at the perimeter. Note what it deliberately _doesn't_ do — it can't tell if a _validly-signed_ session was _revoked_ in the DB, so a revoked-but-unexpired cookie passes here and gets caught later by the API (covered in concept #12). The middleware trades completeness for speed on purpose.
+
+### Why it matters
+
+Every cookie flag you omit is an attack class you've reopened, and every auth system that stores tokens in localStorage is one XSS bug away from mass account takeover. The flag triad plus signing is the concrete difference between "auth that works on localhost" and "auth you can put paying customers behind." This is the most security-dense concept in the whole course.
+
+**Self-test:** If an attacker _copies_ a valid signed cookie from another browser, does signing stop them? And why can the middleware reject a _forged_ cookie but not a _revoked_ one?
+
+---
+
+## 5. Password Hashing: One-Way Functions, Salting, and Slow-By-Design
+
+### High-level overview
+
+Passwords are **hashed, never encrypted**. Hashing is a one-way function: the server stores a hash, and on login it hashes the submitted password and compares the two hashes. The server never stores or even knows the actual password — which means a database breach doesn't hand attackers everyone's credentials.
+
+### Deep dive
+
+**One-way, not reversible.** Encryption can be decrypted back to the original; hashing cannot. `hash("hunter2")` always produces the same output, but there's no `unhash()`. To check a login, you hash the incoming password and compare to the stored hash — you never reverse the stored value.
+
+**Why argon2id / bcrypt, not SHA-256 or MD5.** General-purpose hashes (SHA-256) are designed to be _fast_ — billions per second on a GPU. That speed is a disaster for passwords, because it makes brute-forcing fast too. Password hashing algorithms (argon2id, bcrypt, scrypt) are deliberately _slow_ and _memory-hard_: each hash takes meaningful time and RAM, so an attacker who steals the database can only test a few thousand guesses per second instead of billions. argon2id is the current best-practice choice.
+
+**Salting.** A salt is a unique random value mixed into each password before hashing. Without it, two users with the same password get identical hashes (visible in the DB), and attackers can precompute "rainbow tables" of common-password hashes. With a unique per-password salt, identical passwords hash differently and rainbow tables become useless. argon2 and bcrypt generate and embed the salt automatically — it's stored as part of the hash string.
+
+**Never leak the hash.** Even the hash should never appear in an API response. The course enforces this with explicit `select: { ... }` whitelists on every query, so the `password` field is simply never fetched into anything client-facing.
+
+**Constant-time comparison.** The verify step compares hashes in constant time (the library handles this) so an attacker can't learn the correct hash byte-by-byte by measuring how long comparisons take.
+
+### Examples
+
+**Example 1 — A password helper module wrapping argon2.**
+
+```ts
+// lib/password.ts
+import argon2 from "argon2";
+
+// Hash a plaintext password for storage. argon2id is the recommended variant.
+// The salt is generated internally and embedded in the returned string.
+export async function hashPassword(plain: string): Promise<string> {
+  return argon2.hash(plain, {
+    type: argon2.argon2id, // hybrid: resistant to GPU and side-channel attacks
+    memoryCost: 19456, // ~19 MB of memory per hash (memory-hard)
+    timeCost: 2, // number of iterations
+    parallelism: 1,
+  });
+}
+
+// Verify a submitted password against a stored hash.
+// Returns true/false; the salt is read from the stored hash automatically.
+export async function verifyPassword(
+  plain: string,
+  hash: string
+): Promise<boolean> {
+  try {
+    return await argon2.verify(hash, plain); // constant-time comparison inside
+  } catch {
+    return false; // malformed hash, etc. — fail closed
+  }
+}
+```
+
+_Explanation:_ `hashPassword` is called once at registration; `verifyPassword` on every login. The `memoryCost` and `timeCost` parameters are what make this deliberately slow — tuned so a single hash takes a fraction of a second for a legitimate login but makes mass brute-forcing infeasible. The salt is fully automatic: argon2 generates a random salt, mixes it in, and stores it _inside_ the output hash string, so `verifyPassword` can extract it without you tracking salts separately. The `try/catch` "fails closed" — any error in verification is treated as a failed login, never an accidental success.
+
+**Example 2 — Registration: hash before storing, never store plaintext.**
+
+```ts
+// app/api/v1/auth/register/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { hashPassword } from "@/lib/password";
+
+export async function POST(req: NextRequest) {
+  const { email, password, name } = await req.json();
+
+  if (!email || !password || password.length < 8) {
+    return NextResponse.json(
+      { error: "Email and an 8+ character password are required" },
+      { status: 422 }
+    );
+  }
+
+  // Hash BEFORE the value ever touches the database.
+  const hashed = await hashPassword(password);
+
+  try {
+    const user = await db.user.create({
+      data: { email, name, password: hashed }, // store the hash, never the plaintext
+      select: { id: true, email: true, name: true, role: true }, // hash NOT returned
+    });
+    return NextResponse.json({ user }, { status: 201 });
+  } catch (e: any) {
+    // Prisma P2002 = unique constraint (email already registered) → 409
+    if (e.code === "P2002") {
+      return NextResponse.json(
+        { error: "Email already in use" },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: "Registration failed" }, { status: 500 });
+  }
+}
+```
+
+_Explanation:_ The plaintext password exists only briefly in memory, is immediately hashed, and only the hash is written to the DB — the plaintext is never persisted anywhere. The `select` whitelist on `create` ensures the response contains the safe fields but _not_ the password hash, so even the registration response can't leak it. The `201 Created` status correctly signals a new resource, and the `P2002` handling turns a duplicate email into a clean `409` instead of a generic 500.
+
+**Example 3 — Login verification with the anti-enumeration generic message.**
+
+```ts
+// app/api/v1/auth/login/route.ts (verification portion)
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
+
+async function authenticate(email: string, password: string) {
+  const user = await db.user.findUnique({ where: { email } });
+
+  // CRITICAL: the SAME generic outcome for "no such user" and "wrong password".
+  // We still run verifyPassword even when the user is missing? See note below.
+  if (!user) {
+    return { ok: false as const };
+  }
+
+  const valid = await verifyPassword(password, user.password);
+  if (!valid) {
+    return { ok: false as const };
+  }
+
+  return { ok: true as const, user };
+}
+
+// In the handler:
+const result = await authenticate(email, password);
+if (!result.ok) {
+  // ONE message for BOTH failure modes — attackers can't tell which.
+  return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+}
+```
+
+_Explanation:_ The security point is the _uniform_ failure: whether the email doesn't exist or the password is wrong, the response is an identical `401 "Invalid credentials"`. If the API said "no account with that email" vs "wrong password," an attacker could probe which emails are registered (user enumeration) — useful for targeted phishing or credential-stuffing. (A fully hardened version also equalizes _timing_ by hashing a dummy value even when the user is missing, so the response takes the same time either way; the principle is the same — give attackers zero signal about which accounts exist.)
+
+### Why it matters
+
+A leaked database of argon2 hashes is an inconvenience — attackers can crack maybe a handful of weak passwords slowly. A leaked database of SHA-256, MD5, or plaintext passwords is a catastrophe that also compromises every _other_ site where users reused that password. This single choice — slow, salted, one-way hashing — is among the highest-leverage security decisions in the entire system, and getting it wrong is the kind of mistake that ends up in the news.
+
+**Self-test:** Why is the login error message identical for "unknown email" and "wrong password," and why is SHA-256 a poor choice for hashing passwords even though it's cryptographically strong?
+
+---
+
+_(continued in part 2)_
+
+## 6. Stateful Sessions vs Stateless JWTs — Revocation Is the Whole Game
+
+### High-level overview
+
+This is the conceptual heart of the course. The post opens with it: "JWT-only sessions can't be revoked." The entire architecture — DB sessions, Redis cache, signed cookie — exists to make one thing possible: killing a session _instantly_ from the server side. "Log out everywhere" must work the moment the user clicks it.
+
+### Deep dive
+
+**Pure JWT (stateless).** The user's identity lives _inside_ a signed token. The server verifies the signature and trusts the contents — no database lookup needed. This is fast and scales beautifully: any server with the secret can validate any token. But there's a fatal flaw for many apps: **once issued, a JWT is valid until it expires, and you cannot revoke it.** If a token is stolen, or a user is banned, or they click "log out everywhere," there's no server-side switch — the token keeps working until its clock runs out. Workarounds (short expiries + refresh tokens, denylists) reintroduce exactly the server-side state that JWTs were supposed to avoid.
+
+**Database session (stateful).** A session record lives in the database. The cookie holds only an opaque session ID. To authenticate, the server looks up that ID. This costs a lookup per request — but it means **deleting the row instantly invalidates the session.** The next request finds nothing and is rejected. Revocation is trivial because the source of truth is server-side.
+
+**The course's hybrid, and why each half exists.** The cookie is a _signed_ token (JWT-style) — but its payload is just the session ID, not the user identity. The signature lets the edge cheaply reject _forged_ cookies without a DB hit (the JWT strength). The session ID points to a _database record_ that can be deleted to revoke (the stateful strength). Redis caches the lookup so the per-request cost is tiny. You get forgery-resistance _and_ instant revocation _and_ speed — by combining the approaches rather than picking one.
+
+**The kill switch.** Revocation = delete the DB row + delete the Redis key. After that, a cache miss falls through to a DB miss, and the request is rejected. That two-line delete is the entire reason DB-backed sessions are worth their cost.
+
+### Examples
+
+**Example 1 — The same session, modeled as a pure JWT vs a DB session (contrast).**
+
+```ts
+// ---- APPROACH A: PURE JWT (stateless) — CANNOT be revoked ----
+import { SignJWT, jwtVerify } from "jose";
+const secret = new TextEncoder().encode(process.env.SESSION_SECRET!);
+
+// On login: pack identity INTO the token.
+async function issueJwt(user: { id: string; role: string }) {
+  return new SignJWT({ sub: user.id, role: user.role })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("7d")
+    .sign(secret);
+}
+
+// On each request: verify and trust — no database involved.
+async function verifyJwt(token: string) {
+  const { payload } = await jwtVerify(token, secret);
+  return { userId: payload.sub as string, role: payload.role as string };
+  // PROBLEM: if this user is banned or logs out "everywhere", this token
+  // STILL verifies for up to 7 days. There is no server-side off switch.
+}
+
+// ---- APPROACH B: DB SESSION (stateful) — CAN be revoked instantly ----
+async function createDbSession(userId: string) {
+  const session = await db.session.create({
+    data: { userId, expiresAt: new Date(Date.now() + 7 * 864e5) },
+  });
+  return session.id; // the cookie will carry only THIS id
+}
+
+async function verifyDbSession(sessionId: string) {
+  const session = await db.session.findUnique({ where: { id: sessionId } });
+  if (!session || session.expiresAt < new Date()) return null;
+  return { userId: session.userId };
+  // To revoke: delete the row. The very next lookup returns null. Done.
+}
+```
+
+_Explanation:_ Side by side, the trade-off is stark. Approach A never touches the database on verify — blazingly fast and stateless — but the token is a sealed envelope that stays valid until expiry no matter what happens server-side. Approach B pays for a lookup but gains a kill switch: delete the row and the session is dead on the next request. The course chooses B's revocability and then uses Redis (concept #7) to claw back most of A's speed.
+
+**Example 2 — Creating a hybrid session: signed cookie + DB record + cache.**
+
+```ts
+// lib/session.ts (create)
+import { cookies } from "next/headers";
+import { NextRequest } from "next/server";
+import { SignJWT } from "jose";
+import { db } from "@/lib/db";
+import { redis, keys } from "@/lib/redis";
+import { getClientIp, parseDevice } from "@/lib/request-meta";
+
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+const secret = new TextEncoder().encode(process.env.SESSION_SECRET!);
+
+export async function createSession(userId: string, req: NextRequest) {
+  const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
+  const device = parseDevice(req);
+  const ipAddress = getClientIp(req);
+
+  // 1. The DB record — the SOURCE OF TRUTH that can be deleted to revoke.
+  const session = await db.session.create({
+    data: { userId, expiresAt, ipAddress, ...device },
+  });
+
+  // 2. Cache the session payload in Redis for fast verification.
+  await redis.set(
+    keys.session(session.id),
+    JSON.stringify({ userId, expiresAt: expiresAt.toISOString() }),
+    "EX",
+    SESSION_TTL_SECONDS
+  );
+
+  // 3. The SIGNED cookie carries only the opaque session ID.
+  const token = await new SignJWT({ sid: session.id })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
+    .sign(secret);
+
+  const cookieStore = await cookies();
+  cookieStore.set("session", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    expires: expiresAt,
+    path: "/",
+  });
+
+  return session;
+}
+```
+
+_Explanation:_ Three storage layers, three jobs. The **DB record** is the authority — its existence _is_ the session, and deleting it revokes. **Redis** caches the same facts so most verifications never hit Postgres. The **signed cookie** carries nothing but the session ID, protected by a signature so it can't be forged. Notice the cookie payload is `{ sid }` — not the user ID, not the role — so even if someone reads the token they learn only an opaque ID that's useless without the server-side record behind it.
+
+**Example 3 — The kill switch: instant "log out everywhere else."**
+
+```ts
+// lib/session.ts (revoke a single session)
+export async function revokeSession(sessionId: string, ownerUserId: string) {
+  const session = await db.session.findUnique({ where: { id: sessionId } });
+  // Ownership guard — you can only revoke sessions that are yours.
+  if (!session || session.userId !== ownerUserId) {
+    return { ok: false, status: 403 as const };
+  }
+  await db.session.delete({ where: { id: sessionId } }); // remove source of truth
+  await redis.del(keys.session(sessionId)); // evict the cache
+  return { ok: true, status: 200 as const };
+  // After these two deletes, ANY future request bearing this session:
+  //   cache miss → DB miss → rejected. The session is dead. Instantly.
+}
+
+// "log out ALL other devices" — same idea, in bulk
+export async function revokeAllOthers(userId: string, keepSessionId: string) {
+  const others = await db.session.findMany({
+    where: { userId, id: { not: keepSessionId } },
+    select: { id: true },
+  });
+  await db.session.deleteMany({
+    where: { userId, id: { not: keepSessionId } },
+  });
+  await Promise.all(others.map((s) => redis.del(keys.session(s.id))));
+  return { revoked: others.length };
+}
+```
+
+_Explanation:_ This is the feature pure JWTs cannot deliver. Two deletes — DB then Redis — and the session is gone _immediately_; you don't wait for any token to expire. The ownership check (`session.userId !== ownerUserId`) prevents revoking other people's sessions. The bulk version powers the account page's "Log out all other devices" button. The reason the entire stateful architecture earns its complexity is contained in these few lines: when a customer says "I think I've been hacked — log me out everywhere," you can actually do it, right now.
+
+### Why it matters
+
+"Log me out everywhere" and "ban this user immediately" are non-negotiable requirements for any app holding real accounts. Pure JWTs can't satisfy them without bolting on the very server-side state they were meant to avoid. If you don't internalize this trade-off, every other choice in the course — the DB sessions, the Redis layer, the cache invalidation — looks like needless complexity instead of the deliberate price of instant revocation.
+
+**Self-test:** A user clicks "log out all other devices." Trace exactly what makes the other devices' next request fail, and explain why a pure-JWT system couldn't do the same.
+
+---
+
+## 7. Redis as a Cache: Cache-Aside, TTLs, and Invalidation
+
+### High-level overview
+
+Redis is an in-memory key-value store that sits in front of the hot reads — session lookups and user records — so Postgres isn't hit on every single request. You don't need Redis mastery; you need the **cache-aside pattern** to be reflexive, along with a healthy fear of stale data.
+
+### Deep dive
+
+**The cache-aside pattern** (also called lazy loading) has four steps the course follows everywhere:
+
+1. Check the cache for the key.
+2. **Hit** → parse and return it. Done, no database touched.
+3. **Miss** → read from the database.
+4. **Backfill** → write the DB result into the cache (with a TTL) before returning, so the _next_ read is a hit.
+
+**TTL (time-to-live).** Every cached key gets an expiry, after which Redis deletes it automatically. The course tunes TTLs by how tolerable staleness is: a session is cached for its full remaining lifetime, a user record for 5 minutes, the users list for 30 seconds. A short TTL is a cheap, self-healing bound on staleness — even if you _forget_ to invalidate, the wrong data can only live as long as the TTL.
+
+**Invalidation — the genuinely hard part.** When the underlying data changes, the cached copy is now a lie. The course handles this explicitly: when a user updates their profile, the PATCH handler _deletes_ the `v1:user:*` key so the next read repopulates from the DB. The famous saying — "there are only two hard things in computer science: cache invalidation and naming things" — is lived experience here, not a joke.
+
+**Namespacing and versioning keys.** Keys are built by helpers and prefixed `v1:` (e.g. `v1:session:abc`, `v1:user:xyz`). The prefix lets you reason about and selectively flush groups of keys, and lets you bump to `v2:` if the cached payload's _shape_ ever changes — old keys simply expire out.
+
+**Serialization.** Redis stores strings, so objects are `JSON.stringify`'d on write and `JSON.parse`'d on read. Dates become ISO strings and must be reconstructed.
+
+### Examples
+
+**Example 1 — Cache-aside session verification: Redis → Postgres → backfill.**
+
+```ts
+// lib/session.ts (verify with cache-aside)
+import { cookies } from "next/headers";
+import { db } from "@/lib/db";
+import { redis, keys } from "@/lib/redis";
+
+export async function verifySession() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  if (!token) return { isAuth: false, user: null, sessionId: null };
+
+  const sessionId = await readCookie(token); // verify signature → sid
+  if (!sessionId) return { isAuth: false, user: null, sessionId: null };
+
+  // STEP 1+2: try the cache first.
+  const cached = await redis.get(keys.session(sessionId));
+  if (cached) {
+    const { userId, expiresAt } = JSON.parse(cached); // deserialize
+    if (new Date(expiresAt) > new Date()) {
+      // still valid?
+      const user = await getCachedUser(userId); // (also cached)
+      if (user) return { isAuth: true, user, sessionId }; // HIT — no Postgres
+    }
+  }
+
+  // STEP 3: cache miss → fall back to the database.
+  const session = await db.session.findUnique({
+    where: { id: sessionId },
+    include: {
+      user: { select: { id: true, email: true, name: true, role: true } },
+    },
+  });
+  if (!session || session.expiresAt < new Date()) {
+    await redis.del(keys.session(sessionId)); // clean up any stale key
+    return { isAuth: false, user: null, sessionId: null };
+  }
+
+  // STEP 4: backfill the cache so the NEXT request is a hit.
+  await redis.set(
+    keys.session(sessionId),
+    JSON.stringify({
+      userId: session.userId,
+      expiresAt: session.expiresAt.toISOString(),
+    }),
+    "EX",
+    Math.floor((session.expiresAt.getTime() - Date.now()) / 1000) // remaining life
+  );
+
+  return { isAuth: true, user: session.user, sessionId };
+}
+```
+
+_Explanation:_ This is the canonical cache-aside flow and the most-executed function in the app (it runs on every protected request). The common case — a cache hit — returns without touching Postgres at all, which is what keeps auth fast under load. On a miss it reads the DB _and backfills_ with a TTL equal to the session's remaining life, so the data never outlives the session. The `redis.del` on the miss path cleans up keys for sessions that have already expired or been revoked, preventing stale entries from lingering.
+
+**Example 2 — A nested cache for user records with a short TTL.**
+
+```ts
+// lib/session.ts (user cache helper)
+import { db } from "@/lib/db";
+import { redis, keys } from "@/lib/redis";
+
+// Cache user records for 5 minutes. Same cache-aside shape, smaller TTL.
+async function getCachedUser(userId: string) {
+  const cached = await redis.get(keys.user(userId));
+  if (cached) return JSON.parse(cached); // HIT
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, role: true }, // never the hash
+  });
+
+  if (user) {
+    // EX 300 = expire in 300 seconds (5 min). Bounds staleness automatically.
+    await redis.set(keys.user(userId), JSON.stringify(user), "EX", 300);
+  }
+  return user;
+}
+
+// Called whenever a user's data changes, to force a fresh read next time.
+export async function invalidateUserCache(userId: string) {
+  await redis.del(keys.user(userId));
+}
+```
+
+_Explanation:_ The user record is cached separately from the session because it changes for different reasons and on a different timescale. A 5-minute TTL means even with _no_ explicit invalidation, a profile edit would self-correct within five minutes — but the course doesn't rely on that; it calls `invalidateUserCache` on every update for immediacy. The `select` whitelist appears again, guaranteeing the cached blob never contains the password hash. This two-layer caching (session → user) is why a fully warm request can answer with zero database queries.
+
+**Example 3 — Explicit invalidation on write, the hard half of caching.**
+
+```ts
+// app/api/v1/account/route.ts (PATCH — update profile)
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { verifySession, invalidateUserCache } from "@/lib/session";
+
+export async function PATCH(req: NextRequest) {
+  const { isAuth, user } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json();
+
+  try {
+    const updated = await db.user.update({
+      where: { id: user.id },
+      data: { name: body.name, email: body.email },
+      select: { id: true, email: true, name: true, role: true },
+    });
+
+    // CRITICAL: the cached copy is now stale — delete it so the next
+    // read repopulates from the database with the new values.
+    await invalidateUserCache(user.id);
+
+    return NextResponse.json({ profile: updated }, { status: 200 });
+  } catch (e: any) {
+    if (e.code === "P2002") {
+      return NextResponse.json(
+        { error: "Email already in use" },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json(
+      { error: "Failed to update profile" },
+      { status: 500 }
+    );
+  }
+}
+```
+
+_Explanation:_ The write path _must_ invalidate, or the cache will keep serving the old name/email for up to its TTL. The single line `await invalidateUserCache(user.id)` is the difference between "the user sees their change immediately" and "the user changes their email, sees the old one, refreshes, still sees the old one, and files a bug." Forgetting this line is the single most common caching bug, and it's invisible in testing if your cache is empty — it only bites once data is warm in production.
+
+### Why it matters
+
+Redis is why the users page can paginate 100,000 rows with sub-100ms responses and why auth stays fast under load — the cache absorbs the read traffic Postgres would otherwise drown in. But the same power cuts the other way: forget to invalidate and users see stale data, which silently erodes trust. Caching is simultaneously a 10× speedup and a 10× footgun, and the course shows you how to get the speedup without the footgun.
+
+**Self-test:** Walk through the exact user-visible bug that appears if you cache a user record with a TTL but forget to invalidate it on profile update. Then explain how the TTL limits how long that bug lasts.
+
+---
+
+## 8. Rate Limiting: Fixed Windows, Buckets, and Per-IP vs Per-User
+
+### High-level overview
+
+The course ships a Redis-backed **fixed-window** rate limiter and applies it to sensitive endpoints — for example, 5 login attempts per minute per IP. It turns an open brute-force/DoS target into a wall that attackers hit in a handful of tries.
+
+### Deep dive
+
+**The fixed-window algorithm.** For each (bucket, identifier) pair, keep a counter in Redis with a key like `v1:rl:login:1.2.3.4`. On each request: `INCR` the counter; if it just became 1 (first request in this window), set the key to expire after the window length. If the count exceeds the limit, reject with 429. When the key expires, the counter resets and a new window begins. It's simple, fast (two Redis ops), and good enough for the vast majority of apps.
+
+**Its known weakness.** Because windows are fixed, a burst straddling the boundary can briefly allow up to 2× the limit (e.g. 5 requests at 0:59 and 5 more at 1:01). Sliding-window or token-bucket algorithms fix this at the cost of complexity; for login protection, fixed-window is fine.
+
+**Buckets** separate independent limits. `login`, `account-update`, and `api` are different buckets, so a strict 5/min login limit doesn't also throttle profile edits. The bucket is part of the key.
+
+**Identifier choice — per-IP vs per-user.** Per-IP is the natural default (you can rate-limit _before_ you know who the user is, e.g. on login). But per-IP alone has a flaw: an entire office or campus behind one NAT'd IP shares a single budget, so one noisy colleague can lock everyone out. Production systems add _per-user_ buckets for authenticated endpoints. The course flags this in its hardening checklist.
+
+**The response contract.** A rejected request returns `429` plus `Retry-After` (seconds until reset) and `X-RateLimit-Remaining`. Well-behaved clients and your own React Query retry logic read these.
+
+### Examples
+
+**Example 1 — The core fixed-window limiter.**
+
+```ts
+// lib/rate-limit.ts
+import { redis, keys } from "./redis";
+
+type RateLimitResult = {
+  success: boolean;
+  remaining: number;
+  reset: number; // epoch seconds when the window resets
+};
+
+export async function rateLimit(
+  bucket: string, // e.g. 'login', 'account-update', 'api'
+  identifier: string, // e.g. an IP address or a userId
+  limit: number, // max requests allowed in the window
+  windowSeconds: number
+): Promise<RateLimitResult> {
+  const key = keys.rateLimit(bucket, identifier); // v1:rl:<bucket>:<id>
+
+  // Atomically increment. Redis guarantees no two requests race here.
+  const count = await redis.incr(key);
+
+  // If this is the FIRST request in the window, start the expiry clock.
+  if (count === 1) {
+    await redis.expire(key, windowSeconds);
+  }
+
+  const ttl = await redis.ttl(key); // seconds left in this window
+  return {
+    success: count <= limit,
+    remaining: Math.max(0, limit - count),
+    reset: Math.floor(Date.now() / 1000) + (ttl > 0 ? ttl : windowSeconds),
+  };
+}
+```
+
+_Explanation:_ The whole limiter is `INCR` + conditional `EXPIRE`. `INCR` is _atomic_ — even if 100 requests arrive simultaneously, Redis serializes them, so the count is always correct with no race condition. The expiry is set only when the counter first hits 1, which both starts the window and ensures the key self-deletes (so counters don't accumulate forever). `success: count <= limit` is the verdict; `remaining` and `reset` feed the response headers. Note the deliberate ordering: the counter increments _before_ the verdict, so even rejected requests count — an attacker can't dodge the limit by spamming.
+
+**Example 2 — A reusable guard that short-circuits with 429.**
+
+```ts
+// lib/api/with-rate-limit.ts
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/request-meta";
+
+export async function enforceRateLimit(
+  req: NextRequest,
+  bucket: string,
+  limit: number,
+  windowSeconds: number
+): Promise<NextResponse | null> {
+  const ip = getClientIp(req);
+  const result = await rateLimit(bucket, ip, limit, windowSeconds);
+
+  if (!result.success) {
+    const retryAfter = result.reset - Math.floor(Date.now() / 1000);
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(retryAfter),
+          "X-RateLimit-Remaining": String(result.remaining),
+        },
+      }
+    );
+  }
+  return null; // null = allowed; caller continues
+}
+
+// Usage at any route — a single guard line:
+//   const limited = await enforceRateLimit(req, "login", 5, 60);
+//   if (limited) return limited;
+```
+
+_Explanation:_ This wraps the raw limiter into a drop-in guard. It resolves the client IP, runs the limiter, and either returns a fully-formed `429` response (with the headers a polite client respects) or `null` to mean "proceed." The call-site pattern — `if (limited) return limited` — is a single readable line you add to the top of any sensitive handler. Centralizing it here means every protected route enforces limits identically, instead of each one reinventing the logic.
+
+**Example 3 — Layering per-IP and per-user limits on one endpoint.**
+
+```ts
+// app/api/v1/account/route.ts (PATCH, with layered limits)
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/request-meta";
+import { verifySession } from "@/lib/session";
+
+export async function PATCH(req: NextRequest) {
+  const { isAuth, user } = await verifySession();
+  if (!isAuth)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Per-IP limit: stops a single machine from hammering, even across accounts.
+  const ipLimit = await rateLimit(
+    "account-update-ip",
+    getClientIp(req),
+    20,
+    60
+  );
+  if (!ipLimit.success) {
+    return NextResponse.json(
+      { error: "Too many requests from this network" },
+      { status: 429 }
+    );
+  }
+
+  // Per-USER limit: stops one account being abused, even from many IPs —
+  // and ensures a shared office IP can't lock an individual out unfairly.
+  const userLimit = await rateLimit("account-update-user", user.id, 10, 60);
+  if (!userLimit.success) {
+    return NextResponse.json(
+      { error: "Too many profile updates. Slow down." },
+      { status: 429 }
+    );
+  }
+
+  // ...proceed with the update
+  return NextResponse.json({ ok: true }, { status: 200 });
+}
+```
+
+_Explanation:_ This shows why one dimension isn't enough. The **per-IP** bucket catches a single machine flooding the endpoint (even if it cycles through accounts). The **per-user** bucket catches one account being abused from many IPs, _and_ — more subtly — it means a legitimate user behind a shared office NAT is limited by _their own_ activity, not their noisy colleagues'. Different buckets (`account-update-ip` vs `account-update-user`) keep the two counters independent. Layering limits like this is the difference between a toy limiter and one that holds up against real abuse without punishing innocent users.
+
+### Why it matters
+
+Without rate limiting, your login endpoint is a free brute-force oracle and every API route is a free DoS target — an attacker can try millions of password guesses or simply exhaust your database. With a few lines of Redis, attackers hit a wall after a handful of attempts, and your infrastructure stays standing under abuse. It's one of the highest return-on-effort defenses you can add.
+
+**Self-test:** Why does the course's React Query config _not_ retry 4xx errors, and how does that connect to the rate limiter? Separately, why is per-IP limiting alone unfair to users behind a shared office network?
+
+---
+
+## 9. Prisma and Relational Data Modeling
+
+### High-level overview
+
+The data layer is Prisma — a type-safe ORM — over Postgres. You declare your models in a schema, and Prisma generates a fully typed client where every query and its result share a single source of truth. You need to read a schema fluently and understand the relational thinking that shapes it.
+
+### Deep dive
+
+**Schema as source of truth.** The `schema.prisma` file declares models (`User`, `Session`), their fields and types, relations, and indexes. Prisma generates a typed client from it, so `db.user.findUnique(...)` returns a precisely-typed object. Rename a column in the schema and mistyped code becomes a _compile_ error, not a runtime surprise.
+
+**Relations.** `User` has many `Session`s (one-to-many). The relation is declared on both sides, with a foreign key (`userId`) and an `onDelete: Cascade` rule so deleting a user automatically deletes their sessions — the database enforces referential integrity, you don't write cleanup code.
+
+**`select` and `include`.** `select` whitelists exactly which fields to return (and is the course's standing defense against leaking the password hash). `include` pulls in related records (e.g. a session _with_ its user). Using `select` everywhere is both a performance habit (fetch only what you need) and a security habit (never fetch what you must not expose).
+
+**Error codes.** Prisma surfaces typed error codes. `P2002` is a unique-constraint violation (e.g. duplicate email), which handlers catch and map to a `409`. `P2025` is "record not found." Handling these explicitly turns database errors into clean HTTP responses.
+
+**Migrations.** Schema changes are applied via migrations (`prisma migrate`), which version your database structure alongside your code — so every environment's schema is reproducible.
+
+### Examples
+
+**Example 1 — The schema: models, relation, cascade, and indexes.**
+
+```prisma
+// schema.prisma
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique          // DB-enforced uniqueness → enables P2002
+  name      String?                     // nullable → 'string | null' in TS
+  password  String                      // the argon2 hash; never selected to clients
+  role      Role      @default(USER)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt        // auto-set on every update
+  sessions  Session[]                   // one-to-many: a user has many sessions
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String                       // foreign key to User
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+
+  // captured device/IP metadata
+  ipAddress  String?
+  userAgent  String?
+  browser    String?
+  os         String?
+  deviceType String?
+
+  // The relation. onDelete: Cascade = delete the user → delete their sessions.
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])     // fast "list a user's sessions"
+  @@index([expiresAt])  // fast "delete expired sessions"
+}
+```
+
+_Explanation:_ This single file defines the whole data model and generates the typed client. `email @unique` creates a DB-level constraint — the database itself rejects duplicates, which is what produces the `P2002` error you can catch. `name String?` (nullable) becomes `string | null` in TypeScript, forcing null-handling in the UI. The `user` relation with `onDelete: Cascade` means deleting a user cleans up their sessions automatically — no orphaned rows, no manual cleanup. The two `@@index` lines are deliberate performance decisions (concept #10). Reading this schema tells you everything about how the data is shaped and protected.
+
+**Example 2 — A query with relation include, select whitelist, and filtering.**
+
+```ts
+// Fetch a session WITH its user, but only safe user fields.
+const session = await db.session.findUnique({
+  where: { id: sessionId },
+  include: {
+    user: {
+      // 'select' INSIDE 'include' — pull the related user, but ONLY these fields.
+      // The password hash is structurally impossible to leak here.
+      select: { id: true, email: true, name: true, role: true },
+    },
+  },
+});
+
+// List a user's ACTIVE sessions, newest-used first, only display fields.
+const activeSessions = await db.session.findMany({
+  where: {
+    userId: user.id,
+    expiresAt: { gt: new Date() }, // gt = "greater than now" → not expired
+  },
+  orderBy: { lastUsedAt: "desc" },
+  select: {
+    id: true,
+    ipAddress: true,
+    browser: true,
+    os: true,
+    deviceType: true,
+    lastUsedAt: true,
+    createdAt: true,
+  },
+});
+```
+
+_Explanation:_ `include` with a nested `select` is the precise tool for "give me the session and its user, but never the user's password." Because the hash isn't in the `select`, it can't appear in the result type _or_ the runtime value — the safety is structural, not a convention you have to remember. The `findMany` shows filtering (`expiresAt: { gt: new Date() }` returns only live sessions), sorting (`orderBy`), and field whitelisting together. Every query fetches exactly what the response needs and nothing more — faster queries and zero accidental exposure.
+
+**Example 3 — Catching Prisma error codes and mapping them to HTTP.**
+
+```ts
+// app/api/v1/account/route.ts (PATCH, error mapping)
+import { Prisma } from "@prisma/client";
+import { NextResponse } from "next/server";
+
+async function updateEmail(userId: string, email: string) {
+  try {
+    const updated = await db.user.update({
+      where: { id: userId },
+      data: { email },
+      select: { id: true, email: true, name: true, role: true },
+    });
+    return NextResponse.json({ profile: updated }, { status: 200 });
+  } catch (e) {
+    // Typed Prisma errors → clean HTTP responses.
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === "P2002") {
+        // Unique constraint failed → the email is already taken.
+        return NextResponse.json(
+          { error: "Email already in use" },
+          { status: 409 }
+        );
+      }
+      if (e.code === "P2025") {
+        // Record to update was not found.
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+    }
+    // Anything else is an unexpected server fault.
+    return NextResponse.json(
+      { error: "Failed to update profile" },
+      { status: 500 }
+    );
+  }
+}
+```
+
+_Explanation:_ Database constraints throw _typed_ errors, and translating them into the right HTTP status is what makes the API feel polished. A duplicate email is a `P2002`, which is genuinely a _client_ problem (they chose a taken email) and deserves a `409 Conflict` with a clear message — not an opaque `500`. `P2025` (record missing) maps to `404`. Everything unrecognized falls through to `500`, the honest "this is our bug" code. This mapping turns raw database failures into a clean, predictable API surface.
+
+### Why it matters
+
+A type-safe ORM means a renamed column is a compile error caught in your editor, not a 3 a.m. production incident. Disciplined `select` usage is a quiet, constant defense against leaking sensitive fields — the kind of bug that doesn't surface until a security audit or a breach. And mapping Prisma's error codes to HTTP statuses is what separates an API that returns helpful `409`s from one that returns mysterious `500`s.
+
+**Self-test:** What does `onDelete: Cascade` save you from doing manually when an admin deletes a user, and how does a nested `select` inside `include` make leaking the password hash structurally impossible?
+
+---
+
+## 10. Database Indexing and Query Performance
+
+### High-level overview
+
+An index is a sorted lookup structure the database maintains so it can find rows without scanning the whole table. The course adds exactly two indexes, deliberately, and you should understand why each earns its keep — and why you don't just index everything.
+
+### Deep dive
+
+**What an index does.** Without an index, finding rows matching `userId = X` means a _full table scan_ — the database reads every row, which is O(n) and gets catastrophically slow as the table grows. With an index on `userId`, the database walks a sorted tree structure to the matching rows in O(log n) — effectively instant even on millions of rows.
+
+**The two indexes and their jobs:**
+
+- `@@index([userId])` — powers "list my sessions" on the account page. Without it, showing a user their devices would scan every session in the system.
+- `@@index([expiresAt])` — powers the hourly cleanup `DELETE ... WHERE expiresAt < now()`. Without it, every cleanup run scans the whole table.
+
+**The trade-off — why not index everything.** Indexes speed _reads_ but cost on _writes_: every insert/update/delete must also update each relevant index, and indexes consume disk. So you index the columns you actually filter or sort on in hot paths, and leave the rest unindexed. Indexing is a targeted decision, not a blanket one.
+
+**Server-side pagination.** You never fetch all rows and slice in JavaScript — that loads the entire table into memory. Instead you push pagination into the database with `skip` (offset) and `take` (limit), and run a parallel `count` for the total. The result includes `page`, `total`, `totalPages`, `hasNext`, `hasPrev` so the UI can render pager controls.
+
+**Counting and paginating in parallel.** The total count and the page of rows are independent queries, so `Promise.all` runs them concurrently rather than one after the other — half the latency.
+
+### Examples
+
+**Example 1 — Server-side pagination with a parallel count.**
+
+```ts
+// app/api/v1/users/route.ts (the query portion)
+import { db } from "@/lib/db";
+
+async function listUsers(page: number, pageSize: number, where: object) {
+  // Run BOTH queries concurrently — they don't depend on each other.
+  const [total, items] = await Promise.all([
+    db.user.count({ where }), // how many rows match in total
+    db.user.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize, // OFFSET: jump past earlier pages
+      take: pageSize, // LIMIT: only this page's rows
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  return {
+    items,
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+      hasNext: page * pageSize < total,
+      hasPrev: page > 1,
+    },
+  };
+}
+```
+
+_Explanation:_ The database does the paginating, not JavaScript. `skip: (page - 1) * pageSize` and `take: pageSize` translate to SQL `OFFSET`/`LIMIT`, so only one page of rows ever leaves the database — fetching 20 rows of a million-row table is fast and memory-light. The `count` is needed to compute `totalPages` and `hasNext`, and running it inside `Promise.all` alongside `findMany` means both execute concurrently rather than sequentially, roughly halving the response time. The returned `pagination` object hands the frontend everything it needs to render Previous/Next buttons and "Page X of Y."
+
+**Example 2 — Why the indexes matter, shown by the queries that rely on them.**
+
+```ts
+// These two queries are FAST only because of the indexes in the schema.
+
+// 1. "List my sessions" — relies on @@index([userId]).
+//    Without the index: full scan of the entire Session table.
+//    With it: a direct lookup of just this user's rows.
+const mySessions = await db.session.findMany({
+  where: { userId: user.id }, // ← indexed column
+  orderBy: { lastUsedAt: "desc" },
+});
+
+// 2. Expired-session cleanup — relies on @@index([expiresAt]).
+//    Run hourly by a cron. Without the index, every run scans every row.
+//    With it, the DB jumps straight to the expired range.
+await db.session.deleteMany({
+  where: { expiresAt: { lt: new Date() } }, // ← indexed column, lt = "less than now"
+});
+```
+
+_Explanation:_ These two operations are exactly why the two indexes exist. The session-list query filters by `userId`; at 10 sessions that's trivially fast with or without an index, but at 10 million sessions across all users, an unindexed filter would scan the entire table on every account-page load. The cleanup deletes by `expiresAt`; without the index, the hourly job would full-scan the table every hour forever. Each index was added because a _specific, frequent query_ needed it — the textbook reason to add an index.
+
+**Example 3 — A pagination bug fixed by clamping and validating inputs.**
+
+```ts
+// Parsing pagination params SAFELY — untrusted input from the query string.
+function parsePagination(searchParams: URLSearchParams) {
+  // page: at least 1. parseInt of garbage → NaN → falls back to 1.
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+
+  // pageSize: clamp between 1 and 100. The UPPER bound is the critical guard —
+  // without it, a client could send ?pageSize=1000000 and pull the whole table,
+  // defeating pagination entirely and potentially exhausting the database.
+  const pageSize = Math.min(
+    100,
+    Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10) || 20)
+  );
+
+  return { page, pageSize };
+}
+
+// A naive version that looks fine but is dangerous:
+//   const pageSize = parseInt(searchParams.get("pageSize") ?? "20");
+//   → ?pageSize=999999999 fetches everything, OOMs the server. The clamp is the fix.
+```
+
+_Explanation:_ Pagination only protects your database if the client can't opt out of it. The naive parse trusts the client's `pageSize`, so a request for `?pageSize=999999999` would `take` a million rows and load the entire table into memory — turning your careful pagination into a denial-of-service vector. The `Math.min(100, ...)` clamp caps the damage, and the `Math.max(1, ...)` plus `|| 1` fallback handle zero, negatives, and non-numeric junk. Treating every external input as hostile and clamping it is the habit that keeps pagination both fast _and_ safe.
+
+### Why it matters
+
+At a thousand rows, no index feels fine and unbounded page sizes seem harmless. At a million rows, an unindexed query is the difference between a 50ms page and a 30-second timeout that takes the whole app down, and an unclamped `pageSize` is a one-line DoS. Indexing and disciplined pagination are how the users page stays sub-100ms as real data accumulates — performance you design in, not bolt on after it's already slow.
+
+**Self-test:** The users query runs `count` and `findMany` inside `Promise.all` — why both queries, and why concurrently? And what specifically goes wrong if you don't clamp `pageSize` to a maximum?
+
+---
+
+## 11. The Session Lifecycle: Create, Verify, Refresh, Revoke
+
+### High-level overview
+
+A session isn't a single moment — it's a lifecycle with four distinct operations: **create** (on login), **verify** (on every protected request), **refresh** (sliding expiry to keep active users logged in), and **revoke** (logout or forced kill). Modeling it as a small state machine is the key to building auth that feels solid rather than flaky.
+
+### Deep dive
+
+**Create** (login): write a DB row capturing user, expiry, and device metadata; cache it in Redis; sign a cookie carrying the session ID; set the cookie. Covered in concepts #4 and #6.
+
+**Verify** (every request): read the cookie → verify its signature → extract the session ID → look up Redis, fall back to Postgres, backfill the cache → return `{ isAuth, user, sessionId }`. Covered in concept #7. This is the most frequently executed operation in the system.
+
+**Refresh (sliding expiry):** extend `expiresAt` on activity so engaged users aren't logged out mid-task. The critical subtlety from the hardening checklist: do **not** refresh on _every_ request — that's a database write per request, which crushes write throughput. Only refresh when the session is past, say, half its lifetime. This bounds writes while still keeping active users logged in.
+
+**Revoke** (logout / kill): delete the DB row and the Redis key. Covered in concept #6 — this is the kill switch.
+
+**Why model it as a lifecycle.** Most homegrown auth nails create and verify, then forgets refresh and revoke — so users get unexpectedly logged out mid-session, or can never be force-logged-out when an account is compromised. Seeing all four states (and their interactions with the cache) is what makes the difference.
+
+### Examples
+
+**Example 1 — Refresh with sliding expiry, throttled to avoid write-per-request.**
+
+```ts
+// lib/session.ts (refresh)
+import { db } from "@/lib/db";
+import { redis, keys } from "@/lib/redis";
+
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
+export async function refreshSession(sessionId: string) {
+  const newExpiry = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
+
+  // Extend the DB record's expiry and bump lastUsedAt.
+  await db.session.update({
+    where: { id: sessionId },
+    data: { expiresAt: newExpiry, lastUsedAt: new Date() },
+  });
+
+  // Keep the cached copy in sync with the new expiry.
+  const cached = await redis.get(keys.session(sessionId));
+  if (cached) {
+    const data = JSON.parse(cached);
+    data.expiresAt = newExpiry.toISOString();
+    await redis.set(
+      keys.session(sessionId),
+      JSON.stringify(data),
+      "EX",
+      SESSION_TTL_SECONDS
+    );
+  }
+}
+
+// THROTTLE: only refresh past the halfway point of the session's life.
+// Called from verify with the current session's expiry.
+export function shouldRefresh(expiresAt: Date): boolean {
+  const msLeft = expiresAt.getTime() - Date.now();
+  const halfLife = (SESSION_TTL_SECONDS * 1000) / 2;
+  return msLeft < halfLife; // only refresh when LESS than half the window remains
+}
+```
+
+_Explanation:_ Sliding expiry is what keeps an active user logged in indefinitely — each refresh pushes the 7-day clock forward. But refreshing must update _both_ the DB row and the Redis copy, or they'd disagree about when the session expires. The crucial optimization is `shouldRefresh`: a naive implementation that refreshes on every request would issue a database `UPDATE` for _every single request_ the user makes, destroying write performance. Gating refresh behind "less than half the lifetime remains" means a session is refreshed at most once per ~3.5 days of activity instead of thousands of times a day.
+
+**Example 2 — Wiring refresh into the verify path (the full lifecycle in motion).**
+
+```ts
+// lib/session.ts (verify + conditional refresh)
+export async function verifySessionAndRefresh() {
+  const result = await verifySession(); // the cache-aside verify from concept #7
+  if (!result.isAuth || !result.sessionId) return result;
+
+  // We need the expiry to decide whether to refresh. Read it cheaply from cache.
+  const cached = await redis.get(keys.session(result.sessionId));
+  if (cached) {
+    const { expiresAt } = JSON.parse(cached);
+    if (shouldRefresh(new Date(expiresAt))) {
+      // Fire-and-forget the refresh so it doesn't add latency to THIS request.
+      refreshSession(result.sessionId).catch(() => {
+        /* a failed refresh is non-fatal: the session is still valid right now */
+      });
+    }
+  }
+
+  return result;
+}
+```
+
+_Explanation:_ This composes verify (concept #7) with refresh into the complete per-request lifecycle. Verification happens first and is authoritative; refresh is a _conditional, secondary_ concern gated by `shouldRefresh`. Two deliberate choices: the refresh is fire-and-forget (not awaited) so it doesn't slow down the response the user is waiting on, and a refresh failure is swallowed because it's non-fatal — the session is valid for this request regardless of whether the expiry got extended. This is the difference between an auth system that adds latency and write load to every request versus one that stays light.
+
+**Example 3 — Logout: ending the current session cleanly.**
+
+```ts
+// lib/session.ts (delete current session)
+import { cookies } from "next/headers";
+import { db } from "@/lib/db";
+import { redis, keys } from "@/lib/redis";
+
+export async function deleteSession() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+
+  if (token) {
+    const sessionId = await readCookie(token); // verify signature → sid
+    if (sessionId) {
+      // Remove the DB record. .catch swallows "already deleted" races.
+      await db.session.delete({ where: { id: sessionId } }).catch(() => {});
+      // Evict the cache so it can't be served after logout.
+      await redis.del(keys.session(sessionId));
+    }
+  }
+
+  // Always clear the cookie, even if the session was already gone.
+  cookieStore.delete("session");
+}
+
+// app/api/v1/auth/logout/route.ts
+import { NextResponse } from "next/server";
+export async function POST() {
+  await deleteSession();
+  return NextResponse.json({ ok: true }, { status: 200 });
+}
+```
+
+_Explanation:_ Logout is the user-initiated end of the lifecycle, and it must clean up all three places a session lives: the DB row, the Redis key, and the cookie. The `.catch(() => {})` on the delete handles a harmless race (the row might already be gone if the session expired or was revoked elsewhere) without crashing. Critically, the cookie is cleared _unconditionally_ at the end — even if everything else failed, the browser stops sending the session token, so the user is logged out from their perspective no matter what. Handling all three storage layers is what makes logout reliable.
+
+### Why it matters
+
+Auth that only implements create and verify feels fragile in production: sessions expire mid-task and frustrate users, or compromised accounts can't be force-killed. Treating the session as a four-state lifecycle — and getting the refresh _throttling_ right so you don't write to the database on every request — is what makes auth feel both solid to users and light on your infrastructure.
+
+**Self-test:** Why is refreshing the session on _every_ request a performance problem, and how does the `shouldRefresh` halfway-point check fix it while still keeping active users logged in?
+
+---
+
+## 12. The Edge / Server Boundary: Middleware vs Route Handlers
+
+### High-level overview
+
+Next.js middleware runs at the **edge** — geographically close to the user, before the page renders — but it can't reliably reach your Postgres or Redis. The course uses this constraint deliberately: middleware does a cheap signature check to bounce obvious anonymous traffic, while the _authoritative_ auth decision (DB + Redis) lives in the route handlers where those services are reachable.
+
+### Deep dive
+
+**Two execution environments, two capabilities.** Edge middleware is fast and runs everywhere, but it's resource-constrained and often can't open a database connection or reach Redis. Route handlers run on the server (Node runtime) with full access to your database and cache, but they're a network hop away and run after routing. The course assigns each the job it's suited for.
+
+**Optimistic vs authoritative checks.** Middleware does an _optimistic_ check: "does this request carry a validly-signed cookie?" If not, redirect to login immediately — cheap and correct for _anonymous_ traffic. But a validly-signed cookie whose session was _revoked_ in the DB still passes middleware (middleware can't see the DB). That request proceeds, the page starts to render, and then the _first_ React Query call to the API does the _authoritative_ check (DB/Redis lookup), gets a `401`, and the UI flips to the unauthorized state. The course calls this brief render-then-correct "a feature, not a bug" — accepting a momentary flash in the rare revoked-but-unexpired case is the price of keeping middleware cheap.
+
+**The request lifecycle.** cookie → middleware (cheap signature gate, redirects anonymous users) → route handler (authoritative DB/Redis check) → data layer → response. Each layer does only what it's positioned to do well.
+
+### Examples
+
+**Example 1 — Optimistic middleware: signature-only gate at the edge.**
+
+```ts
+// middleware.ts
+import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
+
+const secret = new TextEncoder().encode(process.env.SESSION_SECRET!);
+
+export async function middleware(req: NextRequest) {
+  const token = req.cookies.get("session")?.value;
+
+  // OPTIMISTIC check: is the cookie present and validly signed?
+  // This does NOT (and cannot reliably) check the DB/Redis for revocation.
+  let hasValidSignature = false;
+  if (token) {
+    try {
+      await jwtVerify(token, secret); // signature + expiry only
+      hasValidSignature = true;
+    } catch {
+      hasValidSignature = false;
+    }
+  }
+
+  const isProtected = ["/account", "/users"].some((p) =>
+    req.nextUrl.pathname.startsWith(p)
+  );
+
+  // Anonymous or forged → redirect to login BEFORE any React renders.
+  if (isProtected && !hasValidSignature) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  return NextResponse.next(); // let it through to the authoritative check
+}
+
+export const config = { matcher: ["/account/:path*", "/users/:path*"] };
+```
+
+_Explanation:_ This is intentionally the _cheapest possible_ useful check. It catches the overwhelmingly common case — a user with no cookie or a forged/expired one — and bounces them to login instantly, before any expensive server work or React rendering. What it deliberately _can't_ catch is a validly-signed cookie whose underlying session was revoked, because that requires a DB lookup the edge can't do. The `matcher` config limits middleware to only the protected paths, so it doesn't run on every asset request.
+
+**Example 2 — The authoritative check in the route handler.**
+
+```ts
+// app/api/v1/account/route.ts (the AUTHORITATIVE gate)
+import { NextResponse } from "next/server";
+import { verifySession } from "@/lib/session";
+import { db } from "@/lib/db";
+
+export async function GET() {
+  // This is the REAL check: cache-aside Redis → Postgres lookup of the session.
+  // It WILL catch a revoked session that slipped past middleware.
+  const { isAuth, user } = await verifySession();
+
+  if (!isAuth) {
+    // A revoked-but-unexpired cookie lands here: signature was fine (passed
+    // middleware) but the DB record is gone → 401. The client flips to
+    // the unauthorized state.
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const profile = await db.user.findUnique({
+    where: { id: user.id },
+    select: { id: true, email: true, name: true, role: true, createdAt: true },
+  });
+  return NextResponse.json({ profile }, { status: 200 });
+}
+```
+
+_Explanation:_ This handler runs on the server with full DB/Redis access, so `verifySession` can do the lookup middleware couldn't. This is where a revoked session is finally caught: its cookie signature was valid (so middleware let it through), but `verifySession` finds no live DB record and returns `isAuth: false`, producing a `401`. The division of labor is explicit — middleware filters the easy 95% cheaply at the edge, and the handler makes the authoritative call for the tricky cases. Putting this check _only_ in middleware would be impossible (no DB at the edge); putting it _only_ here would mean anonymous users render the whole page before being rejected.
+
+**Example 3 — The client handling the "rendered then corrected" 401 gracefully.**
+
+```tsx
+// app/account/page.tsx (excerpt — how the client absorbs a late 401)
+"use client";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch, ApiError } from "@/lib/api/client";
+
+export default function AccountPage() {
+  const profileQuery = useQuery({
+    queryKey: ["account"],
+    queryFn: () => apiFetch<{ profile: Profile }>("/api/v1/account"),
+  });
+
+  // First-load skeleton (the optimistic render middleware allowed through).
+  if (profileQuery.isLoading) return <ProfileSkeleton />;
+
+  // If the AUTHORITATIVE check returned 401 (e.g. session was revoked),
+  // the query errors here with ApiError.status === 401, and we show the
+  // signed-out state instead of a broken page.
+  if (profileQuery.isError) {
+    const err = profileQuery.error as ApiError;
+    if (err.status === 401) {
+      return (
+        <SignedOutNotice message="Your session has ended. Please sign in again." />
+      );
+    }
+    return <ErrorBox message={err.message} onRetry={profileQuery.refetch} />;
+  }
+
+  const p = profileQuery.data!.profile;
+  return <ProfileView profile={p} />;
+}
+```
+
+_Explanation:_ This closes the loop on the optimistic-middleware trade-off. A user with a revoked-but-unexpired session is allowed through middleware, briefly sees the skeleton, then the authoritative API call returns `401` — and _this_ code catches it via `ApiError.status === 401` and shows a clean "your session has ended" notice rather than a broken screen. The momentary skeleton flash is the entire cost of keeping middleware cheap, and handling the 401 explicitly on the client is what makes that cost invisible to the user. Edge and server each did their part; the client gracefully absorbs the seam between them.
+
+### Why it matters
+
+Trying to do a full DB session check in middleware leads to either reliability problems (the edge can't reliably reach your database) or a latency tax on every request. The optimistic-edge / authoritative-server split keeps the fast path fast and the correct path correct — a pattern that recurs far beyond auth (any time you have a cheap-but-incomplete check and an expensive-but-complete one). Understanding _which_ check belongs _where_ is a genuinely senior instinct.
+
+**Self-test:** Why can't you just do the full DB session check in middleware and skip the route-handler check? And in the revoked-but-unexpired case, what does the user briefly see, and what corrects it?
+
+## 13. React Query Fundamentals: Server State Is Not Client State
+
+### High-level overview
+
+The entire frontend fetches through React Query (TanStack Query), with **zero `useEffect` for data anywhere.** If you currently fetch with `useEffect` + `useState` + a manual loading flag, this is the single biggest mindset shift in the course — and the one most worth practicing in advance.
+
+### Deep dive
+
+**The core insight: server state is fundamentally different from client state.** Client state (a toggle, a form input, the current page number) is owned by your component and exists only in the browser. Server state (the user's profile, the list of sessions) _lives somewhere else_, can become stale the moment you fetch it, is shared across many components, and needs caching, deduplication, background refetching, and invalidation. Treating server data like client `useState` forces you to hand-build all of that, badly. React Query owns the server-state lifecycle so you don't.
+
+**What React Query gives you for free:**
+
+- **Caching** keyed by a query key, so the same data isn't refetched needlessly and is shared across components.
+- **Deduplication** — ten components requesting the same key trigger one network call.
+- **Loading and error states** as first-class flags (`isLoading`, `isError`, `error`, `data`).
+- **Background refetching** and staleness control via `staleTime`.
+- **Invalidation** so a mutation can declaratively mark data stale and trigger a refetch.
+
+**Setup.** A single `QueryClient` holds the cache; a `QueryClientProvider` makes it available to the whole tree. Default options (like `staleTime` and the retry policy) are configured once here.
+
+**The retry policy ties back to HTTP.** The course configures React Query to _not_ retry 4xx errors — retrying a `401` won't make you more logged in, and retrying a `429` just burns your rate-limit budget. 5xx and network errors are worth a retry; client errors are not. This is concept #2's status-code semantics applied to the client.
+
+### Examples
+
+**Example 1 — The QueryClient setup with a status-aware retry policy.**
+
+```tsx
+// app/providers.tsx
+"use client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
+import { ApiError } from "@/lib/api/client";
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  // useState(() => ...) creates the client ONCE, not on every render.
+  const [client] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            // Don't retry CLIENT errors (4xx) — retrying won't help and
+            // a 429 retry actively harms (burns rate-limit budget).
+            retry: (failureCount, error) => {
+              if (
+                error instanceof ApiError &&
+                error.status >= 400 &&
+                error.status < 500
+              ) {
+                return false;
+              }
+              return failureCount < 2; // otherwise retry up to twice
+            },
+            // Consider data fresh for 30s before a background refetch.
+            staleTime: 30_000,
+          },
+        },
+      })
+  );
+
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+```
+
+_Explanation:_ The `QueryClient` is created inside `useState(() => ...)` so it's instantiated exactly once for the app's lifetime rather than rebuilt on every render (which would throw away the cache). The `retry` function encodes concept #2's semantics directly: a 4xx is the _client's_ fault and retrying is pointless or harmful, so it returns `false`; everything else (5xx, network) retries up to twice. `staleTime: 30_000` tells React Query that fetched data stays "fresh" for 30 seconds before it'll refetch in the background — tuning how aggressively the UI revalidates.
+
+**Example 2 — Replacing a hand-rolled useEffect fetch with useQuery.**
+
+```tsx
+// ---- THE OLD WAY: useEffect + useState (don't do this) ----
+function ProfileOld() {
+  const [data, setData] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false; // manual race-condition guard
+    setLoading(true);
+    fetch("/api/v1/account")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setData(d.profile);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    }; // cleanup to avoid setState after unmount
+  }, []);
+  // ...and you STILL have no caching, no dedup, no refetch, no invalidation.
+}
+
+// ---- THE REACT QUERY WAY: one declaration ----
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch, ApiError } from "@/lib/api/client";
+
+function ProfileNew() {
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["account"],
+    queryFn: () => apiFetch<{ profile: Profile }>("/api/v1/account"),
+  });
+
+  if (isLoading) return <ProfileSkeleton />;
+  if (isError)
+    return <ErrorBox message={(error as ApiError).message} onRetry={refetch} />;
+  return <ProfileView profile={data!.profile} />;
+}
+```
+
+_Explanation:_ The old way manually juggles three pieces of state, a cancellation flag to avoid the classic "setState after unmount" race, and _still_ provides no caching, deduplication, background refetch, or invalidation. The React Query version replaces all of it with one `useQuery` declaration that returns those states ready-made — and adds caching, dedup, and refetch for free. The mental shift is from _imperatively orchestrating a fetch_ to _declaring what data this component needs_; React Query handles the how.
+
+**Example 3 — Deduplication and sharing: two components, one network call.**
+
+```tsx
+// Both components need the current user. With React Query and a shared key,
+// this results in exactly ONE network request, and both render from one cache.
+
+function useCurrentUser() {
+  return useQuery({
+    queryKey: ["account"], // SAME key in both consumers → shared cache entry
+    queryFn: () => apiFetch<{ profile: Profile }>("/api/v1/account"),
+  });
+}
+
+function NavbarAvatar() {
+  const { data } = useCurrentUser();
+  return (
+    <img src={`/avatars/${data?.profile.id}`} alt={data?.profile.name ?? ""} />
+  );
+}
+
+function AccountHeader() {
+  const { data } = useCurrentUser();
+  return <h1>Welcome, {data?.profile.name ?? "friend"}</h1>;
+}
+
+// Render BOTH on the same page:
+//   <NavbarAvatar /> and <AccountHeader />
+// → React Query sees two subscribers to ["account"], fires ONE fetch,
+//   and feeds both. With useEffect, you'd fetch twice (or hoist state awkwardly).
+```
+
+_Explanation:_ Because both components subscribe to the same query key `["account"]`, React Query deduplicates them into a _single_ network request and serves both from one cache entry. With hand-rolled `useEffect`, you'd either fetch the same data twice (wasteful, and the two copies could disagree) or be forced to lift the state up and prop-drill it everywhere. The shared-key model means any component, anywhere in the tree, can ask for the data it needs and automatically share one cached, deduplicated, always-consistent copy.
+
+### Why it matters
+
+Hand-rolled `useEffect` fetching reinvents caching, race-condition handling, deduplication, and refetching — badly — in every component, and most implementations forget at least one (usually the cancellation guard or the error state). React Query gives you all of it as one coherent system, which is exactly why the course's frontend has _no_ `useEffect` for data yet does more than most hand-written ones. Internalizing "server state is not client state" is the unlock.
+
+**Self-test:** Name three things `useQuery` gives you for free that you'd otherwise hand-build with `useEffect` + `useState`, and explain why the retry policy returns `false` for a 429.
+
+---
+
+## 14. Data Fetching with `useQuery`: Keys, Caching, and Pagination
+
+### High-level overview
+
+Reads use `useQuery`, identified by a **query key**. The key is the cache address: the same key returns the same cached data, and _changing_ the key triggers a fetch for that new combination. This single mechanism is how search and pagination work with almost no manual code.
+
+### Deep dive
+
+**Query keys as cache addresses and dependencies.** A key like `["users", page, pageSize, search]` does two jobs: it's the address under which that exact result is cached, _and_ it's a dependency list. When `page` or `search` changes, the key changes, React Query looks for that new key in the cache (hit → instant) or fetches it (miss). Navigate back to a page you've seen and it's served instantly from cache. Each search term is cached separately.
+
+**`queryFn`** is the async function that fetches the data for a key — here, always going through the typed `apiFetch` wrapper.
+
+**`placeholderData: keepPreviousData`** is the pagination magic. By default, when the key changes (new page), the query goes into a loading state and the old data vanishes — so the table flashes a skeleton between every page. `keepPreviousData` tells React Query to _keep showing the previous page's data_ while the next page loads, so pagination feels instant and stable.
+
+**`isLoading` vs `isFetching`.** `isLoading` is true only on the _first-ever_ fetch for a key (no cached data yet) — that's when you show a skeleton. `isFetching` is true during _any_ fetch including background refetches and `keepPreviousData` transitions — that's when you dim the existing table to signal "updating." Confusing these is a common source of flickery UIs.
+
+**`enabled`** lets you make a query conditional (e.g. don't run until you have an ID).
+
+### Examples
+
+**Example 1 — Paginated, searchable query with keys driving everything.**
+
+```tsx
+// app/users/page.tsx (the query)
+"use client";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useState } from "react";
+import { apiFetch, ApiError } from "@/lib/api/client";
+
+export default function UsersPage() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const pageSize = 20;
+
+  const query = useQuery({
+    // The key INCLUDES page, pageSize, search. Change any → new cache entry → refetch.
+    queryKey: ["users", page, pageSize, search],
+    queryFn: () =>
+      apiFetch<UsersResponse>(
+        `/api/v1/users?page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}`
+      ),
+    // Keep the OLD page visible while the NEW page loads — no skeleton flash.
+    placeholderData: keepPreviousData,
+  });
+
+  return (
+    <div>
+      <input
+        placeholder="Search users…"
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          setPage(1); // reset to first page on a new search
+        }}
+      />
+      {/* table + pager use query.data — see next examples */}
+    </div>
+  );
+}
+```
+
+_Explanation:_ The query key `["users", page, pageSize, search]` is the entire engine. Type in the search box → `search` changes → the key changes → React Query fetches that specific result and caches it under that key. Flip to page 3, then back to page 1 → page 1's key is already cached → it appears instantly. You never write a single `useEffect` or manual refetch; changing the state that's _in the key_ is what drives fetching. `keepPreviousData` ensures the transition between pages is smooth rather than a jarring skeleton flash.
+
+**Example 2 — Using `isLoading` vs `isFetching` to drive the right UI.**
+
+```tsx
+// Rendering the table with correct loading semantics.
+function UsersTable({ query }: { query: ReturnType<typeof useUsersQuery> }) {
+  // isLoading: TRUE only on the very first load (no data cached yet) → skeleton.
+  if (query.isLoading) return <TableSkeleton />;
+
+  // isError: show a real message with retry (sourced from ApiError).
+  if (query.isError) {
+    return (
+      <div className="error-box">
+        <p>{(query.error as ApiError).message}</p>
+        <button onClick={() => query.refetch()}>Retry</button>
+      </div>
+    );
+  }
+
+  return (
+    <table>
+      <tbody
+        // isFetching: TRUE during background/page-change fetches → DIM the table
+        // to signal "updating" while keepPreviousData keeps the old rows visible.
+        style={{
+          opacity: query.isFetching ? 0.6 : 1,
+          transition: "opacity 0.15s",
+        }}
+      >
+        {query.data!.items.map((u) => (
+          <tr key={u.id}>
+            <td>{u.name ?? "—"}</td>
+            <td>{u.email}</td>
+            <td>{u.role}</td>
+            <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+```
+
+_Explanation:_ The two flags drive two different visuals. `isLoading` is only true on the first-ever load when there's genuinely nothing to show, so it gates the full skeleton. `isFetching` is true whenever a fetch is in flight — including when you flip pages — so it dims the (still-visible, thanks to `keepPreviousData`) table to `0.6` opacity, signaling "this is updating" without yanking the content away. Using `isLoading` where you meant `isFetching` would flash a skeleton on every page change; using `isFetching` where you meant `isLoading` would show a dimmed _empty_ table on first load. Getting them right is what makes the pagination feel polished.
+
+**Example 3 — A conditional query with `enabled` and a derived key.**
+
+```tsx
+// Fetch a single user's detail ONLY when a row is selected.
+function UserDetailPanel({ selectedId }: { selectedId: string | null }) {
+  const detailQuery = useQuery({
+    queryKey: ["user", selectedId], // key includes the id
+    queryFn: () => apiFetch<{ user: User }>(`/api/v1/users/${selectedId}`),
+    enabled: selectedId !== null, // DON'T run until a row is actually selected
+  });
+
+  if (selectedId === null)
+    return <EmptyPanel hint="Select a user to see details" />;
+  if (detailQuery.isLoading) return <DetailSkeleton />;
+  if (detailQuery.isError) {
+    return (
+      <ErrorBox
+        message={(detailQuery.error as ApiError).message}
+        onRetry={detailQuery.refetch}
+      />
+    );
+  }
+
+  const u = detailQuery.data!.user;
+  return (
+    <div>
+      <h3>{u.name ?? u.email}</h3>
+      <p>
+        {u.email} · {u.role}
+      </p>
+    </div>
+  );
+}
+```
+
+_Explanation:_ `enabled: selectedId !== null` makes the query _conditional_ — it simply doesn't fire while nothing is selected, so you don't fetch `"/api/v1/users/null"`. The moment `selectedId` becomes a real ID, the key changes _and_ `enabled` flips true, so React Query fetches that user and caches it under `["user", <id>]`. Select the same user again later and it's served from cache instantly. This pattern — a key that includes a maybe-null ID plus an `enabled` guard — is the clean way to do dependent/conditional fetching without effects or manual flags.
+
+### Why it matters
+
+Encoding `page` and `search` _into the query key_ means navigation is instant where it's cached and every parameter combination is remembered separately — for free. Done by hand with `useEffect`, this becomes a tangle of dependency arrays, stale-closure bugs, and manual cache maps. With keys, it's a few lines, and the cache, deduplication, and refetch behavior come along automatically. The `isLoading`/`isFetching` distinction is then what makes the whole thing _feel_ fast rather than flickery.
+
+**Self-test:** When the user flips from page 1 to page 2, what does `keepPreviousData` change about what they see, and why would using `isLoading` (instead of `isFetching`) to dim the table cause a skeleton flash on every page change?
+
+---
+
+## 15. Data Mutations with `useMutation`: Invalidation and Optimistic UI
+
+### High-level overview
+
+Writes use `useMutation`. The pattern that makes the UI feel alive is: perform the write, then on success **invalidate** the relevant query keys, and React Query automatically refetches them so the screen reflects the new server state — with no manual `setState` of server data anywhere.
+
+### Deep dive
+
+**`mutationFn`** performs the write (a `PATCH`, `POST`, or `DELETE` through `apiFetch`).
+
+**`onSuccess` → `invalidateQueries`** is the core loop. After a successful mutation, you call `queryClient.invalidateQueries({ queryKey: [...] })`, which marks those cached queries stale and triggers a refetch. Update your profile → invalidate `["account"]` → the profile query refetches → the fresh name appears. You never manually set the new profile into state; you declare "this data is now stale" and React Query re-pulls the truth from the server.
+
+**Mutation states** drive the UI: `isPending` (the write is in flight → disable the button, show "Saving…"), `isError`/`error` (show the failure message inline), `isSuccess` (show a confirmation).
+
+**Optimistic updates (advanced).** For instant-feeling UIs, you can update the cache _before_ the server responds via `onMutate`, then roll back in `onError` if the write fails, and reconcile in `onSettled`. This makes actions like toggling or deleting feel immediate. The course's simpler invalidate-on-success pattern is the right default; optimistic updates are the optimization for hot paths.
+
+**Why this beats manual state-syncing.** Without it, after every write you'd manually update every piece of UI that displays the changed data — and inevitably miss one, causing the screen to disagree with the server. Invalidation makes the server the single source of truth and the UI a reflection of it.
+
+### Examples
+
+**Example 1 — Profile update: mutate, then invalidate to refetch fresh data.**
+
+```tsx
+// app/account/page.tsx (profile mutation)
+"use client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { apiFetch, ApiError } from "@/lib/api/client";
+
+function ProfileForm({ initial }: { initial: Profile }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    name: initial.name ?? "",
+    email: initial.email,
+  });
+
+  const updateProfile = useMutation({
+    mutationFn: (data: { name?: string; email?: string }) =>
+      apiFetch<{ profile: Profile }>("/api/v1/account", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    // On success, mark ["account"] stale → React Query refetches it →
+    // the UI re-renders with the server's fresh copy. No manual setState.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["account"] }),
+  });
+
+  return (
+    <div>
+      <input
+        value={form.name}
+        onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+      />
+      <input
+        value={form.email}
+        onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+      />
+      <button
+        disabled={updateProfile.isPending} // disable while saving
+        onClick={() => updateProfile.mutate(form)}
+      >
+        {updateProfile.isPending ? "Saving…" : "Save changes"}
+      </button>
+      {updateProfile.isError && (
+        <p className="error">{(updateProfile.error as ApiError).message}</p>
+      )}
+      {updateProfile.isSuccess && <p className="success">Saved.</p>}
+    </div>
+  );
+}
+```
+
+_Explanation:_ The flow is: click → `mutate(form)` runs the `PATCH` → on success, `invalidateQueries(["account"])` marks the profile query stale → React Query refetches it → the displayed profile updates to the server's fresh copy. Crucially, _you never set the new profile into state yourself_ — you declare the cache stale and let the refetch deliver truth. `isPending` disables the button and shows "Saving…" so the user can't double-submit; `isError`/`isSuccess` give inline feedback. This is the whole "mutate then invalidate" loop in one component.
+
+**Example 2 — Delete mutations (revoke one / revoke all) invalidating a list.**
+
+```tsx
+// app/account/page.tsx (session revocation mutations)
+function DeviceList() {
+  const qc = useQueryClient();
+
+  const revokeOne = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/v1/account/sessions/${id}`, { method: "DELETE" }),
+    // After revoking, the device LIST is stale → refetch it so the row vanishes.
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["account", "sessions"] }),
+  });
+
+  const revokeAll = useMutation({
+    mutationFn: () =>
+      apiFetch("/api/v1/account/sessions", { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["account", "sessions"] }),
+  });
+
+  const sessionsQuery = useQuery({
+    queryKey: ["account", "sessions"],
+    queryFn: () =>
+      apiFetch<{ sessions: SessionRow[] }>("/api/v1/account/sessions"),
+  });
+
+  return (
+    <section>
+      <button onClick={() => revokeAll.mutate()} disabled={revokeAll.isPending}>
+        Log out all other devices
+      </button>
+      {sessionsQuery.data?.sessions.map((s) => (
+        <div key={s.id} className="device">
+          <span>
+            {s.browser ?? "Unknown"} on {s.os ?? "Unknown"}
+          </span>
+          {s.current && <span className="badge">This device</span>}
+          {!s.current && (
+            <button
+              onClick={() => revokeOne.mutate(s.id)}
+              disabled={revokeOne.isPending}
+            >
+              Log out
+            </button>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+}
+```
+
+_Explanation:_ Both mutations target the _same_ list query (`["account", "sessions"]`) and invalidate it on success, so revoking a device — whether one or all-others — causes the list to refetch and the gone device(s) to disappear from the UI automatically. You don't manually splice the deleted row out of local state (which would risk the UI disagreeing with the server if the delete partially failed); you invalidate and let the refetched list be the truth. The `current` flag (computed server-side, concept #3) hides the "Log out" button on the user's own row so they can't accidentally revoke themselves here.
+
+**Example 3 — An optimistic update with rollback for an instant-feeling toggle.**
+
+```tsx
+// Optimistic role toggle (admin promoting/demoting a user) — instant UI, safe rollback.
+function useToggleRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, role }: { id: string; role: "USER" | "ADMIN" }) =>
+      apiFetch(`/api/v1/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      }),
+
+    // BEFORE the server responds, update the cache so the UI flips instantly.
+    onMutate: async ({ id, role }) => {
+      await qc.cancelQueries({ queryKey: ["users"] }); // avoid races
+      const previous = qc.getQueryData(["users"]); // snapshot for rollback
+      qc.setQueryData(["users"], (old: any) => ({
+        ...old,
+        items: old.items.map((u: User) => (u.id === id ? { ...u, role } : u)),
+      }));
+      return { previous }; // pass snapshot to onError
+    },
+
+    // If the server REJECTS it, roll the cache back to the snapshot.
+    onError: (_err, _vars, context) => {
+      if (context?.previous) qc.setQueryData(["users"], context.previous);
+    },
+
+    // Either way, refetch to reconcile with the server's actual truth.
+    onSettled: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+```
+
+_Explanation:_ This is the advanced optimization. `onMutate` runs _before_ the network call: it snapshots the current cache (for rollback) and immediately rewrites the cached list so the role flips in the UI instantly — the user sees zero latency. If the server then rejects the change, `onError` restores the snapshot so the UI doesn't lie. `onSettled` invalidates regardless, so the final state always reconciles with the server. Compared to the simple invalidate-on-success pattern (Examples 1–2), this trades more code for an instant-feeling interaction — worth it on hot, frequently-toggled controls, overkill elsewhere. Knowing _when_ to reach for it is the skill.
+
+### Why it matters
+
+The "invalidate after mutate" loop is what keeps the device list, profile, and users table correct without a single manual `setState` of server data. Miss this pattern and you're back to hand-syncing local copies after every write — the exact bug-prone busywork (and UI-disagrees-with-server bugs) that React Query exists to eliminate. Optimistic updates then layer on instant responsiveness where it counts.
+
+**Self-test:** After a successful profile `PATCH`, the new name appears without you calling any `setState` for it — what mechanism made that happen? And in an optimistic update, what is the `onMutate` snapshot for?
+
+---
+
+## 16. Centralized API Client and Error Handling
+
+### High-level overview
+
+All client-side fetching goes through one wrapper, `apiFetch<T>`, which catches **every** status code and network failure and turns it into a typed `ApiError` carrying a user-readable message. Error handling lives in exactly one place instead of being re-implemented (and half-forgotten) in every component.
+
+### Deep dive
+
+**One wrapper, one error path.** Rather than calling `fetch` directly all over the app, every request flows through `apiFetch`. It sets `Content-Type: application/json` and `credentials: "include"` (so the httpOnly cookie is sent), tolerates empty response bodies (logout returns none), parses JSON safely, and on any failure throws a structured `ApiError`.
+
+**The `ApiError` class** extends `Error` (so it flows through `try/catch` and React Query) and adds `status` and `body`. Components can branch on `error.status` (e.g. show a sign-out notice on 401) or just display `error.message`.
+
+**Status-to-message mapping.** When the response isn't OK, the wrapper builds a message in priority order: the server's own `error` field if present, otherwise a default keyed by status (`401 → "You are not signed in"`, `429 → "Too many requests. Slow down."`), otherwise a generic fallback. So every failure — anywhere — yields a sane human message.
+
+**Network failures.** A thrown `fetch` (offline, DNS failure, CORS) doesn't return a status at all. The wrapper catches it and throws `ApiError(0, "Network error…")`, so "the network died" is a handled case with a real message rather than an unhandled exception that white-screens the app.
+
+**Native `fetch`, not axios.** Two reasons: smaller bundle, and forcing a single explicit error path instead of scattering try/catch and interceptor config across the codebase.
+
+### Examples
+
+**Example 1 — The complete API client with structured errors.**
+
+```ts
+// lib/api/client.ts
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, message: string, body?: unknown) {
+    super(message);
+    this.status = status;
+    this.body = body;
+    this.name = "ApiError";
+  }
+}
+
+const STATUS_DEFAULTS: Record<number, string> = {
+  400: "Bad request",
+  401: "You are not signed in",
+  403: "You do not have permission to do that",
+  404: "Not found",
+  409: "Conflict",
+  422: "Validation failed",
+  429: "Too many requests. Slow down.",
+  500: "Something went wrong on our end",
+};
+
+export async function apiFetch<T>(
+  input: string,
+  init?: RequestInit
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(input, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      credentials: "include", // send the httpOnly session cookie
+    });
+  } catch {
+    // No HTTP status at all — the request never completed.
+    throw new ApiError(0, "Network error. Check your connection.");
+  }
+
+  // Parse JSON defensively; some endpoints (logout) return an empty body.
+  let data: unknown = null;
+  const text = await res.text();
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (!res.ok) {
+    const message =
+      (data as { error?: string } | null)?.error ?? // server's message wins
+      STATUS_DEFAULTS[res.status] ?? // else a default by status
+      `Request failed (${res.status})`; // else a generic fallback
+    throw new ApiError(res.status, message, data);
+  }
+
+  return data as T;
+}
+```
+
+_Explanation:_ This single function is the only place HTTP errors are interpreted. The outer `try/catch` handles _transport_ failure (status 0); the `!res.ok` block handles _HTTP_ failure. The message-resolution order is deliberate: the server's specific `error` string ("Email already in use") is best, a status default is the fallback, and a generic message is the last resort — so there's _always_ something human to show. `credentials: "include"` is what makes the cookie ride along on every call. Because everything throws a typed `ApiError`, every consumer gets `.status` and `.message` without parsing responses themselves.
+
+**Example 2 — Consuming ApiError: branching on status in the UI.**
+
+```tsx
+// A reusable hook that translates query errors into UI decisions by status.
+import { ApiError } from "@/lib/api/client";
+
+function renderQueryError(error: unknown, onRetry: () => void) {
+  const err =
+    error instanceof ApiError ? error : new ApiError(0, "Unexpected error");
+
+  switch (err.status) {
+    case 401:
+      // Not authenticated → prompt sign-in, not a generic error.
+      return (
+        <SignedOutNotice message="Your session has ended. Please sign in again." />
+      );
+    case 403:
+      // Authenticated but not allowed → permission message, no sign-in prompt.
+      return <PermissionDenied message="You don't have access to this." />;
+    case 0:
+      // Network failure → offline-specific UI with retry.
+      return <OfflineNotice onRetry={onRetry} />;
+    default:
+      return <ErrorBox message={err.message} onRetry={onRetry} />;
+  }
+}
+
+// In a component:
+//   if (query.isError) return renderQueryError(query.error, query.refetch);
+```
+
+_Explanation:_ Because the wrapper guarantees a typed `ApiError` with a `status`, the UI can make precise decisions: a `401` shows a sign-in prompt, a `403` shows a permission message (importantly _not_ a sign-in prompt — the user is already signed in), a `0` shows an offline state with retry, and everything else falls back to a generic error box. This is concept #2's status semantics paying off all the way at the UI layer. Without the centralized `ApiError`, each component would re-parse raw responses and most would handle only the happy path plus a vague "something went wrong."
+
+**Example 3 — How the wrapper handles edge cases that crash naive fetch code.**
+
+```ts
+// Three real situations that break naive `fetch().then(r => r.json())` code,
+// and how apiFetch handles each.
+
+// CASE 1 — Empty body (logout returns 200 with no content).
+//   Naive: `await res.json()` THROWS on empty body → unhandled crash.
+//   apiFetch: reads res.text() first; empty text → data stays null, no throw.
+await apiFetch("/api/v1/auth/logout", { method: "POST" }); // resolves cleanly
+
+// CASE 2 — Non-JSON error page (a 500 that returns HTML, e.g. a proxy error).
+//   Naive: `res.json()` THROWS on "<html>..." → masks the real 500.
+//   apiFetch: JSON.parse fails → falls back to data = text, still throws a
+//             clean ApiError(500, "Something went wrong on our end").
+try {
+  await apiFetch("/api/v1/users");
+} catch (e) {
+  // e is ApiError(500, ...) with a usable message, even though body was HTML.
+}
+
+// CASE 3 — Offline / DNS failure (request never reaches the server).
+//   Naive: fetch() REJECTS → if you only handle .then, this is an unhandled rejection.
+//   apiFetch: outer try/catch → throws ApiError(0, "Network error...").
+try {
+  await apiFetch("/api/v1/account");
+} catch (e) {
+  // e is ApiError(0, "Network error. Check your connection.")
+}
+```
+
+_Explanation:_ These three cases are exactly where hand-written `fetch().then(r => r.json())` code falls apart — and they _will_ happen in production. An empty body crashes `.json()`; an HTML error page (common from proxies/load balancers on a 500) crashes `.json()` and hides the real status; an offline request rejects the promise entirely. `apiFetch` handles all three by reading text first, tolerating parse failures, and wrapping transport errors as `ApiError(0, ...)`. Centralizing these defenses once means _every_ call in the app is robust to them, instead of each component author having to remember all three.
+
+### Why it matters
+
+Centralizing error handling means every screen shows a sane, specific message for every failure mode — for free — and React Query's retry logic and your UI can branch on `error.status`. Without it, each component reinvents error handling, most forget the 429/409/offline/empty-body cases, and your app white-screens on the exact edge cases that occur most under real-world conditions.
+
+**Self-test:** Why does the wrapper convert a thrown `fetch()` (e.g. offline) into `ApiError(0, ...)` instead of letting it bubble up raw, and why read `res.text()` before attempting `JSON.parse`?
+
+---
+
+## 17. Authorization and Role-Based Access Control (RBAC)
+
+### High-level overview
+
+Authentication asks "_who_ are you?"; **authorization** asks "_what are you allowed to do?_" The course separates them cleanly: `verifySession` answers the first, and explicit `role` and _ownership_ checks answer the second — always enforced server-side, where it actually counts.
+
+### Deep dive
+
+**AuthN vs AuthZ.** Authentication establishes identity (you have a valid session). Authorization decides permissions (you may view this, edit that). They're different questions with different failure codes: failing authN is `401`, failing authZ is `403`.
+
+**Role-based access control.** The `User` model has a `role` enum (`USER | ADMIN`). Endpoints gate on it — the users-list endpoint requires `role === "ADMIN"`. The check is layered: first confirm `isAuth` (else 401), _then_ confirm the role (else 403). Two checks, two codes, two meanings.
+
+**Server-side enforcement is the only real enforcement.** Hiding an admin button in the UI is _not_ security — anyone can open dev tools and call the API directly. The authoritative permission check must live in the route handler, next to the data. UI hiding is a _convenience_ (don't show people buttons that will 403), not a control.
+
+**Ownership checks (preventing IDOR).** Beyond roles, many actions require that the resource _belongs to the requester_. `revokeSession` verifies `session.userId === requestingUserId` before deleting — otherwise, changing the session ID in the URL would let you revoke _someone else's_ session. This class of bug (acting on objects you don't own by guessing IDs) is called IDOR (Insecure Direct Object Reference), and ownership checks are the defense.
+
+### Examples
+
+**Example 1 — Layered authN then authZ on an admin endpoint.**
+
+```ts
+// app/api/v1/users/route.ts (the gate)
+import { NextRequest, NextResponse } from "next/server";
+import { verifySession } from "@/lib/session";
+
+export async function GET(req: NextRequest) {
+  const { isAuth, user } = await verifySession();
+
+  // LAYER 1 — Authentication. No valid session → 401 ("who are you?").
+  if (!isAuth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // LAYER 2 — Authorization. Authenticated, but not an admin → 403 ("not allowed").
+  if (user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Past both gates: this caller is authenticated AND authorized.
+  // ...fetch and return the users list
+  return NextResponse.json({ items: [] }, { status: 200 });
+}
+```
+
+_Explanation:_ The two checks are sequential and distinct. A request with no session fails Layer 1 with `401` — the client should prompt sign-in. A request from a logged-in _non-admin_ passes Layer 1 but fails Layer 2 with `403` — the client should show "you don't have access," _not_ a sign-in prompt. Collapsing these (or returning 200) would either leak the admin-only data or confuse the UI about how to respond. This layered shape — authenticate, then authorize — is the backbone of every protected endpoint.
+
+**Example 2 — Ownership check defeating an IDOR attack.**
+
+```ts
+// lib/session.ts (revoke with ownership enforcement)
+export async function revokeSession(sessionId: string, ownerUserId: string) {
+  const session = await db.session.findUnique({ where: { id: sessionId } });
+
+  // OWNERSHIP CHECK: the session must exist AND belong to the requester.
+  // Without this line, anyone could revoke ANY session by guessing its id (IDOR).
+  if (!session || session.userId !== ownerUserId) {
+    return { ok: false, status: 403 as const };
+  }
+
+  await db.session.delete({ where: { id: sessionId } });
+  await redis.del(keys.session(sessionId));
+  return { ok: true, status: 200 as const };
+}
+
+// Caller passes the AUTHENTICATED user's own id — never a value from the request body.
+// app/api/v1/account/sessions/[id]/route.ts
+//   const { user } = await verifySession();      // trusted identity
+//   const { id } = await params;                 // attacker-controlled id
+//   const result = await revokeSession(id, user.id);  // ownership enforced inside
+```
+
+_Explanation:_ The `id` in the URL is attacker-controlled — a malicious user can put _any_ session ID there. The ownership check `session.userId !== ownerUserId` is what stops them from revoking sessions that aren't theirs: even if they guess a valid session ID belonging to another user, the check fails and returns `403`. The critical detail is that `ownerUserId` comes from `verifySession()` (the _trusted, authenticated_ identity), never from the request body (which the attacker controls). This pairing — trusted identity + ownership check — is the standard defense against IDOR, one of the most common real-world API vulnerabilities.
+
+**Example 3 — UI hiding as convenience, server check as the real control.**
+
+```tsx
+// CLIENT: hide the admin link if the user isn't an admin — a CONVENIENCE only.
+function Navbar({ user }: { user: Profile }) {
+  return (
+    <nav>
+      <a href="/account">Account</a>
+      {/* Hiding this does NOT secure /api/v1/users — it just avoids showing a
+          button that would 403. The real gate is server-side (Example 1). */}
+      {user.role === "ADMIN" && <a href="/users">Users</a>}
+    </nav>
+  );
+}
+
+// Why UI hiding is NOT security — anyone can call the API directly:
+//   $ curl https://yourapp.com/api/v1/users --cookie "session=<a normal user's cookie>"
+//   → STILL returns 403, because the server checks role regardless of the UI.
+//
+// If you ONLY hid the link and skipped the server check, that same curl would
+// happily return every user in your database to a non-admin. The server check
+// is what actually protects the data.
+```
+
+_Explanation:_ This makes the "UI is not security" principle concrete. Hiding the `/users` link for non-admins is good UX — don't show people buttons that will just fail. But it protects _nothing_: a non-admin can hit `/api/v1/users` directly with `curl` or dev tools, bypassing your UI entirely. Only the _server-side_ `role === "ADMIN"` check (Example 1) actually stops them. The rule to internalize: every permission decision must be enforced where the data lives; the UI merely _reflects_ those permissions for convenience.
+
+### Why it matters
+
+Hiding an admin button is cosmetic — anyone can call your API directly, and if the server doesn't enforce the role, your "admin-only" data is public to anyone who knows the URL. Server-side role checks and ownership checks are the actual controls, and ownership checks specifically defend against IDOR, one of the most common and damaging real-world API vulnerabilities. Confusing UI hiding with security is how data breaches happen.
+
+**Self-test:** Why is checking `role === "ADMIN"` in the route handler essential even if you already hide the admin link in the navbar, and how does the ownership check in `revokeSession` prevent one user from revoking another's session?
+
+---
+
+## 18. API Versioning and Designing for Replaceability
+
+### High-level overview
+
+Every endpoint lives under `/api/v1/...` and every Redis key is prefixed `v1:`. This is the architectural bet that makes the whole post worth reading: the frontend depends only on an HTTP _contract_, so the backend is _swappable_ — you could later reimplement `/api/v1/*` in Go or Rust and the React layer wouldn't change a line.
+
+### Deep dive
+
+**Why version a public contract.** Once clients depend on a route's shape (its URL, its request and response format), you can't change that shape without breaking them. Versioning lets old and new coexist: ship `/api/v2/auth/login` with a new response shape while `/api/v1/auth/login` keeps serving existing clients, then migrate clients over and retire v1 on your own schedule. The version prefix is a promise: "within v1, this contract is stable."
+
+**The "no Server Actions" choice.** Next.js Server Actions let the client call server functions directly, which is convenient but _couples your data layer to React_ — those functions only exist inside the React/Next runtime. The course deliberately avoids them so the backend stays a plain HTTP API, framework-agnostic and reimplementable in any language. The trade-off: a bit more boilerplate now (explicit route handlers and fetch calls) in exchange for the freedom to migrate the backend later without touching the frontend.
+
+**Versioned cache keys mirror the idea internally.** Prefixing Redis keys with `v1:` means that if the cached _payload shape_ ever changes, you bump to `v2:` and the old keys expire out naturally — no manual flush, no serving a new code path stale data in the old shape.
+
+**Designing for replaceability** is a discipline: keep the contract explicit and stable, keep the layers decoupled, and treat the API boundary as a real interface that something else could implement.
+
+### Examples
+
+**Example 1 — The versioned route structure as a stable contract.**
+
+```
+app/api/v1/
+├── auth/
+│   ├── login/route.ts      POST   /api/v1/auth/login
+│   ├── logout/route.ts     POST   /api/v1/auth/logout
+│   └── me/route.ts         GET    /api/v1/auth/me
+├── account/
+│   ├── route.ts            GET,PATCH  /api/v1/account
+│   └── sessions/
+│       ├── route.ts        GET,DELETE /api/v1/account/sessions
+│       └── [id]/route.ts   DELETE     /api/v1/account/sessions/:id
+└── users/
+    └── route.ts            GET    /api/v1/users
+
+// The CONTRACT for one endpoint, documented by its types — this is what any
+// reimplementation (Go, Rust, ...) must honor exactly:
+//
+//   POST /api/v1/auth/login
+//   Request:  { email: string; password: string }
+//   Responses:
+//     200 { user: { id, email, name, role } }  + Set-Cookie: session=...
+//     401 { error: "Invalid credentials" }
+//     422 { error: "Email and password are required" }
+//     429 { error: "Too many requests..." }     + Retry-After header
+```
+
+_Explanation:_ The folder layout _is_ the API surface — predictable, resource-oriented, and entirely under the `v1` namespace. The documented contract for `login` (request shape, every response shape and status, the headers) is what makes the backend replaceable: a Go reimplementation just has to produce these exact shapes and statuses, and the React frontend — which only knows the contract — won't notice the swap. The `v1` prefix declares this contract stable; breaking changes go to `v2`.
+
+**Example 2 — Why Server Actions would couple you to React (the contrast).**
+
+```tsx
+// ---- COUPLED: Server Action (convenient, but locks you into Next/React) ----
+// app/actions.ts
+"use server";
+import { db } from "@/lib/db";
+export async function updateProfile(name: string) {
+  // This function ONLY exists inside the Next.js/React runtime.
+  // A Go backend cannot "be" this function. To migrate, you'd rewrite
+  // every component that imports it.
+  return db.user.update({ where: { id: "..." }, data: { name } });
+}
+// Component calls it directly:
+//   import { updateProfile } from "./actions";
+//   <button onClick={() => updateProfile(name)} />   // tightly bound to React
+
+// ---- DECOUPLED: HTTP route handler (the course's choice) ----
+// app/api/v1/account/route.ts  → PATCH handler returning JSON over HTTP.
+// Component calls it over the WIRE:
+//   apiFetch("/api/v1/account", { method: "PATCH", body: JSON.stringify({ name }) });
+//
+// Tomorrow, reimplement PATCH /api/v1/account in Go. The component's
+// apiFetch call is IDENTICAL — it's just HTTP. Nothing in React changes.
+```
+
+_Explanation:_ The contrast is the whole argument. The Server Action is a JavaScript function that lives _inside_ React — to move your backend to Go, you'd have to rewrite every component that imports it, because there's no HTTP boundary to swap behind. The route-handler version exposes an HTTP endpoint; the component talks to it over the wire via `apiFetch`. Reimplement that endpoint in Go and the frontend call is byte-for-byte identical, because the coupling point is a _protocol_ (HTTP/JSON), not a _function import_. The course pays a little boilerplate to keep that protocol boundary, buying total backend freedom.
+
+**Example 3 — Running v2 alongside v1 during a migration.**
+
+```ts
+// You need to change the users response shape (breaking change). Don't mutate v1 —
+// introduce v2 and run BOTH until clients have migrated.
+
+// app/api/v1/users/route.ts  (UNCHANGED — existing clients keep working)
+export async function GET() {
+  // returns { items: [...], pagination: {...} }  ← the original v1 shape
+}
+
+// app/api/v2/users/route.ts  (NEW shape — e.g. cursor pagination)
+export async function GET() {
+  // returns { data: [...], nextCursor: "..." }   ← the new v2 shape
+}
+
+// Redis keys are versioned too, so the two caches never collide:
+export const keys = {
+  usersV1: (page: number) => `v1:users:${page}`,
+  usersV2: (cursor: string) => `v2:users:${cursor}`,
+};
+
+// Migration path:
+//   1. Ship v2 alongside v1.
+//   2. Move clients (web, mobile, partners) to v2 one at a time.
+//   3. When v1 traffic hits zero, delete the v1 route and keys.
+// At no point is any client broken.
+```
+
+_Explanation:_ This is versioning's payoff in action. A breaking change (switching from offset to cursor pagination) would shatter every existing client if you edited `v1` in place. Instead you add `v2` with the new shape and run both simultaneously — `v1` clients keep working untouched while you migrate consumers to `v2` at your own pace, then delete `v1` once it's unused. The versioned Redis keys (`v1:users:` vs `v2:users:`) keep the two caches isolated so they can't serve each other's data. No flag day, no broken clients, no coordinated big-bang deploy — just a gradual, safe migration.
+
+### Why it matters
+
+Versioning is what turns a backend rewrite from a terrifying big-bang that breaks every client into a gradual, safe migration. It's a small discipline now — a path prefix and decoupled layers — that buys enormous flexibility later: the freedom to re-platform, to evolve response shapes, and to support multiple client versions at once. This is exactly the unglamorous, load-bearing kind of decision that distinguishes systems built to last from ones built to demo.
+
+**Self-test:** What concretely breaks if the frontend called Server Actions directly and you later wanted to move the backend to Go, and how does running `/api/v2` alongside `/api/v1` let you make a breaking change without breaking any client?
+
+---
+
+## 19. React Component State, Lifecycle, and Composition
+
+### High-level overview
+
+React Query handles _server_ state, but you still need solid React fundamentals for _client_ state: form inputs, the current page number, search text, selection — plus composing clean loading/error/empty/success UI. The skill is knowing precisely which state is client state and which is server state, and never mixing them up.
+
+### Deep dive
+
+**`useState` for genuine client state.** The current page (`useState(1)`), the search box value (`useState("")`), which row is selected — these are UI control state, owned by the component, with no server counterpart. They belong in `useState`. Server data (the users for that page) does _not_ — it belongs in React Query (concept #14). Putting server data in `useState` means you hand-sync it forever; putting UI state in React Query means you fight the cache for no reason.
+
+**Controlled inputs.** An input whose `value` is driven by state and whose `onChange` updates that state is "controlled" — React is the single source of truth for what's in the box. This is what lets "typing in search resets page to 1" work as a simple state update.
+
+**Conditional rendering of UI states.** A data view has four states — loading, error, empty, success — and clean components render each explicitly (skeleton / error box / empty hint / the data) rather than cramming them into one tangled return.
+
+**Composition.** Small presentational components (`ProfileSkeleton`, `ErrorBox`, `TableSkeleton`, `EmptyPanel`) keep pages readable and reusable. Each does one thing.
+
+**Why no `useEffect` for data.** `useEffect` is for genuine _side effects_ (subscriptions, DOM measurements, timers). Data fetching was historically shoved into it, but that's exactly what React Query replaces. In this course, `useEffect` essentially disappears from the data path.
+
+### Examples
+
+**Example 1 — Separating client state (useState) from server state (useQuery).**
+
+```tsx
+// app/users/page.tsx (the state separation, made explicit)
+"use client";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useState } from "react";
+import { apiFetch } from "@/lib/api/client";
+
+export default function UsersPage() {
+  // CLIENT STATE — UI controls owned by this component. useState is correct.
+  const [page, setPage] = useState(1); // which page is shown
+  const [search, setSearch] = useState(""); // what's typed in the search box
+  const pageSize = 20; // a constant, not even state
+
+  // SERVER STATE — data that lives on the server. React Query owns it.
+  // It is DERIVED from the client state via the query key. We never copy
+  // the fetched users into useState; that would mean hand-syncing forever.
+  const usersQuery = useQuery({
+    queryKey: ["users", page, pageSize, search], // client state drives the key
+    queryFn: () =>
+      apiFetch<UsersResponse>(
+        `/api/v1/users?page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}`
+      ),
+    placeholderData: keepPreviousData,
+  });
+
+  // The users list is ALWAYS read from usersQuery.data — never mirrored locally.
+  return (
+    <div>
+      <SearchBox
+        value={search}
+        onChange={(v) => {
+          setSearch(v);
+          setPage(1);
+        }}
+      />
+      <UsersTable query={usersQuery} />
+      <Pager
+        page={page}
+        setPage={setPage}
+        pagination={usersQuery.data?.pagination}
+      />
+    </div>
+  );
+}
+```
+
+_Explanation:_ This is the whole discipline in one component. `page` and `search` are _client_ state — pure UI controls with no server equivalent — so they live in `useState`. The users list is _server_ state, so it lives in React Query and is _derived_ from the client state through the query key. The list is always read from `usersQuery.data`, never copied into a local `useState`. The moment you mirror server data into component state, you've signed up to manually keep them in sync after every change — the exact bug-class this separation avoids.
+
+**Example 2 — Controlled input where typing resets the page.**
+
+```tsx
+// A controlled search box; changing it resets pagination to page 1.
+function SearchBox({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <input
+      type="text"
+      placeholder="Search users…"
+      value={value} // CONTROLLED: state is the source of truth
+      onChange={(e) => onChange(e.target.value)} // every keystroke updates state
+    />
+  );
+}
+
+// Parent wires it so a new search starts from page 1:
+//   <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} />
+//
+// Because both `search` and `page` are in the query key, this single state
+// update (search changes, page resets) automatically triggers the right fetch.
+// No effect, no manual refetch — just state in, correct data out.
+```
+
+_Explanation:_ The input is _controlled_ — its displayed value is `value` from state, and every keystroke calls `onChange` to update that state, making React the single source of truth for the field's contents. The parent's handler does two state updates at once (`setSearch(v); setPage(1)`), so starting a new search always jumps back to the first page. Because both pieces of state feed the query key (concept #14), this plain state update is _all_ that's needed to fetch the correct results — there's no `useEffect`, no manual `refetch()`, just the key changing and React Query responding.
+
+**Example 3 — Composed UI states: loading, error, empty, success.**
+
+```tsx
+// Rendering all four states explicitly with small composed components.
+function UsersTable({ query }: { query: ReturnType<typeof useUsersQuery> }) {
+  // 1. LOADING (first load) → skeleton
+  if (query.isLoading) return <TableSkeleton rows={8} />;
+
+  // 2. ERROR → message + retry
+  if (query.isError) {
+    return (
+      <ErrorBox
+        message={(query.error as ApiError).message}
+        onRetry={query.refetch}
+      />
+    );
+  }
+
+  const items = query.data!.items;
+
+  // 3. EMPTY (loaded successfully, but no rows) → helpful empty state
+  if (items.length === 0) {
+    return <EmptyState message="No users match your search." />;
+  }
+
+  // 4. SUCCESS → the data
+  return (
+    <table>
+      <tbody style={{ opacity: query.isFetching ? 0.6 : 1 }}>
+        {items.map((u) => (
+          <tr key={u.id}>
+            <td>{u.name ?? "—"}</td>
+            <td>{u.email}</td>
+            <td>{u.role}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// Small, single-purpose presentational pieces:
+function TableSkeleton({ rows }: { rows: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="skeleton"
+          style={{ height: 40, marginBottom: 6 }}
+        />
+      ))}
+    </>
+  );
+}
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="empty">
+      <p>{message}</p>
+    </div>
+  );
+}
+```
+
+_Explanation:_ A data view is never just "loading or loaded" — it has four real states, and rendering each explicitly is what makes the UI feel finished. The `empty` state especially matters: a successful fetch that returns zero rows should show "no users match," not a blank table that looks broken. Each state maps to a small, single-purpose component (`TableSkeleton`, `ErrorBox`, `EmptyState`), keeping the main component a readable list of guard clauses rather than one sprawling conditional. This composition — guard clauses for each state, tiny components for each piece — is what keeps real-world React maintainable.
+
+### Why it matters
+
+Knowing _which_ state is client state and which is server state is the skill that keeps the frontend clean. Mirror server data into `useState` and you'll hand-sync it after every mutation and eventually ship a UI that disagrees with the server; push UI control state into React Query and you'll fight the cache for no reason. The course draws this line precisely throughout, and rendering all four UI states explicitly is what separates a polished frontend from one that shows blank screens and broken-looking empty tables.
+
+**Self-test:** Why is `page` good `useState` state, but the _list of users for that page_ should not be? And why does a successful fetch returning zero rows still need its own explicit UI state?
+
+---
+
+## 20. Production Hardening: Cleanup, Auditing, and Operational Maturity
+
+### High-level overview
+
+This is the difference between "ships" and "stays shipped." The course closes with a hardening checklist — the operational concerns that never appear in a demo but entirely determine whether your auth survives real users over real time. Most are unglamorous; all are load-bearing.
+
+### Deep dive
+
+**Expired-session cleanup.** Sessions get created constantly and expire silently. Without a cleanup job, the `Session` table grows forever. A cron runs `DELETE ... WHERE expiresAt < now()` periodically — fast because `expiresAt` is indexed (concept #10).
+
+**Refresh throttling.** As covered in concept #11, only refresh a session past the halfway point of its life, never on every request, or you turn every read into a database write.
+
+**Per-user rate-limit buckets.** As covered in concept #8, layer per-user limits on top of per-IP so a shared office NAT doesn't let one noisy user lock everyone out.
+
+**Cache invalidation at scale.** Don't use `redis.keys("v1:users:*")` to invalidate list caches — `KEYS` scans the entire keyspace and can block Redis in production. Instead keep a _version counter_ (e.g. `v1:users:_ver`) and include it in the cache key; bumping the counter on any write instantly orphans all old keys (they expire out) without scanning anything.
+
+**IP trust.** Only trust the `x-forwarded-for` header behind a proxy you control (Vercel, Cloudflare, your nginx). Otherwise a client can spoof it, and your "this device / this IP" list becomes fiction. Behind a raw VPS, configure the proxy's real-IP handling correctly.
+
+**Audit logging.** Record every security-relevant event — login, logout, password change, session revoke — in a separate append-only table. The first time a customer asks "did someone else access my account?", an audit log is the difference between a confident answer and a shrug.
+
+**Cookie and field hygiene.** `httpOnly`/`secure`/`sameSite` on every cookie (concept #4); never `select` the password hash into any response (concept #9). These are checklist items precisely because they're easy to forget under deadline.
+
+### Examples
+
+**Example 1 — Scheduled expired-session cleanup (fast because expiresAt is indexed).**
+
+```ts
+// app/api/v1/cron/cleanup-sessions/route.ts
+// Triggered hourly by a scheduler (Vercel Cron, GitHub Actions, etc.).
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+
+export async function POST(req: NextRequest) {
+  // Protect the cron endpoint with a shared secret so randoms can't trigger it.
+  if (
+    req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Delete every expired session in one query. FAST: @@index([expiresAt])
+  // lets the DB jump straight to the expired range instead of scanning.
+  const { count } = await db.session.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
+
+  return NextResponse.json({ deleted: count }, { status: 200 });
+}
+```
+
+_Explanation:_ Expired sessions don't clean themselves — a verify call ignores them, but the rows linger. This hourly job deletes them in a single indexed query (the `@@index([expiresAt])` from concept #10 is exactly what keeps this fast as the table grows into the millions). The endpoint is guarded by a `CRON_SECRET` bearer token so only your scheduler can trigger it, not a random visitor. Skip this job and your `Session` table grows unbounded forever, eventually slowing every query and bloating your database — a problem that's invisible for weeks and then suddenly isn't.
+
+**Example 2 — Scale-safe cache invalidation via a version counter (not KEYS).**
+
+```ts
+// lib/cache/users-cache.ts
+import { redis } from "@/lib/redis";
+
+// Read the current version, then build keys that include it.
+async function usersVersion(): Promise<number> {
+  const v = await redis.get("v1:users:_ver");
+  return v ? parseInt(v, 10) : 1;
+}
+
+// Cache key embeds the version: v1:users:<ver>:<page>:<search>
+export async function buildUsersCacheKey(
+  page: number,
+  search: string
+): Promise<string> {
+  const ver = await usersVersion();
+  return `v1:users:${ver}:${page}:${search}`;
+}
+
+// On ANY user write (create/update/delete), bump the version. This INSTANTLY
+// orphans every old key — future reads build keys with the new version and miss,
+// so they repopulate from the DB. The orphaned keys expire out on their own.
+export async function invalidateUsersCache(): Promise<void> {
+  await redis.incr("v1:users:_ver"); // O(1) — no scanning of the keyspace
+}
+
+// ---- THE WRONG WAY (don't do this in production) ----
+//   const stale = await redis.keys("v1:users:*"); // KEYS scans EVERYTHING —
+//   await redis.del(...stale);                     // can block Redis under load.
+```
+
+_Explanation:_ Invalidating a _family_ of cache keys (every page and search of the users list) naively tempts you toward `redis.keys("v1:users:*")` — but `KEYS` scans the entire Redis keyspace and can stall the whole server under production load. The version-counter trick sidesteps it entirely: the version number is baked into every cache key, so bumping the counter with one O(1) `INCR` instantly makes all existing keys unreachable (future reads compute keys with the new version and miss → repopulate from the DB), while the orphaned old keys simply expire on their own TTL. One atomic increment replaces a dangerous full scan.
+
+**Example 3 — An append-only audit log for security events.**
+
+```prisma
+// schema.prisma — a separate, append-only audit table.
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?                       // nullable: failed logins have no user yet
+  action    String                        // "login", "logout", "password_change", "session_revoke"
+  ipAddress String?
+  userAgent String?
+  metadata  Json?                         // extra context (which session, etc.)
+  createdAt DateTime @default(now())
+
+  @@index([userId])      // fast "show me this user's history"
+  @@index([action])      // fast "show me all password changes"
+  @@index([createdAt])   // fast time-range queries
+}
+```
+
+```ts
+// lib/audit.ts — record security-relevant events. Fire-and-forget; never block auth.
+import { db } from "@/lib/db";
+
+export async function audit(entry: {
+  userId?: string;
+  action: "login" | "logout" | "password_change" | "session_revoke";
+  ipAddress?: string;
+  userAgent?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  // .catch so a logging failure can NEVER break the actual auth operation.
+  await db.auditLog
+    .create({ data: entry })
+    .catch((e) => console.error("audit failed", e));
+}
+
+// Usage at each event:
+//   await audit({ userId: user.id, action: "login", ipAddress, userAgent });
+//   await audit({ userId: user.id, action: "session_revoke", metadata: { revokedId } });
+```
+
+_Explanation:_ An audit log is the record you wish you had the first time a customer asks "did someone else log into my account?" Every security-relevant event is appended to a dedicated, indexed table — the `userId` is nullable because a _failed_ login has no authenticated user yet, and the indexes make "this user's recent activity" or "all password changes last week" fast to query. The logging is fire-and-forget with a `.catch`, so a logging hiccup can _never_ break the actual login or revoke — auditing observes the system without being in its critical path. It costs almost nothing to add up front and is invaluable the moment a security question arises.
+
+### Why it matters
+
+These are the items that turn a working demo into a system you can operate for years. Skip session cleanup and your database bloats until queries crawl; use `KEYS` for invalidation and you stall Redis under load; trust `x-forwarded-for` blindly and your device list lies to users; omit audit logs and you can't answer the security questions that _will_ eventually be asked. Production maturity is mostly this unglamorous checklist — and it's exactly what separates code that ships from code that stays shipped.
+
+**Self-test:** Why is using `redis.keys("v1:users:*")` to invalidate the users cache dangerous in production, and what does the version-counter approach do instead? And why is the audit log write done as fire-and-forget with a `.catch`?
+
+---
+
+## How to use this list
+
+You don't need to be an expert in all twenty — the tutorial teaches by wiring them together, and seeing them in context is itself a great way to learn. But you should be at least _conversant_ in each. A rough readiness bar:
+
+- **Solid on 1–6 and 13–16** (TypeScript, HTTP, REST, cookies, hashing, sessions vs JWTs, and the full React Query stack — fundamentals, fetching, mutations, the API client) → you can follow the tutorial actively and get the most from it.
+- **Shaky on 7–12** (Redis, rate limiting, Prisma, indexing, the session lifecycle, the edge boundary) → skim a primer and re-read those deep dives before starting; these are the infrastructure concepts the tutorial moves fast through.
+- **Unsure on 17–20** (RBAC, versioning, the client/server-state line, hardening) → you can learn these _from_ the tutorial, but reading the overviews and examples first will make them click far faster.
+- **Never heard of most of these** → build a tiny throwaway app with login + one protected page first, then come back. The tutorial is a _production_ shape; it assumes you've already felt the pain it's solving.
+
+Work through the self-tests at the end of each concept — if you can answer all twenty in your own words, with a code sketch where relevant, you're ready. Auth is the one area where copy-pasting without understanding will eventually cost you a security incident, so the prep pays for itself. When you open the tutorial, there'll be no magic in it — and after this preparation, there won't be any in your head either.
+
+---
+
+## Ready? Read the tutorial
+
+[**Production Session Auth in Next.js — Database Sessions, Redis Caching, and a Versioned API →**](/blog/database-session-auth-nextjs-postgres-redis)
+
+The tutorial puts every one of these 20 concepts to work in a single ~1,000-line, copy-pasteable build: signed cookies wrapping DB sessions, Redis cache in front of session + user reads, per-IP rate limiting, IP/device metadata captured per session, an account page with a real "log out other devices" list, and a server-paginated users page. All behind versioned `/api/v1` routes — no Server Actions — so the backend is swappable.
+
+---
+
+## Related reading
+
+- [Production Session Auth in Next.js — Database Sessions, Redis Caching, and a Versioned API](/blog/database-session-auth-nextjs-postgres-redis) — the build this guide is the prerequisite map for.
+- [Securing your first VPS (and installing Dokploy)](/blog/secure-vps-and-install-dokploy) — lock down the box the Postgres and Redis live on before you put real users on it.
+- [Sentinel v2 + Pulse v1 migration guide](/blog/sentinel-pulse-migration-guide) — the WAF + observability layer I wrap around the same Go/Gin APIs when I rewrite the backend off Next.js.
+- [Load-testing your API with k6](/blog/api-perfomance-testing-with-k6) — once auth ships, you want to know it survives 500 concurrent logins.
+
+---
+
+## Need a paired session?
+
+I run paid engagements for teams shipping production Next.js + Postgres + Redis stacks. Auth, billing, multi-tenancy, internal tools — the unglamorous load-bearing pieces.
+
+- **[Book a session](/book)** — 1-on-1 architecture / code review / paired auth wiring. Sessions from UGX 50,000.
+- **Hire Desishub** for full Next.js + Go backend builds — [desishub.com](https://desishub.com)
+- **YouTube** — practical Next.js + AI tutorials at [@JBWEBDEVELOPER](https://www.youtube.com/@JBWEBDEVELOPER)
+- **WhatsApp JB**: [+256 762 063 160](https://wa.me/256762063160)
