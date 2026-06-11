@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import type { Metadata } from "next";
 
-import { PostItem } from "@/components/post-item";
+import { BlogList } from "@/components/blog-list";
 import { getAllPostsMetadata } from "@/data/blog";
 
 export const metadata: Metadata = {
@@ -11,7 +11,11 @@ export const metadata: Metadata = {
 
 export default function Page() {
   // Metadata-only — listings never render post.content
-  const allPosts = getAllPostsMetadata();
+  const allPosts = getAllPostsMetadata()
+    .slice()
+    .sort((a, b) =>
+      dayjs(b.metadata.createdAt).diff(dayjs(a.metadata.createdAt))
+    );
 
   return (
     <>
@@ -25,29 +29,7 @@ export default function Page() {
         </p>
       </div>
 
-      <div className="relative pt-4">
-        <div className="absolute inset-0 -z-1 grid grid-cols-1 gap-4 max-sm:hidden sm:grid-cols-2">
-          <div className="border-r border-edge"></div>
-          <div className="border-l border-edge"></div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {allPosts
-            .slice()
-            .sort((a, b) =>
-              dayjs(b.metadata.createdAt).diff(dayjs(a.metadata.createdAt))
-            )
-            .map((post, index) => (
-              <PostItem
-                key={post.slug}
-                post={post}
-                shouldPreloadImage={index <= 4}
-              />
-            ))}
-        </div>
-      </div>
-
-      <div className="h-4" />
+      <BlogList posts={allPosts} />
     </>
   );
 }
